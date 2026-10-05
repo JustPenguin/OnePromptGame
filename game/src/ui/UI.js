@@ -1,10 +1,23 @@
-// UI manager. OWNER: Agent E (ui).  BASELINE: a minimal title screen, loading bar, HUD and results list so the
-// pipeline works end to end.  Agent E replaces everything under src/ui/ (and src/app/) with the real,
-// beautiful UI.  The App <-> UI contract is E's to define; only the App's public API (see src/app/App.js) and the
-// session/kart fields documented in docs/ARCHITECTURE.md are relied on by other modules and the debug API.
-import { EV } from '../core/events.js';
-import { formatTime, ordinal } from '../core/math.js';
-import { ITEM_DEFS, getItemIcon } from '../items/itemDefs.js';
+// UI manager: layers, layout/scale, screen stack + transitions, modals, toasts, hint bar, HUD mount.  OWNER: Agent E.
+// Plain DOM + CSS over the WebGL canvas.  docs/ui.md has the screen map and state machine.
+//
+//   ui.reset(id, params)   show a screen with an empty history (title / main menu)
+//   ui.push(id, params)    forward (slides in; Back returns here)       ui.back()   pop the history
+//   ui.replace(id, params) swap the current screen without growing the history
+//   ui.clearScreens()      remove every screen (race starts)           ui.confirm({...}) / ui.modal({...}) -> Promise
+//   ui.toast({...})        ui.wipe(fn)  diagonal chequered transition   ui.sfx(name)
+//   ui.showHud(session) / ui.hideHud() / ui.update(dt, session)         HUD lives in ./hud/
+import { h, clear, afterLayout, wait } from './dom.js';
+import { clamp } from '../core/math.js';
+import { baseCss } from './css/base.js';
+import { headerCss } from './components.js';
+import { Nav } from './nav.js';
+import { renderHints } from './hints.js';
+import { showModal, confirmModal } from './modal.js';
+import { Toasts } from './toasts.js';
+import { SCREENS, SCREEN_CSS } from './screens/index.js';
+import { Hud } from './hud/Hud.js';
+import { hudCss } from './hud/hudCss.js';
 
 export class UI {
   constructor(app) {
@@ -12,73 +25,212 @@ export class UI {
     this.root = app.uiRoot;
     this.hud = null;
     this.screen = null;
+    this.current = null;
+    this.stack = [];
+    this.device = 'mouse';
+    this.layout = { w: 1280, h: 720, mode: 'wide', scale: 1 };
+
     const style = document.createElement('style');
-    style.textContent = `
-      .bl-screen{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:16px;background:rgba(10,15,36,.55);text-align:center}
-      .bl-title{font-family:var(--font-display);font-size:clamp(40px,9vw,110px);transform:skewX(-8deg);text-shadow:0 5px 0 #b34700,0 12px 40px rgba(255,122,26,.5)}
-      .bl-btn{font-family:var(--font-display);font-size:24px;padding:12px 28px;border-radius:14px;border:0;background:var(--kr-accent);color:#fff;cursor:pointer;box-shadow:0 5px 0 #b34700}
-      .bl-hud{position:absolute;inset:0;pointer-events:none;font-family:var(--font-display);text-shadow:0 3px 0 rgba(0,0,0,.45)}
-      .bl-hud .tl{position:absolute;top:16px;left:20px;font-size:34px}
-      .bl-hud .tr{position:absolute;top:16px;right:20px;font-size:64px;color:var(--kr-warn)}
-      .bl-hud .br{position:absolute;bottom:18px;right:24px;font-size:44px}
-      .bl-hud .bl{position:absolute;top:70px;left:20px;display:flex;gap:10px;align-items:center;font-size:20px}
-      .bl-hud .cd{position:absolute;inset:0;display:grid;place-items:center;font-size:clamp(80px,22vw,260px);color:var(--kr-warn)}
-      .bl-list{font-size:22px;min-width:min(420px,80vw);text-align:left}
-    `;
+    style.id = 'kr-ui-css';
+    style.textContent = [baseCss, headerCss, ...SCREEN_CSS, hudCss].join('\n');
     document.head.appendChild(style);
-  }
 
-  clear() { this.root.replaceChildren(); this.hud = null; this.screen = null; }
-
-  showTitle() {
-    this.clear();
-    const el = document.createElement('div');
-    el.className = 'bl-screen';
-    el.innerHTML = `<div class="bl-title">KART RUSH <span style="color:var(--kr-accent)">GP</span></div><button class="bl-btn" id="bl-start">Race!</button><div style="color:var(--kr-ink-dim)">Arrows / WASD to drive · Space to drift · E for items</div>`;
-    this.root.appendChild(el);
-    el.querySelector('#bl-start').onclick = () => { this.app.audio.unlock(); this.app.startRace(this.app.defaultRaceConfig()); };
-    this.screen = el;
-  }
-
-  showLoading(p, msg) {
-    if (!this.screen || !this.screen.classList.contains('loading')) {
-      this.clear();
-      const el = document.createElement('div'); el.className = 'bl-screen loading'; el.innerHTML = '<div class="bl-title" style="font-size:48px">Loading…</div><div class="lm"></div>';
-      this.root.appendChild(el); this.screen = el;
+    this.layers = {};
+    for (const name of ['hud', 'screens', 'modal', 'toast', 'wipe', 'error']) {
+      const el = h('div', { class: `layer layer-${name}` });
+      this.layers[name] = el;
+      this.root.appendChild(el);
     }
-    this.screen.querySelector('.lm').textContent = `${Math.round(p * 100)}% ${msg ?? ''}`;
+    this.hintbar = h('div', { class: 'hintbar hidden', 'aria-hidden': 'true' });
+    this.layers.screens.appendChild(this.hintbar);
+    this.toasts = new Toasts(this.layers.toast);
+    this.nav = new Nav(this);
+
+    this.applyPrefs();
+    this.resize();
+    window.addEventListener('resize', () => this.resize());
+    window.addEventListener('orientationchange', () => setTimeout(() => this.resize(), 120));
+    // browsers only allow audio after a gesture: unlock on the very first one, wherever it happens
+    const unlock = () => { this.app.audio?.unlock?.(); window.removeEventListener('pointerdown', unlock, true); window.removeEventListener('keydown', unlock, true); };
+    window.addEventListener('pointerdown', unlock, true);
+    window.addEventListener('keydown', unlock, true);
   }
 
+  // ------------------------------------------------------------------------------------------------ prefs / layout
+  /** Apply accessibility + display preferences from settings. Call after every settings change. */
+  applyPrefs() {
+    const s = this.app.settings;
+    const osRm = typeof matchMedia !== 'undefined' && matchMedia('(prefers-reduced-motion: reduce)').matches;
+    const rm = !!s.reducedMotion || osRm;
+    this.reducedMotion = rm;
+    document.documentElement.toggleAttribute('data-rm', rm);
+    this.root.classList.toggle('noflash', !!s.reduceFlashes);
+    this.root.classList.toggle('hc', !!s.highContrastHud);
+    this.root.classList.toggle('lg', !!s.largeText);
+    document.documentElement.style.setProperty('--hud-scale', String(clamp(s.hudScale ?? 1, 0.7, 1.4)));
+    this.resize();
+  }
+
+  resize() {
+    const w = window.innerWidth || 1280, h = window.innerHeight || 720;
+    let mode = 'wide', scale;
+    if (h > w * 1.12) { mode = 'portrait'; scale = clamp(w / 390, 0.85, 1.5); }
+    else if (h < 520) { mode = 'compact'; scale = clamp(h / 390, 0.8, 1.15); }
+    else scale = clamp(Math.min(w / 1280, h / 720), 0.72, 1.9);
+    if (this.app.settings?.largeText) scale *= 1.14;
+    this.layout = { w, h, mode, scale };
+    document.documentElement.style.setProperty('--ui-scale', scale.toFixed(3));
+    for (const m of ['wide', 'portrait', 'compact']) this.root.classList.toggle(`l-${m}`, m === mode);
+    this.screen?.onResize?.();
+    this._applyStage();
+    this.hud?.onResize?.();
+  }
+
+  onDeviceChange(d) {
+    this.device = d;
+    this.root.dataset.device = d;
+    this._updateHints();
+    this.screen?.onDevice?.(d);
+    this.hud?.onDevice?.(d);
+  }
+
+  sfx(name) { try { this.app.audio?.ui?.(name); } catch { /* audio is optional */ } }
+
+  // ------------------------------------------------------------------------------------------------ screens
+  _make(id, params) {
+    const Cls = SCREENS[id];
+    if (!Cls) throw new Error(`Unknown screen "${id}"`);
+    return new Cls(this, params);
+  }
+
+  /** Show `id`; dir: 'fwd' | 'back' | 'fade'. */
+  go(id, params = {}, { dir = 'fwd', push = true } = {}) {
+    const prev = this.screen;
+    if (push && this.current) this.stack.push(this.current);
+    this.current = { id, params };
+    const screen = this._make(id, params);
+    const el = screen.build();
+    el.classList.add('screen', `s-${id}`, `in-${dir}`);
+    if (prev) this._retire(prev, dir === 'fwd' ? 'out-fwd' : dir === 'back' ? 'out-back' : 'out-fade');
+    this.layers.screens.insertBefore(el, this.hintbar);
+    screen.root = el;
+    screen._scope = this.nav.push(el, screen.navOptions());
+    this.screen = screen;
+    this._applyStage();
+    this._updateHints();
+    afterLayout(() => { el.classList.remove(`in-${dir}`); });
+    screen.onShow();
+    return screen;
+  }
+
+  _retire(screen, cls) {
+    try { screen.onHide(); } catch (e) { console.error(e); }
+    if (screen._scope) this.nav.remove(screen._scope);
+    const el = screen.root;
+    el.classList.add(cls);
+    el.setAttribute('inert', '');
+    setTimeout(() => { try { screen.destroy(); } catch (e) { console.error(e); } el.remove(); }, 300);
+  }
+
+  push(id, params) { return this.go(id, params, { dir: 'fwd' }); }
+  replace(id, params, dir = 'fade') { return this.go(id, params, { dir, push: false }); }
+  reset(id, params, dir = 'fade') { this.stack = []; this.current = null; return this.go(id, params, { dir, push: false }); }
+
+  back() {
+    const prev = this.stack.pop();
+    if (!prev) return false;
+    this.go(prev.id, prev.params, { dir: 'back', push: false });
+    this.sfx('back');
+    return true;
+  }
+
+  /** Pop back to the nearest history entry with this id (or reset to it). */
+  backTo(id, fallbackParams) {
+    let found = -1;
+    for (let i = this.stack.length - 1; i >= 0; i--) if (this.stack[i].id === id) { found = i; break; }
+    if (found < 0) return this.reset(id, fallbackParams, 'back');
+    const target = this.stack[found];
+    this.stack.length = found;
+    return this.go(target.id, target.params, { dir: 'back', push: false });
+  }
+
+  clearScreens() {
+    if (this.screen) this._retire(this.screen, 'out-fade');
+    this.screen = null; this.current = null; this.stack = [];
+    this._updateHints();
+  }
+
+  get currentId() { return this.current?.id ?? null; }
+
+  /** Tell the 3D backdrop what this screen needs. */
+  _applyStage() {
+    const m = this.app.menuScene;
+    if (!m) return;
+    const st = this.screen?.stage;
+    if (!st) return;
+    m.setPreset(st.preset ?? 'select');
+    m.setKartVisible(st.kart !== false);
+    const comp = typeof st.comp === 'function' ? st.comp(this.layout) : st.comp ?? { x: 0, y: 0 };
+    m.setComposition(comp);
+    m.setTheme(st.theme ?? null);
+  }
+
+  _updateHints() {
+    const items = this.screen && !this.modalOpen ? this.screen.hints() : null;
+    renderHints(this.hintbar, items, this.device);
+  }
+
+  // ------------------------------------------------------------------------------------------------ overlays
+  modal(def) { this.modalOpen = true; this._updateHints(); return showModal(this, def).finally(() => { this.modalOpen = false; this._updateHints(); }); }
+  confirm(def) { this.modalOpen = true; this._updateHints(); return confirmModal(this, def).finally(() => { this.modalOpen = false; this._updateHints(); }); }
+  toast(o) { return this.toasts.show(o); }
+
+  /** Diagonal chequered wipe: covers the screen, runs fn (swap scenes) while covered, then reveals. */
+  async wipe(fn, { hold = 120 } = {}) {
+    if (this.reducedMotion) { await fn?.(); return; }
+    const el = h('div', { class: 'wipe cover' }, Array.from({ length: 12 }, (_, n) => h('i', { style: { '--n': n } })));
+    this.layers.wipe.appendChild(el);
+    await wait(380 + 12 * 28);
+    try { await fn?.(); } finally {
+      await wait(hold);
+      el.className = 'wipe reveal';
+      await wait(420 + 12 * 24);
+      el.remove();
+    }
+  }
+
+  // ------------------------------------------------------------------------------------------------ HUD
   showHud(session) {
-    this.clear();
-    const el = document.createElement('div');
-    el.className = 'bl-hud';
-    el.innerHTML = '<div class="tl"></div><div class="tr"></div><div class="br"></div><div class="bl"></div><div class="cd"></div>';
-    this.root.appendChild(el);
-    this.hud = { el, tl: el.querySelector('.tl'), tr: el.querySelector('.tr'), br: el.querySelector('.br'), bl: el.querySelector('.bl'), cd: el.querySelector('.cd'), session };
-    session.on(EV.COUNTDOWN, ({ count }) => { this.hud.cd.textContent = count === 0 ? 'GO!' : String(count); setTimeout(() => { if (this.hud?.cd.textContent === (count === 0 ? 'GO!' : String(count))) this.hud.cd.textContent = ''; }, count === 0 ? 900 : 950); });
+    this.hideHud();
+    this.hud = new Hud(this, session);
+    this.layers.hud.appendChild(this.hud.root);
+    this.hud.root.classList.toggle('touch', this.device === 'touch');
+    return this.hud;
+  }
+  hideHud() { if (this.hud) { this.hud.destroy(); this.hud.root.remove(); this.hud = null; } }
+
+  // ------------------------------------------------------------------------------------------------ frame
+  update(dt, session, snap = false) {
+    this.nav.pollGamepad(dt);
+    this.screen?.update(dt);
+    if (this.hud && session) this.hud.update(dt, session, snap);
   }
 
-  update(dt, session) {
-    const h = this.hud;
-    if (!h || !session?.player) return;
-    const k = session.player;
-    h.tl.textContent = `LAP ${k.race.lap}/${session.race.lapCount}  ${formatTime(session.race.time)}`;
-    h.tr.textContent = ordinal(k.race.place);
-    h.br.textContent = `${Math.round(Math.abs(k.speed) * 3.6)} km/h`;
-    const it = k.item;
-    if (it.roulette.active) h.bl.replaceChildren(getItemIcon(it.roulette.shown ?? 'boost', 48));
-    else if (it.type) h.bl.replaceChildren(getItemIcon(it.type, 48), Object.assign(document.createElement('span'), { textContent: ITEM_DEFS[it.type]?.name ?? it.type }));
-    else h.bl.replaceChildren();
-  }
+  // ------------------------------------------------------------------------------------------------ app-facing helpers
+  showTitle() { this.hideHud(); this.reset('title'); }
+  showMenu() { this.hideHud(); this.reset('menu'); }
 
-  showResults(standings) {
-    this.clear();
-    const el = document.createElement('div');
-    el.className = 'bl-screen';
-    el.innerHTML = `<div class="bl-title" style="font-size:56px">Results</div><div class="bl-list">${standings.map((s) => `<div>${s.place}. ${s.name}${s.isPlayer ? ' (you)' : ''} — ${s.finished ? formatTime(s.time) : 'DNF'}</div>`).join('')}</div><button class="bl-btn" id="bl-again">Race again</button>`;
-    this.root.appendChild(el);
-    el.querySelector('#bl-again').onclick = () => this.app.startRace(this.app.defaultRaceConfig());
-    this.screen = el;
+  showFatal(error, { canReload = true } = {}) {
+    clear(this.layers.error);
+    const msg = String(error?.message ?? error ?? 'Unknown error');
+    const stack = String(error?.stack ?? '').split('\n').slice(0, 6).join('\n');
+    this.layers.error.append(h('div', { class: 'fatal' }, h('div', { class: 'panel' },
+      h('div', { class: 'kicker' }, 'Pit stop'),
+      h('h1', { class: 'h1', style: { fontSize: '2rem', margin: '.2rem 0 .6rem' } }, 'Something went wrong'),
+      h('p', { style: { margin: 0, color: '#dfe6ff' } }, 'The game hit an unexpected problem. Your saved progress is safe. You can head back to the menu, or reload the page.'),
+      h('pre', {}, msg + (stack ? '\n' + stack : '')),
+      h('div', { class: 'row-gap', style: { marginTop: '1.1rem', justifyContent: 'flex-end', gap: '1.1rem' } },
+        h('button', { class: 'btn glass', type: 'button', onClick: () => { clear(this.layers.error); this.app.quitToMenu(); } }, h('span', { class: 'in' }, 'Back to menu')),
+        canReload ? h('button', { class: 'btn', type: 'button', onClick: () => location.reload() }, h('span', { class: 'in' }, 'Reload')) : null))));
   }
 }
