@@ -115,8 +115,8 @@ function drawTop(g, x0, y0, W, H, driverId, c) {
   g.translate(x0, y0);
   // twin racing stripes down the middle (x = 0 -> W/2)
   const cx = W / 2;
-  g.fillStyle = c.secondary; g.fillRect(cx - W * 0.17, 0, W * 0.13, H); g.fillRect(cx + W * 0.04, 0, W * 0.13, H);
-  g.fillStyle = c.accent; g.fillRect(cx - W * 0.025, 0, W * 0.05, H);
+  g.fillStyle = c.secondary; g.fillRect(cx - W * 0.115, 0, W * 0.07, H); g.fillRect(cx + W * 0.045, 0, W * 0.07, H);
+  g.fillStyle = c.accent; g.fillRect(cx - W * 0.012, 0, W * 0.024, H);
   // number on the bonnet area
   g.save(); g.translate(cx, H * 0.34); g.rotate(-Math.PI / 2);
   number(g, RACE_NUMBERS[driverId] ?? '1', 0, 0, W * 0.3, '#ffffff', c.primary);

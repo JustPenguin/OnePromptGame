@@ -66,15 +66,15 @@ export function addWheel(B, pal, o) {
       const a = (i / o.lugs) * Math.PI * 2;
       const stagger = i % 2 ? 0.2 : -0.2;
       const cy = Math.cos(a) * (r + lh * 0.18), cz = Math.sin(a) * (r + lh * 0.18);
-      B.add(rbox(w * 0.36, lh * 1.5, o.lugW ?? r * 0.17, lh * 0.4, 1), { p: [x + stagger * w, y + cy, z + cz], r: [a, 0, 0], ...mir, ...M.rubber, c: '#23252c', ao: 0.5, tag: 'lugs' });
+      B.add(cyl((o.lugW ?? r * 0.17) * 0.55, (o.lugW ?? r * 0.17) * 0.78, lh * 1.5, 6), { p: [x + stagger * w, y + cy, z + cz], r: [a, 0, 0], ...mir, ...M.rubber, c: '#23252c', ao: 0.5, tag: 'lugs' });
     }
   }
   // hub / rim on the outer side (+X for the left wheel)
   const out = hw - 0.012;
   const hubR = r * 0.62;
   if (o.hub === 'disc') {
-    B.add(lathe([[0, out - 0.05], [hubR * 0.4, out - 0.04], [hubR * 0.62, out - 0.012], [hubR, out - 0.02], [hubR * 1.02, out - 0.07]], 22), { ...common, ...M.steel, c: hubCol, ao: 0.5, tag: 'hub' });
-    B.add(sph(hubR * 0.2, 10, 6), { p: [x + out, y, z], s: [0.5, 1, 1], ...mir, ...M.chrome, c: CHROME, tag: 'hub' });
+    B.add(lathe([[0, out - 0.05], [hubR * 0.4, out - 0.04], [hubR * 0.62, out - 0.012], [hubR, out - 0.02], [hubR * 1.02, out - 0.07]], 18), { ...common, ...M.steel, c: hubCol, ao: 0.5, tag: 'hub' });
+    B.add(sph(hubR * 0.2, 8, 5), { p: [x + out, y, z], s: [0.5, 1, 1], ...mir, ...M.chrome, c: CHROME, tag: 'hub' });
     for (let i = 0; i < 5; i++) {
       const a = (i / 5) * Math.PI * 2 + 0.3;
       B.add(cyl(hubR * 0.075, hubR * 0.075, 0.03, 6), { p: [x + out + 0.002, y + Math.cos(a) * hubR * 0.62, z + Math.sin(a) * hubR * 0.62], r: [0, 0, -Math.PI / 2], ...mir, ...M.chrome, c: CHROME, tag: 'hub' });
@@ -193,9 +193,199 @@ function steeringAssembly(B, pal, st, colLen = 0.5) {
   B.add(cyl(0.055, 0.06, 0.05, 12), { p: [px, py, pz], r: [rot[0] + Math.PI / 2, rot[1], rot[2]], ...M.gloss, c: pal.accent, bone: 'steerWheel', tag: 'steer' });
 }
 
+// ------------------------------------------------------------------------------------------------ shared extras
+/** Arch (fender) over a wheel: annular sector in the YZ plane, extruded along X by `width`. */
+function archGeo(rIn, rOut, a0, a1, width) {
+  const sh = new THREE.Shape();
+  sh.absarc(0, 0, rOut, a0, a1, false);
+  sh.absarc(0, 0, rIn, a1, a0, true);
+  sh.closePath();
+  const d = Math.max(0.02, width - 0.04);
+  const g = new THREE.ExtrudeGeometry(sh, { depth: d, bevelEnabled: true, bevelThickness: 0.02, bevelSize: 0.02, bevelSegments: 1, curveSegments: 9 });
+  g.translate(0, 0, -d / 2);
+  g.rotateY(Math.PI / 2);
+  return g;
+}
+
+/** Vertical exhaust stack with a glowing mouth (returns the top position). */
+function addStack(B, x, y0, y1, z, { r = 0.07, mirror = true } = {}) {
+  B.add(tube([[x, y0, z], [x, (y0 + y1) / 2, z - 0.03], [x, y1 - 0.06, z - 0.02]], r, { rs: 8, seg: 4, caps: false }), { ...M.chrome, c: CHROME, bone: 'chassis', mirror, tag: 'stack' });
+  B.add(cyl(r * 1.25, r * 1.1, 0.1, 12), { p: [x, y1 - 0.02, z - 0.02], ...M.steel, c: '#3a4054', bone: 'chassis', mirror, tag: 'stack' });
+  B.add(cyl(r * 0.8, r * 0.8, 0.02, 12), { p: [x, y1 + 0.032, z - 0.02], ...M.glow(1.5), c: '#ffb36a', bone: 'chassis', mirror, tag: 'stack' });
+}
+
+// ------------------------------------------------------------------------------------------------ STREAK (low GT)
+export const STREAK = {
+  id: 'streak',
+  wheels: { FL: { x: 0.78, y: 0.38, z: 1.02, r: 0.38, w: 0.3 }, RL: { x: 0.85, y: 0.44, z: -0.98, r: 0.44, w: 0.44 } },
+  seat: { x: 0, y: 0.5, z: -0.14 },
+  steer: { pos: [0, 0.82, 0.36], axis: [0, 0.5, -0.86], radius: 0.19 },
+  exhaust: [[0.36, 0.36, -1.7], [-0.36, 0.36, -1.7]],
+  size: { length: 3.2, width: 1.98, height: 1.1 },
+};
+
+function buildStreak(B, rig, pal) {
+  const S = STREAK;
+  B.add(rbox(0.96, 0.1, 2.7, 0.04), { p: [0, 0.25, -0.1], ...M.steel, c: '#262a38', bone: 'chassis', tag: 'floor' });
+  // long wedge hood + rear deck
+  B.add(loft([
+    { z: 0.2, hw: 0.5, y0: 0.24, y1: 0.64, n: 4 }, { z: 0.75, hw: 0.47, y0: 0.23, y1: 0.56, n: 4 }, { z: 1.2, hw: 0.37, y0: 0.23, y1: 0.46, n: 3.4 },
+    { z: 1.58, hw: 0.2, y0: 0.24, y1: 0.38, n: 3 }, { z: 1.78, hw: 0.05, y0: 0.26, y1: 0.33, n: 2.6 },
+  ]), { ...M.paint, c: pal.paint, decal: true, bone: 'chassis', tag: 'hood' });
+  B.add(loft([
+    { z: -0.5, hw: 0.5, y0: 0.24, y1: 0.58, n: 4 }, { z: -1.0, hw: 0.53, y0: 0.26, y1: 0.74, n: 4 }, { z: -1.45, hw: 0.45, y0: 0.3, y1: 0.7, n: 3.6 }, { z: -1.68, hw: 0.3, y0: 0.34, y1: 0.6, n: 3 },
+  ]), { ...M.paint, c: pal.paint, decal: true, bone: 'chassis', tag: 'deck' });
+  // cockpit: tub rails, dash, dark interior
+  B.add(rbox(0.09, 0.34, 0.95, 0.04), { p: [0.49, 0.43, -0.14], ...M.paint, c: pal.paint, decal: true, bone: 'chassis', mirror: true, tag: 'rails' });
+  B.add(rbox(1.0, 0.1, 0.5, 0.04), { p: [0, 0.3, -0.14], ...M.plastic, c: '#1b1e28', bone: 'chassis', tag: 'tub' });
+  B.add(rbox(0.96, 0.2, 0.26, 0.08, 1), { p: [0, 0.66, 0.26], r: [-0.25, 0, 0], ...M.paint, c: pal.paint, decal: true, bone: 'chassis', tag: 'dash' });
+  addSeat(B, pal, { y: 0.34, z: -0.2, tilt: 0.3, w: 0.58 });
+  // windscreen frame (chrome arch)
+  B.add(tube([[-0.46, 0.66, 0.32], [-0.4, 0.88, 0.14], [0.4, 0.88, 0.14], [0.46, 0.66, 0.32]], 0.024, { rs: 6 }), { ...M.chrome, c: CHROME, bone: 'chassis', tag: 'screen' });
+  // front splitter, side skirts, diffuser
+  B.add(rbox(1.64, 0.045, 0.4, 0.02), { p: [0, 0.2, 1.62], ...M.plastic, c: '#15171f', bone: 'chassis', tag: 'splitter' });
+  B.add(rbox(1.46, 0.025, 0.1, 0.01), { p: [0, 0.225, 1.8], ...M.panel, c: pal.accent, bone: 'chassis', tag: 'splitter' });
+  B.add(rbox(0.07, 0.1, 1.5, 0.03), { p: [0.58, 0.26, -0.1], ...M.plastic, c: '#15171f', bone: 'chassis', mirror: true, tag: 'skirt' });
+  for (const x of [-0.18, 0, 0.18]) B.add(rbox(0.05, 0.14, 0.42, 0.02, 1), { p: [x, 0.3, -1.6], r: [0.28, 0, 0], ...M.plastic, c: '#15171f', bone: 'chassis', tag: 'diffuser' });
+  // fenders over the rear wheels + small arches over the fronts
+  const R = S.wheels.RL, F = S.wheels.FL;
+  B.add(archGeo(R.r + 0.05, R.r + 0.12, 0.2, Math.PI - 0.2, R.w + 0.12), { p: [R.x, R.y, R.z], ...M.paint, c: pal.paint, decal: true, bone: 'chassis', mirror: true, tag: 'fender' });
+  B.add(archGeo(F.r + 0.04, F.r + 0.09, 0.45, Math.PI - 0.45, F.w + 0.1), { p: [F.x, F.y, F.z], ...M.paint, c: pal.paint, bone: 'chassis', mirror: true, tag: 'fender' });
+  // big rear wing: pylons, plane, endplates, gurney
+  B.add(rbox(0.07, 0.5, 0.16, 0.03), { p: [0.34, 0.95, -1.38], ...M.panel, c: '#20232e', bone: 'chassis', mirror: true, tag: 'wing' });
+  B.add(rbox(1.78, 0.05, 0.44, 0.02), { p: [0, 1.2, -1.45], r: [0.1, 0, 0], ...M.paint, c: pal.stripe, decal: true, bone: 'chassis', tag: 'wing' });
+  B.add(rbox(1.78, 0.04, 0.12, 0.015, 1), { p: [0, 1.28, -1.58], r: [0.5, 0, 0], ...M.paint, c: pal.accent, bone: 'chassis', tag: 'wing' });
+  B.add(rbox(0.05, 0.36, 0.56, 0.02), { p: [0.9, 1.16, -1.46], ...M.paint, c: pal.paint, bone: 'chassis', mirror: true, tag: 'wing' });
+  // lights: slim LED headlights, wide tail light bar, twin exhausts
+  B.add(rbox(0.26, 0.045, 0.05, 0.02, 1), { p: [0.3, 0.38, 1.46], r: [0, -0.35, 0.12], ...M.glow(3), c: '#fff6dc', bone: 'chassis', mirror: true, tag: 'lamp' });
+  B.add(sph(0.045, 8, 6), { p: [0.46, 0.36, 1.38], ...M.glow(3), c: '#fff6dc', bone: 'chassis', mirror: true, tag: 'lamp' });
+  B.add(rbox(1.0, 0.06, 0.05, 0.025, 1), { p: [0, 0.56, -1.74], ...M.glow(2.6), c: '#ff2a2a', bone: 'chassis', tag: 'lamp' });
+  addExhaust(B, pal, 0.36, 0.36, -1.7, { len: 0.2, r: 0.07 });
+  B.add(rbox(0.84, 0.02, 2.1, 0.01), { p: [0, 0.19, -0.1], ...M.glow(2.2), c: pal.accent, bone: 'chassis', tag: 'glow' });
+  steeringAssembly(B, pal, S.steer, 0.3);
+  const W = S.wheels;
+  addWheel(B, pal, { ...W.FL, bone: 'wheelFL', bm: 'wheelFR', hub: 'spoke', rim: pal.accent, band: pal.stripe });
+  addWheel(B, pal, { ...W.RL, bone: 'wheelRL', bm: 'wheelRR', hub: 'spoke', rim: pal.accent, band: pal.stripe, sidewall: 0.58 });
+  return { ...S, mounts: { exhaustL: S.exhaust[0], exhaustR: S.exhaust[1] } };
+}
+
+// ------------------------------------------------------------------------------------------------ HOPPER (dune buggy)
+export const HOPPER = {
+  id: 'hopper',
+  wheels: { FL: { x: 0.82, y: 0.4, z: 1.04, r: 0.4, w: 0.3 }, RL: { x: 0.96, y: 0.6, z: -0.92, r: 0.6, w: 0.54 } },
+  seat: { x: 0, y: 0.66, z: -0.18 },
+  steer: { pos: [0, 1.0, 0.36], axis: [0, 0.6, -0.8], radius: 0.2 },
+  exhaust: [[0.34, 0.74, -1.55], [-0.34, 0.74, -1.55]],
+  size: { length: 3.1, width: 2.3, height: 1.7 },
+};
+
+function buildHopper(B, rig, pal) {
+  const S = HOPPER;
+  B.add(rbox(1.02, 0.22, 2.2, 0.08, 2), { p: [0, 0.42, -0.1], ...M.paint, c: pal.paint, decal: true, bone: 'chassis', tag: 'tub' });
+  B.add(rbox(0.9, 0.1, 2.0, 0.04), { p: [0, 0.3, -0.1], ...M.steel, c: '#262a38', bone: 'chassis', tag: 'floor' });
+  // chunky hood
+  B.add(loft([
+    { z: 0.4, hw: 0.5, y0: 0.4, y1: 0.78, n: 4 }, { z: 0.9, hw: 0.46, y0: 0.38, y1: 0.8, n: 4 }, { z: 1.3, hw: 0.36, y0: 0.38, y1: 0.7, n: 3.4 }, { z: 1.5, hw: 0.16, y0: 0.4, y1: 0.6, n: 2.8 },
+  ]), { ...M.paint, c: pal.paint, decal: true, bone: 'chassis', tag: 'hood' });
+  addSeat(B, pal, { y: 0.5, z: -0.2, w: 0.64 });
+  // exposed engine block + air filter + stacks
+  B.add(rbox(0.86, 0.42, 0.56, 0.12, 1), { p: [0, 0.68, -1.0], ...M.steel, c: '#323848', bone: 'chassis', tag: 'engine' });
+  B.add(rbox(0.74, 0.1, 0.44, 0.04), { p: [0, 0.94, -1.0], ...M.paint, c: pal.paint, decal: true, bone: 'chassis', tag: 'engine' });
+  B.add(cyl(0.12, 0.14, 0.16, 14), { p: [0.18, 1.05, -1.0], ...M.chrome, c: CHROME, bone: 'chassis', tag: 'filter' });
+  addExhaust(B, pal, 0.34, 0.74, -1.58, { len: 0.3, r: 0.07 });
+  // roll cage (chrome) with accent clamps
+  const hoop = [[0.55, 0.6, -0.52], [0.52, 1.3, -0.56], [0.0, 1.5, -0.58], [-0.52, 1.3, -0.56], [-0.55, 0.6, -0.52]];
+  B.add(tube(hoop, 0.04, { rs: 7, seg: 6 }), { ...M.chrome, c: CHROME, bone: 'chassis', tag: 'cage' });
+  B.add(tube([[0.5, 0.62, 0.38], [0.44, 1.0, 0.24], [0.4, 1.38, 0.08], [0.52, 1.3, -0.56]], 0.036, { rs: 7, seg: 6 }), { ...M.chrome, c: CHROME, bone: 'chassis', mirror: true, tag: 'cage' });
+  B.add(tube([[-0.4, 1.38, 0.08], [0, 1.44, 0.04], [0.4, 1.38, 0.08]], 0.036, { rs: 7, seg: 4 }), { ...M.chrome, c: CHROME, bone: 'chassis', tag: 'cage' });
+  for (const [x, y, z] of [[0.52, 1.3, -0.56], [0.4, 1.38, 0.08]]) { B.add(cyl(0.06, 0.06, 0.1, 10), { p: [x, y, z], r: [0, 0, Math.PI / 2], ...M.gloss, c: pal.accent, bone: 'chassis', mirror: true, tag: 'clamp' }); }
+  // big round headlights on the cage
+  addHeadlight(B, pal, 0.3, 1.26, 0.2, { r: 0.115, yaw: 0.08, emit: 3 });
+  // rear springs (coil stack) + shock
+  for (const s of [1, -1]) {
+    B.add(cyl(0.035, 0.035, 0.5, 8), { p: [s * 0.62, 0.8, -0.98], ...M.chrome, c: CHROME, bone: 'chassis', tag: 'spring' });
+    for (let i = 0; i < 5; i++) B.add(torus(0.075, 0.018, 4, 9), { p: [s * 0.62, 0.64 + i * 0.085, -0.98], r: [Math.PI / 2, 0, 0], ...M.plastic, c: pal.accent, bone: 'chassis', tag: 'spring' });
+  }
+  // big flared fenders
+  const R = S.wheels.RL, F = S.wheels.FL;
+  B.add(archGeo(R.r + 0.06, R.r + 0.15, 0.1, Math.PI - 0.1, R.w + 0.14), { p: [R.x, R.y, R.z], ...M.paint, c: pal.paint, decal: true, bone: 'chassis', mirror: true, tag: 'fender' });
+  B.add(archGeo(F.r + 0.05, F.r + 0.11, 0.35, Math.PI - 0.35, F.w + 0.12), { p: [F.x, F.y, F.z], ...M.paint, c: pal.paint, bone: 'chassis', mirror: true, tag: 'fender' });
+  // front bumper + skid plate, tail lights
+  B.add(tube([[-0.5, 0.42, 0.9], [-0.4, 0.4, 1.5], [0.4, 0.4, 1.5], [0.5, 0.42, 0.9]], 0.06, { rs: 8 }), { ...M.chrome, c: CHROME, bone: 'chassis', tag: 'bumper' });
+  B.add(rbox(0.8, 0.05, 0.5, 0.02), { p: [0, 0.27, 1.25], ...M.steel, c: '#59607a', bone: 'chassis', tag: 'skid' });
+  addTailLight(B, 0.4, 0.62, -1.3, { w: 0.13, h: 0.09 });
+  B.add(rbox(0.9, 0.02, 1.9, 0.01), { p: [0, 0.2, -0.1], ...M.glow(2.2), c: pal.accent, bone: 'chassis', tag: 'glow' });
+  // whip antenna with a pennant (two springy bones)
+  const ax = 0.58, ay = 0.94, az = -1.28;
+  rig.add('flag1', 'chassis', [ax, ay, az]);
+  rig.add('flag2', 'flag1', [ax, ay + 0.5, az - 0.04]);
+  B.add(tube([[ax, ay, az], [ax, ay + 0.25, az - 0.01], [ax, ay + 0.5, az - 0.04]], 0.012, { rs: 4, seg: 3 }), { ...M.chrome, c: CHROME, bone: 'flag1', tag: 'flag' });
+  B.add(tube([[ax, ay + 0.5, az - 0.04], [ax, ay + 0.72, az - 0.08], [ax, ay + 0.94, az - 0.14]], 0.009, { rs: 4, seg: 3 }), { ...M.chrome, c: CHROME, bone: 'flag2', tag: 'flag' });
+  B.add(extrude([[0, 0], [0, 0.2], [-0.34, 0.1]], 0.02, { bevel: 0.004, bs: 1 }), { p: [ax, ay + 0.74, az - 0.1], r: [0, Math.PI / 2, 0], ...M.cloth, c: pal.accent, bone: 'flag2', tag: 'flag', ao: 0 });
+  steeringAssembly(B, pal, S.steer, 0.32);
+  const W = S.wheels;
+  addWheel(B, pal, { ...W.FL, bone: 'wheelFL', bm: 'wheelFR', hub: 'disc', rim: pal.accent, lugs: 10, lugH: 0.07, lugW: 0.1 });
+  addWheel(B, pal, { ...W.RL, bone: 'wheelRL', bm: 'wheelRR', hub: 'disc', rim: pal.accent, lugs: 14, lugH: 0.12, lugW: 0.17, sidewall: 0.5 });
+  return { ...S, mounts: { exhaustL: S.exhaust[0], exhaustR: S.exhaust[1] }, secondary: [{ bone: 'flag1', kind: 'ant', amp: 1.0, k: 55, c: 3 }, { bone: 'flag2', kind: 'ant', amp: 1.6, k: 45, c: 2.6 }] };
+}
+
+// ------------------------------------------------------------------------------------------------ CRUSHER (heavy bruiser)
+export const CRUSHER = {
+  id: 'crusher',
+  wheels: { FL: { x: 0.94, y: 0.5, z: 1.0, r: 0.5, w: 0.42 }, RL: { x: 0.98, y: 0.52, z: -0.94, r: 0.52, w: 0.46 } },
+  seat: { x: 0, y: 0.68, z: -0.16 },
+  steer: { pos: [0, 1.04, 0.36], axis: [0, 0.58, -0.81], radius: 0.2 },
+  exhaust: [[0.64, 1.68, -0.92], [-0.64, 1.68, -0.92]],
+  size: { length: 3.1, width: 2.4, height: 1.8 },
+};
+
+function buildCrusher(B, rig, pal) {
+  const S = CRUSHER;
+  // heavy tub + armoured sides
+  B.add(rbox(1.34, 0.38, 2.5, 0.1, 2), { p: [0, 0.48, -0.1], ...M.steel, c: '#3a4054', bone: 'chassis', tag: 'tub' });
+  B.add(loft([
+    { z: 0.3, hw: 0.64, y0: 0.5, y1: 1.0, n: 6 }, { z: 0.9, hw: 0.62, y0: 0.5, y1: 0.94, n: 6 }, { z: 1.35, hw: 0.52, y0: 0.5, y1: 0.82, n: 5 }, { z: 1.62, hw: 0.36, y0: 0.52, y1: 0.72, n: 4 },
+  ]), { ...M.paint, c: pal.paint, decal: true, bone: 'chassis', tag: 'hood' });
+  for (const [z, w] of [[0.5, 0.9], [-0.55, 0.7]]) B.add(rbox(0.1, 0.5, w, 0.03, 1), { p: [0.72, 0.72, z], ...M.panel, c: '#3a4054', bone: 'chassis', mirror: true, tag: 'plate' });
+  for (const z of [0.15, 0.45, 0.75, 1.0]) B.add(sph(0.035, 6, 5), { p: [0.78, 0.82, z], ...M.chrome, c: CHROME, bone: 'chassis', mirror: true, tag: 'rivet' });
+  addSeat(B, pal, { y: 0.52, z: -0.2, w: 0.7 });
+  // engine bay + rear cover
+  B.add(rbox(1.0, 0.46, 0.6, 0.1, 1), { p: [0, 0.76, -1.05], ...M.paint, c: pal.paint, decal: true, bone: 'chassis', tag: 'cover' });
+  B.add(rbox(0.8, 0.16, 0.5, 0.05), { p: [0, 1.05, -1.04], ...M.steel, c: '#59607a', bone: 'chassis', tag: 'cover' });
+  // exhaust stacks (tall chrome pipes) behind the seat
+  addStack(B, 0.64, 0.7, 1.68, -0.92, { r: 0.075 });
+  // bull bar + grille
+  B.add(rbox(0.9, 0.34, 0.12, 0.04, 1), { p: [0, 0.66, 1.58], ...M.plastic, c: '#15171f', bone: 'chassis', tag: 'grille' });
+  for (const x of [-0.3, -0.15, 0, 0.15, 0.3]) B.add(box(0.025, 0.28, 0.03), { p: [x, 0.66, 1.65], ...M.chrome, c: CHROME, bone: 'chassis', tag: 'grille' });
+  B.add(tube([[-0.56, 0.5, 1.26], [-0.56, 0.62, 1.72], [0.56, 0.62, 1.72], [0.56, 0.5, 1.26]], 0.06, { rs: 8 }), { ...M.chrome, c: CHROME, bone: 'chassis', tag: 'bullbar' });
+  for (const x of [-0.36, 0, 0.36]) B.add(tube([[x, 0.48, 1.7], [x, 0.78, 1.76], [x, 1.05, 1.62]], 0.045, { rs: 7, seg: 4 }), { ...M.chrome, c: CHROME, bone: 'chassis', tag: 'bullbar' });
+  B.add(tube([[-0.46, 1.02, 1.64], [0.46, 1.02, 1.64]], 0.05, { rs: 7, seg: 3 }), { ...M.chrome, c: CHROME, bone: 'chassis', tag: 'bullbar' });
+  // hazard stripes on the bumper bar plate
+  B.add(rbox(1.2, 0.1, 0.22, 0.03), { p: [0, 0.4, 1.6], ...M.panel, cf: (x) => (Math.floor(x * 9) % 2 === 0 ? pal.accent : '#15171f'), bone: 'chassis', tag: 'hazard' });
+  // big round headlights
+  addHeadlight(B, pal, 0.4, 0.82, 1.5, { r: 0.12, yaw: 0.1, emit: 3.2 });
+  addTailLight(B, 0.42, 0.76, -1.36, { w: 0.2, h: 0.1 });
+  // roll hoop behind the driver
+  B.add(tube([[0.7, 0.7, -0.62], [0.66, 1.62, -0.64], [0, 1.74, -0.66], [-0.66, 1.62, -0.64], [-0.7, 0.7, -0.62]], 0.055, { rs: 8, seg: 6 }), { ...M.chrome, c: CHROME, bone: 'chassis', tag: 'cage' });
+  B.add(rbox(1.0, 0.12, 0.1, 0.04, 1), { p: [0, 1.5, -0.64], ...M.panel, c: pal.paint, bone: 'chassis', tag: 'cage' });
+  B.add(rbox(0.96, 0.02, 2.2, 0.01), { p: [0, 0.24, -0.1], ...M.glow(2.2), c: pal.accent, bone: 'chassis', tag: 'glow' });
+  steeringAssembly(B, pal, S.steer, 0.3);
+  // fender plates over the wheels
+  const R = S.wheels.RL, F = S.wheels.FL;
+  B.add(archGeo(R.r + 0.05, R.r + 0.13, 0.15, Math.PI - 0.15, R.w + 0.1), { p: [R.x, R.y, R.z], ...M.paint, c: pal.paint, decal: true, bone: 'chassis', mirror: true, tag: 'fender' });
+  B.add(archGeo(F.r + 0.05, F.r + 0.13, 0.3, Math.PI - 0.3, F.w + 0.1), { p: [F.x, F.y, F.z], ...M.paint, c: pal.paint, bone: 'chassis', mirror: true, tag: 'fender' });
+  const W = S.wheels;
+  addWheel(B, pal, { ...W.FL, bone: 'wheelFL', bm: 'wheelFR', hub: 'disc', rim: '#59607a', lugs: 12, lugH: 0.1, lugW: 0.15, band: pal.accent });
+  addWheel(B, pal, { ...W.RL, bone: 'wheelRL', bm: 'wheelRR', hub: 'disc', rim: '#59607a', lugs: 12, lugH: 0.1, lugW: 0.16, band: pal.accent });
+  return { ...S, mounts: { exhaustL: S.exhaust[0], exhaustR: S.exhaust[1] } };
+}
+
 // ------------------------------------------------------------------------------------------------ registry
 export const BODIES = {
   classic: { spec: CLASSIC, build: buildClassic },
+  streak: { spec: STREAK, build: buildStreak },
+  hopper: { spec: HOPPER, build: buildHopper },
+  crusher: { spec: CRUSHER, build: buildCrusher },
 };
 
 /** Register the bones every kart needs (positions are model-space bind positions). */

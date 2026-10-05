@@ -158,7 +158,259 @@ function buildPip(ctx) {
   return { head: { center: hc, radii: rad }, secondary: [{ bone: 'tail1', kind: 'tail', amp: 0.35 }], faceOffset: 1.014 };
 }
 
-export const DRIVER_BUILDERS = { pip: buildPip };
+// ------------------------------------------------------------------------------------------------ shared species helpers
+/** Surface point + outward normal on an ellipsoid (centre c, radii rad) at azimuth az (+ = kart left), elevation el. */
+function surfFrame(c, rad, az, el, out = 0) {
+  const ce = Math.cos(el), dx = Math.sin(az) * ce, dy = Math.sin(el), dz = Math.cos(az) * ce;
+  const n = new THREE.Vector3(dx / rad[0], dy / rad[1], dz / rad[2]).normalize();
+  const p = new THREE.Vector3(c[0] + rad[0] * dx, c[1] + rad[1] * dy, c[2] + rad[2] * dz).addScaledVector(n, out);
+  return { p, n };
+}
+/** Matrix placing a part whose +Y axis should point along `dir` at p. */
+function aimMatrix(p, dir, scale = 1) {
+  const q = new THREE.Quaternion().setFromUnitVectors(_Y, dir.clone().normalize());
+  const s = typeof scale === 'number' ? new THREE.Vector3(scale, scale, scale) : new THREE.Vector3(...scale);
+  return new THREE.Matrix4().compose(p, q, s);
+}
+/** Translate a cone/cylinder so its BASE sits at the origin and it points along +Y. */
+function baseUp(geo, h) { geo.translate(0, h / 2, 0); return geo; }
+
+/**
+ * A pair of ears growing out of a reference ellipsoid (usually the helmet shell).  Adds bones earL / earR (springy).
+ * o: { az, el, r, h, sides, c, inner, tip, splay, lift, back, round }
+ */
+function addEars(ctx, ref, o) {
+  const { B, rig } = ctx;
+  for (const [side, name] of [[1, 'earL'], [-1, 'earR']]) {
+    const f = surfFrame(ref.center, ref.R, side * o.az, o.el, -0.035);
+    const d = f.n.clone().add(new THREE.Vector3(side * (o.splay ?? 0.3), o.lift ?? 0.55, o.back ?? -0.12)).normalize();
+    rig.add(name, 'head', f.p.toArray());
+    if (o.round) {
+      const c2 = f.p.clone().addScaledVector(d, o.r * 0.5);
+      B.add(sph(1, 14, 9), { m: aimMatrix(c2, d, [o.r, o.r * 0.82, o.r]), ...M.fur, c: o.c, bone: name, tag: 'ear' });
+      const c3 = c2.clone().addScaledVector(d, o.r * 0.18).add(new THREE.Vector3(side * -0.01, 0, 0.045));
+      B.add(sph(1, 12, 8), { m: aimMatrix(c3, d, [o.r * 0.66, o.r * 0.3, o.r * 0.66]), ...M.fur, c: o.inner ?? o.c, bone: name, tag: 'ear' });
+      continue;
+    }
+    B.add(baseUp(cone(o.r, o.h, o.sides ?? 8), o.h), { m: aimMatrix(f.p, d), ...M.fur, c: o.c, bone: name, tag: 'ear' });
+    const pin = f.p.clone().add(new THREE.Vector3(0, 0.0, 0.04));
+    B.add(baseUp(cone(o.r * 0.66, o.h * 0.82, o.sides ?? 8), o.h * 0.82), { m: aimMatrix(pin, d, [1, 1, 0.5]), ...M.fur, c: o.inner ?? o.c, bone: name, tag: 'ear' });
+    if (o.tip) {
+      const pt = f.p.clone().addScaledVector(d, o.h * 0.7);
+      B.add(baseUp(cone(o.r * 0.32, o.h * 0.31, o.sides ?? 8), o.h * 0.31), { m: aimMatrix(pt, d), ...M.fur, c: o.tip, bone: name, tag: 'ear' });
+    }
+  }
+}
+
+/**
+ * Chain of tail segments between model-space points, each segment bound to its own bone (prefix1, prefix2, ...), parented
+ * in sequence under `parent`.  radii[i] / colors[i] describe segment i.  Shape 'cap' = capsule, otherwise a stretched ellipsoid.
+ */
+function addChain(ctx, prefix, parent, pts, radii, colors, o = {}) {
+  const { B, rig } = ctx;
+  for (let i = 0; i < pts.length - 1; i++) {
+    const name = prefix + (i + 1);
+    rig.add(name, i === 0 ? parent : prefix + i, pts[i]);
+    const a = new THREE.Vector3(...pts[i]), b = new THREE.Vector3(...pts[i + 1]);
+    const dir = b.clone().sub(a), len = dir.length();
+    const mid = a.clone().add(b).multiplyScalar(0.5);
+    const r = radii[i];
+    const rz = Array.isArray(r) ? r : [r, r];
+    if (o.shape === 'cap') B.add(capsule(rz[0], Math.max(0.01, len - 2 * rz[0]), 2, 8), { m: aimMatrix(mid, dir), ...M.fur, c: colors[i], bone: name, tag: prefix });
+    else B.add(sph(1, 14, 9), { m: aimMatrix(mid, dir, [rz[0], len * 0.62, rz[1]]), ...M.fur, c: colors[i], bone: name, tag: prefix });
+  }
+}
+
+/** Add whiskers (thin tubes) fanning out from a cheek point. */
+function addWhiskers(ctx, hc, rad, o = {}) {
+  const { B } = ctx;
+  for (const s of [-1, 1]) {
+    for (let k = 0; k < 3; k++) {
+      const el = (-0.02 + (k - 1) * 0.14), az = s * (0.88 + k * 0.03);
+      const f = surfFrame(hc, rad, az, el, 0);
+      const out = new THREE.Vector3(s * 1, (k - 1) * 0.16, 0.22).normalize();
+      const e = f.p.clone().addScaledVector(out, o.len ?? 0.36);
+      e.y += (k - 1) * 0.03;
+      B.add(tube([f.p.toArray(), f.p.clone().addScaledVector(out, (o.len ?? 0.36) * 0.5).add(new THREE.Vector3(0, 0.02, 0)).toArray(), e.toArray()], o.r ?? 0.009, { rs: 4, seg: 3, caps: true }), { ...M.plastic, c: o.c ?? '#eaf6ff', bone: 'head', tag: 'whisker', ao: 0 });
+    }
+  }
+}
+
+// ------------------------------------------------------------------------------------------------ RUSTY (fox)
+function buildRusty(ctx) {
+  const { B, rig, colors } = ctx;
+  const orange = colors.primary, cream = colors.secondary, dark = colors.accent;
+  humanoidBase(ctx, { torso: { c: orange, rad: [0.33, 0.3, 0.28] }, arm: { c: orange, r: 0.088, glove: dark, gloveR: 0.1, mat: M.fur } });
+  const S = ctx.body.seat;
+  ell(B, [S.x, S.y + 0.3, S.z + 0.12], [0.21, 0.25, 0.2], { ...M.fur, c: cream, bone: 'torso', tag: 'belly' });
+  const hc = [S.x, S.y + 0.92, S.z + 0.04], rad = [0.5, 0.45, 0.47];
+  ell(B, hc, rad, { ...M.fur, c: orange, bone: 'head', ao: 0.4, seg: [26, 18], tag: 'head' });
+  ell(B, [hc[0], hc[1] - 0.1, hc[2] + rad[2] * 0.78], [0.17, 0.145, 0.27], { ...M.fur, c: cream, bone: 'head', tag: 'snout' });
+  ell(B, [hc[0], hc[1] - 0.04, hc[2] + rad[2] * 0.78 + 0.265], [0.068, 0.052, 0.058], { ...M.gloss, c: '#15110e', bone: 'head', tag: 'snout' });
+  for (const s of [-1, 1]) ell(B, [hc[0] + s * 0.34, hc[1] - 0.14, hc[2] + 0.15], [0.17, 0.14, 0.18], { ...M.fur, c: cream, bone: 'head', tag: 'cheek' });
+  const helmet = addHelmet(ctx, hc, { c: dark, stripe: orange, rim: orange });
+  addGoggles(ctx, helmet, { lens: '#ffd9a0', frame: CHROME, glow: 0.8 });
+  const ref = { center: helmet.center, R: helmet.R };
+  addEars(ctx, ref, { az: 0.78, el: 0.62, r: 0.17, h: 0.44, sides: 8, c: orange, inner: cream, tip: dark, splay: 0.28, lift: 0.7, back: -0.2 });
+  // bushy tail: 3 springy segments, cream tip
+  const tb = [S.x, S.y + 0.2, S.z - 0.5];
+  addChain(ctx, 'tail', 'hip', [tb, [S.x, S.y + 0.36, S.z - 0.78], [S.x, S.y + 0.66, S.z - 0.98], [S.x, S.y + 0.98, S.z - 1.04]], [[0.15, 0.15], [0.19, 0.19], [0.17, 0.17]], [orange, orange, cream]);
+  return { head: { center: hc, radii: rad }, secondary: [{ bone: 'earL', kind: 'ear', amp: 0.9, side: 1 }, { bone: 'earR', kind: 'ear', amp: 0.9, side: -1 }, { bone: 'tail1', kind: 'tail', amp: 0.55, freq: 5.5, k: 55, c: 4.4 }, { bone: 'tail2', kind: 'tail', amp: 0.7, freq: 5.5, k: 50, c: 4 }, { bone: 'tail3', kind: 'tail', amp: 0.8, freq: 5.5, k: 46, c: 3.6 }], faceOffset: 1.014 };
+}
+
+// ------------------------------------------------------------------------------------------------ BRUNO (bear)
+function buildBruno(ctx) {
+  const { B, rig, colors } = ctx;
+  const brown = colors.primary, tan = colors.secondary, gold = colors.accent;
+  humanoidBase(ctx, { shoulderX: 0.34, torso: { c: brown, rad: [0.4, 0.34, 0.32] }, arm: { c: brown, r: 0.108, glove: gold, gloveR: 0.118, mat: M.fur } });
+  const S = ctx.body.seat;
+  ell(B, [S.x, S.y + 0.3, S.z + 0.13], [0.28, 0.27, 0.22], { ...M.fur, c: tan, bone: 'torso', tag: 'belly' });
+  const hc = [S.x, S.y + 0.94, S.z + 0.04], rad = [0.53, 0.48, 0.5];
+  ell(B, hc, rad, { ...M.fur, c: brown, bone: 'head', ao: 0.4, seg: [26, 18], tag: 'head' });
+  ell(B, [hc[0], hc[1] - 0.12, hc[2] + 0.4], [0.2, 0.155, 0.17], { ...M.fur, c: tan, bone: 'head', tag: 'snout' });
+  ell(B, [hc[0], hc[1] - 0.045, hc[2] + 0.55], [0.07, 0.05, 0.045], { ...M.gloss, c: '#1a0e08', bone: 'head', tag: 'snout' });
+  const helmet = addHelmet(ctx, hc, { c: gold, stripe: brown, rim: brown, r: [0.55, 0.51, 0.53] });
+  addGoggles(ctx, helmet, { lens: '#ffb44a', frame: shade(brown, 1.3), glow: 0.8 });
+  addEars(ctx, { center: helmet.center, R: helmet.R }, { az: 0.92, el: 0.55, r: 0.14, round: true, c: brown, inner: tan, splay: 0.4, lift: 0.3, back: -0.1 });
+  rig.add('tail1', 'hip', [S.x, S.y + 0.12, S.z - 0.5]);
+  ell(B, [S.x, S.y + 0.14, S.z - 0.58], [0.13, 0.13, 0.13], { ...M.fur, c: brown, bone: 'tail1', tag: 'tail' });
+  return { head: { center: hc, radii: rad }, secondary: [{ bone: 'earL', kind: 'ear', amp: 0.5, side: 1 }, { bone: 'earR', kind: 'ear', amp: 0.5, side: -1 }, { bone: 'tail1', kind: 'tail', amp: 0.5, freq: 6 }], faceOffset: 1.014 };
+}
+
+// ------------------------------------------------------------------------------------------------ HOPPER (frog)
+function buildHopper(ctx) {
+  const { B, rig, colors } = ctx;
+  const green = colors.primary, belly = colors.secondary, pink = colors.accent;
+  humanoidBase(ctx, { torso: { c: green, rad: [0.31, 0.29, 0.27] }, arm: { c: green, r: 0.078, glove: pink, gloveR: 0.098, mat: M.skin } });
+  const S = ctx.body.seat;
+  ell(B, [S.x, S.y + 0.3, S.z + 0.11], [0.2, 0.24, 0.18], { ...M.skin, c: belly, bone: 'torso', tag: 'belly' });
+  const hc = [S.x, S.y + 0.9, S.z + 0.05], rad = [0.56, 0.4, 0.48];
+  ell(B, hc, rad, { ...M.skin, c: green, bone: 'head', ao: 0.4, seg: [26, 16], tag: 'head' });
+  // throat pouch
+  rig.add('throat', 'head', [hc[0], hc[1] - 0.22, hc[2] + 0.22]);
+  ell(B, [hc[0], hc[1] - 0.24, hc[2] + 0.22], [0.26, 0.16, 0.2], { ...M.skin, c: belly, bone: 'throat', tag: 'throat' });
+  // bulging eyes with lazy lids
+  const eyeR = 0.185;
+  for (const [s, lid] of [[1, 'lidL'], [-1, 'lidR']]) {
+    const ec = [hc[0] + s * 0.27, hc[1] + 0.3, hc[2] + 0.16];
+    ell(B, [ec[0], ec[1] - 0.05, ec[2] - 0.04], [0.22, 0.19, 0.22], { ...M.skin, c: green, bone: 'head', tag: 'socket' });
+    ell(B, ec, [eyeR, eyeR, eyeR], { ...M.gloss, c: '#ffffff', bone: 'head', seg: [18, 12], tag: 'eye', ao: 0.15 });
+    ell(B, [ec[0] + s * -0.01, ec[1] - 0.005, ec[2] + eyeR * 0.9], [0.095, 0.095, 0.05], { ...M.gloss, c: '#0c1812', bone: 'head', tag: 'pupil', ao: 0 });
+    ell(B, [ec[0] + s * 0.02, ec[1] + 0.03, ec[2] + eyeR * 0.98], [0.03, 0.03, 0.02], { ...M.glow(1.2), c: '#ffffff', bone: 'head', tag: 'pupil' });
+    rig.add(lid, 'head', ec);
+    const cap = new THREE.SphereGeometry(1, 16, 8, 0, Math.PI * 2, 0, Math.PI / 2);
+    B.add(cap, { p: ec, s: eyeR * 1.1, r: [-0.45, 0, 0], ...M.skin, c: shade(green, 0.92), bone: lid, tag: 'lid', ao: 0.2 });
+  }
+  const helmet = addHelmet(ctx, hc, { c: pink, stripe: colors.secondary, rim: shade(pink, 0.8), r: [0.5, 0.4, 0.44], tilt: -0.85, theta: 1.15, dy: -0.02, dz: -0.12 });
+  return { head: { center: hc, radii: rad }, secondary: [{ bone: 'lidL', kind: 'lid' }, { bone: 'lidR', kind: 'lid' }, { bone: 'throat', kind: 'throat' }], faceOffset: 1.016 };
+}
+
+// ------------------------------------------------------------------------------------------------ LUNA (cat)
+function buildLuna(ctx) {
+  const { B, rig, colors } = ctx;
+  const violet = colors.primary, fur = colors.secondary, cyan = colors.accent;
+  humanoidBase(ctx, { torso: { c: violet, rad: [0.31, 0.3, 0.27] }, arm: { c: violet, r: 0.082, glove: cyan, gloveR: 0.095, mat: M.cloth } });
+  const S = ctx.body.seat;
+  // cyan chest stripe
+  B.add(rbox(0.06, 0.4, 0.04, 0.02, 1), { p: [S.x, S.y + 0.32, S.z + 0.27], r: [0.1, 0, 0], ...M.gloss, c: cyan, bone: 'torso', tag: 'suit' });
+  const hc = [S.x, S.y + 0.92, S.z + 0.04], rad = [0.47, 0.43, 0.45];
+  ell(B, hc, rad, { ...M.fur, c: fur, bone: 'head', ao: 0.4, seg: [26, 18], tag: 'head' });
+  addWhiskers(ctx, hc, rad, { c: '#dff6ff', len: 0.4 });
+  const helmet = addHelmet(ctx, hc, { c: violet, stripe: cyan, rim: cyan });
+  addGoggles(ctx, helmet, { lens: cyan, frame: CHROME, glow: 1.4 });
+  addEars(ctx, { center: helmet.center, R: helmet.R }, { az: 0.74, el: 0.7, r: 0.17, h: 0.42, sides: 6, c: fur, inner: '#ff8ec4', tip: null, splay: 0.2, lift: 0.75, back: -0.15 });
+  // long curling tail
+  addChain(ctx, 'tail', 'hip', [[S.x, S.y + 0.18, S.z - 0.5], [S.x + 0.05, S.y + 0.32, S.z - 0.8], [S.x + 0.12, S.y + 0.6, S.z - 0.96], [S.x + 0.1, S.y + 0.92, S.z - 0.95], [S.x - 0.02, S.y + 1.1, S.z - 0.82]], [0.065, 0.062, 0.058, 0.055], [fur, fur, fur, cyan], { shape: 'cap' });
+  return { head: { center: hc, radii: rad }, secondary: [{ bone: 'earL', kind: 'ear', amp: 0.8, side: 1 }, { bone: 'earR', kind: 'ear', amp: 0.8, side: -1 }, { bone: 'tail1', kind: 'tail', amp: 0.5, freq: 4, k: 60, c: 4.6 }, { bone: 'tail2', kind: 'tail', amp: 0.7, freq: 4, k: 55, c: 4.2 }, { bone: 'tail3', kind: 'tail', amp: 0.8, freq: 4, k: 50, c: 3.8 }, { bone: 'tail4', kind: 'tail', amp: 0.9, freq: 4, k: 46, c: 3.5 }], faceOffset: 1.014 };
+}
+
+// ------------------------------------------------------------------------------------------------ GIZMO (robot)
+function buildGizmo(ctx) {
+  const { B, rig, colors } = ctx;
+  const teal = colors.primary, silver = colors.secondary, yellow = colors.accent;
+  const S = ctx.body.seat;
+  humanoidBase(ctx, { torso: { c: teal, rad: [0.001, 0.001, 0.001], mat: M.gloss }, arm: { c: silver, r: 0.07, glove: yellow, gloveR: 0.1, mat: M.steel } });
+  // boxy torso, chest plate with status lights
+  B.add(rbox(0.66, 0.56, 0.5, 0.17, 2), { p: [S.x, S.y + 0.33, S.z + 0.01], ...M.paint, c: teal, bone: 'torso', tag: 'torso' });
+  B.add(rbox(0.4, 0.28, 0.05, 0.05, 1), { p: [S.x, S.y + 0.34, S.z + 0.27], r: [0.1, 0, 0], ...M.steel, c: silver, bone: 'torso', tag: 'torso' });
+  [[-0.11, '#ff5a5a'], [0, yellow], [0.11, '#5affb0']].forEach(([x, c]) => B.add(sph(0.035, 8, 6), { p: [S.x + x, S.y + 0.36, S.z + 0.3], ...M.glow(2.4), c, bone: 'torso', tag: 'lights' }));
+  for (const s of [-1, 1]) ell(B, [S.x + s * 0.34, S.y + 0.46, S.z + 0.02], [0.13, 0.13, 0.13], { ...M.steel, c: silver, bone: 'torso', tag: 'shoulder' });
+  // neck + head (dome with visor)
+  B.add(cyl(0.12, 0.14, 0.14, 12), { p: [S.x, S.y + 0.64, S.z + 0.02], ...M.steel, c: '#59607a', bone: 'torso', tag: 'neck' });
+  const hc = [S.x, S.y + 0.92, S.z + 0.04], rad = [0.5, 0.42, 0.46];
+  ell(B, hc, rad, { ...M.paint, rough: 0.2, metal: 0.55, c: silver, bone: 'head', ao: 0.3, seg: [26, 18], tag: 'head' });
+  // speaker pods + glowing rings
+  for (const s of [-1, 1]) {
+    B.add(cyl(0.15, 0.15, 0.1, 16), { p: [hc[0] + s * 0.5, hc[1] - 0.02, hc[2]], r: [0, 0, Math.PI / 2], ...M.gloss, c: teal, bone: 'head', tag: 'pod' });
+    B.add(torus(0.13, 0.016, 5, 16), { p: [hc[0] + s * 0.555, hc[1] - 0.02, hc[2]], r: [0, Math.PI / 2, 0], ...M.glow(2.2), c: yellow, bone: 'head', tag: 'pod' });
+  }
+  // dome cap on top
+  const cap = new THREE.SphereGeometry(1, 24, 10, 0, Math.PI * 2, 0, 1.05);
+  B.add(cap, { p: [hc[0], hc[1] + 0.03, hc[2] - 0.05], r: [-0.3, 0, 0], s: [0.53, 0.46, 0.5], ...M.paint, c: teal, bone: 'head', tag: 'cap', ao: 0.25 });
+  // antenna (springy two-bone chain) with glowing ball
+  const top = [hc[0], hc[1] + 0.43, hc[2] - 0.12];
+  rig.add('ant1', 'head', top);
+  rig.add('ant2', 'ant1', [top[0], top[1] + 0.16, top[2] - 0.01]);
+  B.add(cyl(0.022, 0.026, 0.17, 8), { p: [top[0], top[1] + 0.08, top[2]], ...M.steel, c: '#59607a', bone: 'ant1', tag: 'ant' });
+  B.add(cyl(0.016, 0.02, 0.15, 8), { p: [top[0], top[1] + 0.24, top[2] - 0.01], ...M.steel, c: '#59607a', bone: 'ant2', tag: 'ant' });
+  B.add(sph(0.07, 10, 8), { p: [top[0], top[1] + 0.34, top[2] - 0.01], ...M.glow(2.6), c: yellow, bone: 'ant2', tag: 'ant' });
+  return { head: { center: hc, radii: rad }, secondary: [{ bone: 'ant1', kind: 'ant', amp: 0.8, k: 70, c: 3.5 }, { bone: 'ant2', kind: 'ant', amp: 1.2, k: 60, c: 3 }], faceOffset: 1.012 };
+}
+
+// ------------------------------------------------------------------------------------------------ ROCCO (rhino)
+function buildRocco(ctx) {
+  const { B, rig, colors } = ctx;
+  const grey = colors.primary, light = colors.secondary, pink = colors.accent;
+  humanoidBase(ctx, { shoulderX: 0.36, torso: { c: grey, rad: [0.42, 0.36, 0.34] }, arm: { c: grey, r: 0.112, glove: pink, gloveR: 0.124, mat: M.skin } });
+  const S = ctx.body.seat;
+  ell(B, [S.x, S.y + 0.3, S.z + 0.14], [0.29, 0.28, 0.22], { ...M.skin, c: light, bone: 'torso', tag: 'belly' });
+  const hc = [S.x, S.y + 0.94, S.z + 0.04], rad = [0.55, 0.46, 0.5];
+  ell(B, hc, rad, { ...M.skin, c: grey, bone: 'head', ao: 0.4, seg: [26, 18], tag: 'head' });
+  ell(B, [hc[0], hc[1] - 0.14, hc[2] + 0.4], [0.31, 0.21, 0.27], { ...M.skin, c: shade(grey, 1.12), bone: 'head', tag: 'snout' });
+  for (const s of [-1, 1]) ell(B, [hc[0] + s * 0.1, hc[1] - 0.1, hc[2] + 0.64], [0.04, 0.032, 0.03], { ...M.gloss, c: '#171a24', bone: 'head', tag: 'snout' });
+  // horns (ivory)
+  const horn = '#f4ecd6';
+  B.add(baseUp(cone(0.125, 0.46, 12), 0.46), { m: aimMatrix(new THREE.Vector3(hc[0], hc[1] - 0.06, hc[2] + 0.55), new THREE.Vector3(0, 0.62, 0.78)), ...M.gloss, c: horn, bone: 'head', tag: 'horn', rough: 0.35 });
+  B.add(baseUp(cone(0.075, 0.22, 10), 0.22), { m: aimMatrix(new THREE.Vector3(hc[0], hc[1] + 0.1, hc[2] + 0.36), new THREE.Vector3(0, 0.7, 0.55)), ...M.gloss, c: horn, bone: 'head', tag: 'horn', rough: 0.35 });
+  const helmet = addHelmet(ctx, hc, { c: pink, stripe: light, rim: shade(pink, 0.7), r: [0.57, 0.52, 0.54], tilt: -0.55 });
+  addGoggles(ctx, helmet, { lens: '#ffd0da', frame: '#3b4258', glow: 0.8, az: 0.4 });
+  addEars(ctx, { center: helmet.center, R: helmet.R }, { az: 1.0, el: 0.45, r: 0.1, h: 0.17, sides: 8, c: grey, inner: '#d5a0b0', splay: 0.7, lift: 0.1, back: -0.1 });
+  addChain(ctx, 'tail', 'hip', [[S.x, S.y + 0.12, S.z - 0.5], [S.x, S.y + 0.3, S.z - 0.78], [S.x, S.y + 0.52, S.z - 0.9]], [0.075, 0.07], [grey, '#3b4258'], { shape: 'cap' });
+  return { head: { center: hc, radii: rad }, secondary: [{ bone: 'earL', kind: 'ear', amp: 0.45, side: 1 }, { bone: 'earR', kind: 'ear', amp: 0.45, side: -1 }, { bone: 'tail1', kind: 'tail', amp: 0.4, freq: 5, k: 70, c: 5 }, { bone: 'tail2', kind: 'tail', amp: 0.5, freq: 5, k: 60, c: 4.5 }], faceOffset: 1.014 };
+}
+
+// ------------------------------------------------------------------------------------------------ QUILL (duck)
+function buildQuill(ctx) {
+  const { B, rig, colors } = ctx;
+  const yellow = colors.primary, cream = colors.secondary, orange = colors.accent;
+  humanoidBase(ctx, { shoulderX: 0.27, torso: { c: yellow, rad: [0.3, 0.29, 0.26] }, arm: { c: yellow, r: 0.075, glove: orange, gloveR: 0.09, mat: M.fur } });
+  const S = ctx.body.seat;
+  ell(B, [S.x, S.y + 0.3, S.z + 0.1], [0.2, 0.24, 0.18], { ...M.fur, c: cream, bone: 'torso', tag: 'belly' });
+  const hc = [S.x, S.y + 0.92, S.z + 0.04], rad = [0.49, 0.45, 0.47];
+  ell(B, hc, rad, { ...M.fur, c: yellow, bone: 'head', ao: 0.4, seg: [26, 18], tag: 'head' });
+  // flat bill: upper + lower
+  ell(B, [hc[0], hc[1] - 0.075, hc[2] + 0.5], [0.21, 0.07, 0.27], { ...M.gloss, c: orange, bone: 'head', tag: 'bill' });
+  ell(B, [hc[0], hc[1] - 0.145, hc[2] + 0.46], [0.18, 0.05, 0.21], { ...M.gloss, c: shade(orange, 0.8), bone: 'head', tag: 'bill' });
+  const helmet = addHelmet(ctx, hc, { c: orange, stripe: yellow, rim: yellow });
+  addGoggles(ctx, helmet, { lens: '#fff2a8', frame: CHROME, glow: 1.0 });
+  // feather crest poking out of the helmet
+  const topf = surfFrame(helmet.center, helmet.R, 0, 1.38, -0.02);
+  rig.add('crest1', 'head', topf.p.toArray());
+  for (const [k, ang] of [[0, 0], [1, 0.5], [-1, -0.5]]) {
+    const d = new THREE.Vector3(Math.sin(ang) * 0.5, 1, -0.55 + Math.abs(ang) * -0.1).normalize();
+    B.add(baseUp(cone(0.05, 0.24, 6), 0.24), { m: aimMatrix(topf.p.clone().add(new THREE.Vector3(k * 0.03, 0, 0)), d), ...M.fur, c: yellow, bone: 'crest1', tag: 'crest' });
+  }
+  // fan tail
+  rig.add('tail1', 'hip', [S.x, S.y + 0.2, S.z - 0.46]);
+  for (const [k, ang] of [[0, 0], [1, 0.45], [-1, -0.45]]) {
+    const d = new THREE.Vector3(Math.sin(ang), 0.75, -0.7).normalize();
+    const p = new THREE.Vector3(S.x, S.y + 0.22, S.z - 0.5).addScaledVector(d, 0.2);
+    B.add(sph(1, 10, 7), { m: aimMatrix(p, d, [0.07, 0.2, 0.025]), ...M.fur, c: k === 0 ? orange : yellow, bone: 'tail1', tag: 'tail' });
+  }
+  return { head: { center: hc, radii: rad }, secondary: [{ bone: 'crest1', kind: 'ant', amp: 0.9, k: 90, c: 4 }, { bone: 'tail1', kind: 'tail', amp: 0.7, freq: 7, k: 80, c: 5 }], faceOffset: 1.014 };
+}
+
+export const DRIVER_BUILDERS = { pip: buildPip, rusty: buildRusty, bruno: buildBruno, hopper: buildHopper, luna: buildLuna, gizmo: buildGizmo, rocco: buildRocco, quill: buildQuill };
 export function hasDriver(id) { return !!DRIVER_BUILDERS[id]; }
 export function buildDriver(driverId, ctx) {
   const f = DRIVER_BUILDERS[driverId] ?? DRIVER_BUILDERS.pip;

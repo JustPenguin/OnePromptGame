@@ -213,8 +213,8 @@ export class KartVisual {
   // ------------------------------------------------------------------------------------------ materials / quality
   _pickMaterial() {
     if (this.ghost) return (this.matGhost ??= createKartMaterial({ map: this.livery, envMap: this.envMap, physical: false, ghost: true }));
-    if (MAT_QUALITY[this.qualityId]) return (this.matHigh ??= createKartMaterial({ map: this.livery, envMap: this.envMap, physical: true, envIntensity: 1.0 }));
-    return (this.matStd ??= createKartMaterial({ map: this.livery, envMap: this.envMap, physical: false, envIntensity: 1.0 }));
+    if (MAT_QUALITY[this.qualityId]) return (this.matHigh ??= createKartMaterial({ map: this.livery, envMap: this.envMap, physical: true, envIntensity: 0.6 }));
+    return (this.matStd ??= createKartMaterial({ map: this.livery, envMap: this.envMap, physical: false, envIntensity: 0.6 }));
   }
   setQuality(id) {
     if (!id || id === this.qualityId) return;
