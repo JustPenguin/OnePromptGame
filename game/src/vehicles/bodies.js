@@ -173,7 +173,7 @@ function buildClassic(B, rig, pal) {
   const W = S.wheels;
   addWheel(B, pal, { ...W.FL, bone: 'wheelFL', bm: 'wheelFR', hub: 'spoke', rim: CHROME, band: pal.accent });
   addWheel(B, pal, { ...W.RL, bone: 'wheelRL', bm: 'wheelRR', hub: 'spoke', rim: CHROME, band: pal.accent });
-  return { ...S, mounts: { exhaustL: S.exhaust[0], exhaustR: S.exhaust[1] } };
+  return { ...S, mounts: { exhaustL: S.exhaust[0], exhaustR: S.exhaust[1], headL: [0.43, 0.43, 1.02], headR: [-0.43, 0.43, 1.02] } };
 }
 
 /** Column (static, chassis) + wheel rim, spokes and cap (bone 'steerWheel'). */
@@ -257,7 +257,7 @@ function buildStreak(B, rig, pal) {
   const W = S.wheels;
   addWheel(B, pal, { ...W.FL, bone: 'wheelFL', bm: 'wheelFR', hub: 'spoke', rim: pal.accent, band: pal.stripe });
   addWheel(B, pal, { ...W.RL, bone: 'wheelRL', bm: 'wheelRR', hub: 'spoke', rim: pal.accent, band: pal.stripe, sidewall: 0.58 });
-  return { ...S, mounts: { exhaustL: S.exhaust[0], exhaustR: S.exhaust[1] } };
+  return { ...S, mounts: { exhaustL: S.exhaust[0], exhaustR: S.exhaust[1], headL: [0.3, 0.38, 1.5], headR: [-0.3, 0.38, 1.5] } };
 }
 
 // ------------------------------------------------------------------------------------------------ HOPPER (dune buggy)
@@ -319,7 +319,7 @@ function buildHopper(B, rig, pal) {
   const W = S.wheels;
   addWheel(B, pal, { ...W.FL, bone: 'wheelFL', bm: 'wheelFR', hub: 'disc', rim: pal.accent, lugs: 10, lugH: 0.07, lugW: 0.1 });
   addWheel(B, pal, { ...W.RL, bone: 'wheelRL', bm: 'wheelRR', hub: 'disc', rim: pal.accent, lugs: 14, lugH: 0.12, lugW: 0.17, sidewall: 0.5 });
-  return { ...S, mounts: { exhaustL: S.exhaust[0], exhaustR: S.exhaust[1] }, secondary: [{ bone: 'flag1', kind: 'ant', amp: 1.0, k: 55, c: 3 }, { bone: 'flag2', kind: 'ant', amp: 1.6, k: 45, c: 2.6 }] };
+  return { ...S, mounts: { exhaustL: S.exhaust[0], exhaustR: S.exhaust[1], headL: [0.3, 1.26, 0.3], headR: [-0.3, 1.26, 0.3] }, secondary: [{ bone: 'flag1', kind: 'ant', amp: 1.0, k: 55, c: 3 }, { bone: 'flag2', kind: 'ant', amp: 1.6, k: 45, c: 2.6 }] };
 }
 
 // ------------------------------------------------------------------------------------------------ CRUSHER (heavy bruiser)
@@ -373,7 +373,7 @@ function buildCrusher(B, rig, pal) {
   const W = S.wheels;
   addWheel(B, pal, { ...W.FL, bone: 'wheelFL', bm: 'wheelFR', hub: 'disc', rim: '#59607a', lugs: 12, lugH: 0.1, lugW: 0.15, band: pal.accent });
   addWheel(B, pal, { ...W.RL, bone: 'wheelRL', bm: 'wheelRR', hub: 'disc', rim: '#59607a', lugs: 12, lugH: 0.1, lugW: 0.16, band: pal.accent });
-  return { ...S, mounts: { exhaustL: S.exhaust[0], exhaustR: S.exhaust[1] } };
+  return { ...S, mounts: { exhaustL: S.exhaust[0], exhaustR: S.exhaust[1], headL: [0.4, 0.82, 1.6], headR: [-0.4, 0.82, 1.6] } };
 }
 
 // ------------------------------------------------------------------------------------------------ registry

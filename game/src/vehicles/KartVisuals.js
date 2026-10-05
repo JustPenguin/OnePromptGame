@@ -2,7 +2,8 @@
 // Contract (keep stable):
 //   attachKartVisual(kart, session)  builds kart.visual = { root, update(dt, kart, session), dispose(), ... } and adds it under
 //                                    kart.root (positioned/oriented by physics; the model faces +Z, origin on the ground under the kart's centre).
-//   createKartShowcase(driverId, bodyId, opts) -> { root, update(dt), dispose(), setPose(name), ... }   for menu turntables / podium.
+//   createKartShowcase(driverId, bodyId, opts) -> { root, update(dt), dispose(), setPose(name), setPaint(color), ... }   for menu turntables / podium.
+//   opts: { pose, quality, envMap, paint }   (paint = optional custom paint colour, e.g. '#ff3d9a')
 // Each kart is ONE SkinnedMesh (rigid-bound bones, one patched PBR material, see kartMaterial.js) + one face-decal mesh = 2 draw calls.
 // Animation is procedural, driven every frame by kart fields (speed, steerVisual, lean, drift, boost, spin, grounded, race...) and by
 // session events, and is allocation-free.  The pose solve is deferred to render time (`flush()`), so fast headless simulation
@@ -179,7 +180,10 @@ export class KartVisual {
     // ---- material + skinned mesh
     this.livery = getLiveryTexture(A.driver, MAT_QUALITY[this.qualityId] ? 1024 : 512);
     this.matHigh = null; this.matStd = null; this.matGhost = null;
+    this.driverPrimary = new THREE.Color(A.driver.colors.primary);
+    this.paint = opts.paint ? new THREE.Color(opts.paint) : null;
     this.mat = this._pickMaterial();
+    this._syncPaint();
     this.mesh = new THREE.SkinnedMesh(A.geometry, this.mat);
     this.mesh.name = 'kart';
     this.lod = 0;
@@ -266,7 +270,18 @@ export class KartVisual {
     this._applyMaterial();
   }
   _disposeMats() { for (const m of [this.matHigh, this.matStd, this.matGhost]) m?.dispose(); this.matHigh = this.matStd = this.matGhost = null; }
-  _applyMaterial() { this.mat = this._pickMaterial(); this.mesh.material = this.mat; }
+  _applyMaterial() { this.mat = this._pickMaterial(); this._syncPaint(); this.mesh.material = this.mat; }
+  /** Custom paint colour (any CSS colour / hex / THREE.Color) replacing the driver's primary paint; null restores the livery. */
+  setPaint(color) {
+    this.paint = color == null ? null : new THREE.Color(color);
+    this._syncPaint();
+  }
+  _syncPaint() {
+    const u = this.mat?.userData?.u; if (!u) return;
+    const p = this.paint, f = this.driverPrimary;
+    u.uPaintOn.value = p ? 1 : 0;
+    if (p) { u.uPaintFrom.value.copy(f); u.uPaintTo.value.copy(p); u.uPaintLum.value = Math.max(0.02, 0.2126 * f.r + 0.7152 * f.g + 0.0722 * f.b); }
+  }
   setEnvMap(tex) {
     if (tex === this.envMap) return;
     this.envMap = tex;
@@ -583,7 +598,9 @@ export class KartVisual {
 export function attachKartVisual(kart, session) {
   const env = session?.scene?.environment ?? session?.envMap ?? null;
   const qid = session?.quality?.id ?? 'high';
-  const v = new KartVisual(kart.driverId, kart.bodyId, { kart, session, envMap: env, quality: qid });
+  // optional custom paint: kart.paint / kart.ext.paint, or the player's `config.player.paint` (any CSS colour)
+  const paint = kart.paint ?? kart.ext?.paint ?? (kart.isPlayer ? session?.config?.player?.paint : null) ?? null;
+  const v = new KartVisual(kart.driverId, kart.bodyId, { kart, session, envMap: env, quality: qid, paint });
   v.deferred = !!session?.app?.renderer?.supportsVisualFlush;
   v.mat.userData.u.uTime.value = 0;
   v.prepareLods();
@@ -600,7 +617,7 @@ export function attachKartVisual(kart, session) {
  */
 export function createKartShowcase(driverId, bodyId, opts = {}) {
   const fake = makeFakeKart(driverId, bodyId);
-  const vis = new KartVisual(driverId, bodyId, { kart: fake, quality: opts.quality ?? 'high', envMap: opts.envMap });
+  const vis = new KartVisual(driverId, bodyId, { kart: fake, quality: opts.quality ?? 'high', envMap: opts.envMap, paint: opts.paint });
   vis.deferred = false;
   const root = new THREE.Group();
   root.name = 'kartShowcase';
@@ -611,6 +628,8 @@ export function createKartShowcase(driverId, bodyId, opts = {}) {
     t: 0,
     setPose(name) { api.pose = name; api.poseT = 0; },
     setGhost(on) { vis.setGhost(on); },
+    /** Custom paint colour (CSS colour / hex) or null for the driver's own livery. */
+    setPaint(color) { vis.setPaint(color); },
     update(dt = 1 / 60) {
       api.t += dt; api.poseT = (api.poseT ?? 0) + dt;
       poseFake(fake, api.pose, api.t, api.poseT);
@@ -661,3 +680,4 @@ function poseFake(k, pose, t, pt) {
 
 // portraits live in portraits.js; re-exported here so `import { getKartPortrait } from '../vehicles/KartVisuals.js'` works too
 export { getDriverPortrait, getKartPortrait } from './portraits.js';
+export { createPodiumScene } from './podium.js';

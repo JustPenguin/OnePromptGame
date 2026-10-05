@@ -3,7 +3,7 @@
 //   getKartPortrait(driverId, bodyId, size = 192, opts?) -> HTMLCanvasElement  (cached; whole kart, 3/4 view)
 // Both return a transparent-background canvas immediately (a coloured-disc fallback until/unless the 3D render is possible) and
 // repaint the SAME canvas element in place, so UI that already inserted it keeps working.
-//   opts: { az, el, expression: 'open'|'happy'|'wow'|'determined'|'sad', background: css colour | null, supersample = 2 }
+//   opts: { az, el, expression: 'open'|'happy'|'wow'|'determined'|'sad', background: css colour | null, supersample = 2, paint: custom paint colour }
 import * as THREE from 'three';
 import { getDriver } from '../data/roster.js';
 import { getSharedRenderer, getSharedEnvironment } from '../render/shared.js';
@@ -42,7 +42,7 @@ function renderPixels(driverId, bodyId, kind, px, opts) {
   const R = getSharedRenderer();
   if (!R || R.contextLost || !R.renderToPixels || !getSharedEnvironment()) return null;
   const { scene, camera } = getStudio();
-  const show = createKartShowcase(driverId, bodyId, { pose: 'idle', quality: 'high' });
+  const show = createKartShowcase(driverId, bodyId, { pose: 'idle', quality: 'high', paint: opts.paint });
   const vis = show.visual;
   vis.s.blinkT = 999; vis.s.blinkLeft = 0;
   if (opts.expression && EXPR[opts.expression] !== undefined) vis.react(EXPR[opts.expression], 99);
@@ -88,7 +88,7 @@ function make(key, driverId, bodyId, kind, size, opts) {
   canvas.width = canvas.height = size;
   canvas.dataset.portrait = key;
   fallback(canvas, d, size);
-  c = { canvas, done: false };
+  c = { canvas, done: false, args: [driverId, bodyId, kind, size, opts] };
   cache.set(key, c);
   const px = Math.round(size * (opts.supersample ?? 2));
   let pixels = null;
@@ -102,11 +102,11 @@ function make(key, driverId, bodyId, kind, size, opts) {
 export function refreshPortraits() {
   for (const [key, c] of cache) {
     if (c.done || !c.retry) continue;
-    const [kind, driverId, bodyId, size] = key.split('|');
-    const px = Math.round(Number(size) * 2);
+    const [driverId, bodyId, kind, size, opts] = c.args;
+    const px = Math.round(size * (opts.supersample ?? 2));
     try {
-      const pixels = renderPixels(driverId, bodyId, kind, px, {});
-      if (pixels) { paint(c.canvas, pixels, px, Number(size), null); c.done = true; c.retry = false; }
+      const pixels = renderPixels(driverId, bodyId, kind, px, opts);
+      if (pixels) { paint(c.canvas, pixels, px, size, opts.background ?? null); c.done = true; c.retry = false; }
     } catch { /* keep the fallback */ }
   }
 }

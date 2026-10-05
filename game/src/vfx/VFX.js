@@ -4,6 +4,7 @@
 //   vfx.spawn(name, position, opts)   one-shot effects.  Known names (unknown -> silent no-op):
 //        'explosion' {scale,color}  'sparkle' {color}  'smoke'  'hitStars'  'boostBurst' {color}  'pickup' {color}
 //        'confetti'  'splash'  'dust' {color}  'ring' {color,radius}  'respawn'  'shockwave'
+//   vfx.spawnForKart(kart, 'emote', {kind})  /  vfx.emote(kart, kind): speech-bubble emotes (anger shock note heart sweat question star zzz)
 //   vfx.spawnForKart(kart, name, opts)   same but anchored to a kart
 // VFX listens to session.events (drift sparks by level, boost flames, wall sparks, landings, item hits...) and reads
 // kart state every frame (dust off-road, tyre smoke while drifting, skid marks, status trails).  session.quality.particles scales counts.
@@ -18,6 +19,8 @@ import { getSpriteAtlas, SPR } from './sprites.js';
 import { ParticleLayer } from './particles.js';
 import { SkidMarks } from './skids.js';
 import { FlameSystem } from './flames.js';
+import { BeamSystem } from './beams.js';
+import { EmoteBubbles } from './emotes.js';
 import { BlobShadows } from './shadows.js';
 import { RescueDrone } from './drone.js';
 import { ShieldBubbles } from './bubbles.js';
@@ -30,7 +33,8 @@ const CONFETTI = [hex('#ff3d6a'), hex('#ffd23f'), hex('#22d3ff'), hex('#7be04a')
 
 const _a = new THREE.Vector3(), _b = new THREE.Vector3(), _c = new THREE.Vector3(), _d = new THREE.Vector3();
 const _q = new THREE.Quaternion(), _qq = new THREE.Quaternion(), _exq = new THREE.Quaternion();
-const _Z = new THREE.Vector3(0, 0, 1), _ed = new THREE.Vector3(), _dw = new THREE.Vector3();
+const _Z = new THREE.Vector3(0, 0, 1), _X = new THREE.Vector3(1, 0, 0), _ed = new THREE.Vector3(), _dw = new THREE.Vector3();
+const _qp = new THREE.Quaternion().setFromAxisAngle(_X, 0.07), _qb = new THREE.Quaternion();
 const _white = [1, 1, 1];
 
 const SURF_FX = (() => {
@@ -66,16 +70,42 @@ export class VFX {
     this.alpha = new ParticleLayer({ capacity: Math.round(4500 * Math.max(0.4, this.pm)), additive: false, map });
     this.skids = new SkidMarks(Math.round(2600 * Math.max(0.35, this.pm)), 9);
     this.flames = new FlameSystem(36);
+    this.beams = new BeamSystem(Math.max(24, (session.karts?.length ?? 8) * 2 + 4));
+    this.emotes = new EmoteBubbles();
+    /** emote bubbles over drivers (hit / overtaken / finish ...): set false to disable */
+    this.emotesOn = true;
+    /** headlight beams: on by default for dark tracks (night / dusk sky), switchable with setHeadlights() */
+    this.headlights = false;
     this.shadows = new BlobShadows(Math.max(16, (session.karts?.length ?? 8) + 2));
     this.bubbles = new ShieldBubbles(6);
     this.drones = [];
-    this.group.add(this.shadows.mesh, this.skids.mesh, this.alpha.mesh, this.add.mesh, this.flames.mesh);
+    this.group.add(this.shadows.mesh, this.skids.mesh, this.beams.mesh, this.alpha.mesh, this.add.mesh, this.flames.mesh, this.emotes.mesh);
     this.bubbles.attachTo(this.group);
     this._sceneSync = 0;
     this._isShield = (k) => (k.shield > 0 ? 1 : k.ext?.shield > 0 ? 1 : k.ext?.items?.shield > 0 ? 1 : 0);
     this._light = new THREE.Color(1, 1, 1);
     this._camPos = session.camera?.position ?? null;
     this._wire(session);
+    this.headlights = this._isDark();
+  }
+
+  /** Turn the headlight beams on/off (default: on when the track's sky/fog is dark). */
+  setHeadlights(on) { this.headlights = !!on; }
+  /** Pop an emote bubble over a kart's driver: kind = 'anger'|'shock'|'note'|'heart'|'sweat'|'question'|'star'|'zzz' (a kart shows one at a time, rate-limited). */
+  emote(kart, kind, dur = 1.4) {
+    if (!this.emotesOn || !kart) return false;
+    const st = this.st(kart);
+    if (this.time < (st.emoteCool ?? 0)) return false;
+    st.emoteCool = this.time + 0.9;
+    return this.emotes.show(kart, kind, dur);
+  }
+  _isDark() {
+    const S = this.session, d = S.track?.def;
+    if (d?.night !== undefined) return !!d.night;
+    if (d?.headlights !== undefined) return !!d.headlights;
+    const c = S.scene?.fog?.color ?? (S.scene?.background?.isColor ? S.scene.background : null);
+    if (!c) return false;
+    return 0.2126 * c.r + 0.7152 * c.g + 0.0722 * c.b < 0.16;   // linear luminance of the horizon / fog colour
   }
 
   // ------------------------------------------------------------------------------------------ small random helpers
@@ -156,6 +186,7 @@ export class VFX {
   spawnForKart(kart, name, opts = {}) {
     const vis = kart.visual;
     switch (name) {
+      case 'emote': this.emote(kart, opts.kind ?? 'shock', opts.duration ?? 1.4); return;
       case 'hitStars': if (vis?.mountWorld) { vis.mountWorld('head', _a, kart); this._hitStars(_a.x, _a.y + 0.55, _a.z); return; } break;
       case 'boostBurst': {
         if (vis?.mountWorld) {
@@ -355,7 +386,10 @@ export class VFX {
       const p = box?.position ?? kart.position;
       this._pickup(p.x, p.y + 0.2, p.z, this.r() < 0.5 ? CYAN : GOLD);
     });
-    on(EV.ITEM_HIT, ({ victim, point }) => { if (victim) this.spawnForKart(victim, 'hitStars'); else if (point) this._hitStars(point.x, point.y + 1, point.z); });
+    on(EV.ITEM_HIT, ({ victim, point }) => { if (victim) { this.spawnForKart(victim, 'hitStars'); this.emote(victim, 'anger', 1.5); } else if (point) this._hitStars(point.x, point.y + 1, point.z); });
+    on(EV.OVERTAKE, ({ kart, passed }) => { if (passed && (passed.isPlayer || kart?.isPlayer)) this.emote(passed, 'shock', 1.0); });
+    on(EV.WRONG_WAY, ({ kart, active }) => { if (active && kart?.isPlayer) this.emote(kart, 'question', 1.8); });
+    on(EV.LAP_COMPLETE, ({ kart, isBest }) => { if (isBest && kart?.isPlayer) this.emote(kart, 'star', 1.6); });
     on(EV.ITEM_EXPLODE, ({ point, radius }) => { if (point) this._explosion(point.x, point.y, point.z, clamp((radius ?? 4) / 4, 0.6, 2.4), null); });
     on(EV.ITEM_BLOCKED, ({ victim }) => {
       if (!victim) return;
@@ -375,6 +409,8 @@ export class VFX {
     });
     on(EV.KART_FINISH, ({ kart, place }) => {
       if (kart.isPlayer || place <= 3) { _a.copy(kart.position); this._confetti(_a.x, _a.y, _a.z, kart.isPlayer ? 150 : 50); }
+      const n = session.karts?.length ?? 8;
+      this.emote(kart, place === 1 ? 'heart' : place <= 3 ? 'note' : place > Math.ceil(n / 2) ? 'sweat' : 'zzz', 3.2);
     });
     on(EV.COIN, ({ kart }) => { _a.copy(kart.position); this._sparkle(_a.x, _a.y + 1, _a.z, GOLD, 8); });
     on(EV.SPIN_OUT, ({ kart }) => {
@@ -401,7 +437,7 @@ export class VFX {
     if (this._sceneSync <= 0) { this._syncScene(); this._sceneSync = 1.0; } else this._sceneSync -= dt;
     this.add.setTime(T); this.alpha.setTime(T); this.skids.setTime(T); this.flames.setTime(T); this.bubbles.setTime(T);
     const cam = S.camera;
-    this.flames.begin(); this.shadows.begin();
+    this.flames.begin(); this.shadows.begin(); this.beams.begin();
     const karts = S.karts;
     for (let i = 0; i < karts.length; i++) {
       const k = karts[i];
@@ -413,8 +449,10 @@ export class VFX {
       this._wheels(k, st, dt, T);
       this._boost(k, st, dt);
       this._status(k, st, dt, T);
+      if (this.headlights) this._beams(k, d2);
     }
-    this.flames.end(); this.shadows.end();
+    this.flames.end(); this.shadows.end(); this.beams.end();
+    this.emotes.update(dt, cam);
     for (let i = 0; i < this.drones.length; i++) this.drones[i].update(dt);
     this.bubbles.update(dt, karts, this._isShield);
     this.add.flush(); this.alpha.flush(); this.skids.flush();
@@ -543,6 +581,19 @@ export class VFX {
     }
   }
 
+  /** two soft headlight cones per kart (night tracks) */
+  _beams(k, d2) {
+    const vis = k.visual;
+    if (!vis?.mountWorld || vis.ghost || d2 > 120 * 120) return;
+    const sc = k.scale ?? 1;
+    _qb.copy(k.orientation).multiply(_qp);       // aimed a few degrees down onto the road
+    const fade = clamp(1.4 - d2 / (90 * 90), 0.15, 1);
+    for (let m = 0; m < 2; m++) {
+      vis.mountWorld(m ? 'headR' : 'headL', _a, k);
+      this.beams.add(_a, _qb, 1.7 * sc, 15 * sc, fade, 1.0, 0.92, 0.74);
+    }
+  }
+
   /** boost / mini-turbo / rocket flames + trailing particles */
   _boost(k, st, dt) {
     const rocket = k.rocket > 0;
@@ -601,7 +652,7 @@ export class VFX {
 
   dispose() {
     this.group.removeFromParent();
-    this.add.dispose(); this.alpha.dispose(); this.skids.dispose(); this.flames.dispose(); this.shadows.dispose(); this.bubbles.dispose();
+    this.add.dispose(); this.alpha.dispose(); this.skids.dispose(); this.flames.dispose(); this.shadows.dispose(); this.bubbles.dispose(); this.beams.dispose(); this.emotes.dispose();
     for (const d of this.drones) d.dispose();
     this.drones.length = 0;
     for (const k of this.session.karts ?? []) if (k.ext) delete k.ext.vfx;

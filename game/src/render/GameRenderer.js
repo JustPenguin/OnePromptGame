@@ -9,7 +9,8 @@
 //   .stats()  .flash(r,g,b,amount)  .setAutoQuality(bool)  .renderToPixels(scene, camera, w, h, opts)  .dispose()
 //
 // Pipelines (chosen by session.quality / what the GPU supports):
-//   'direct'  low quality (or no float render targets): scene straight to the canvas, ACES via renderer.toneMapping.
+//   'direct'  low quality (or no float render targets): scene straight to the canvas, tone mapping by renderer.toneMapping
+//             (Khronos Neutral, or ACES when profile.tonemap >= 0.5).  Custom ShaderMaterials need the tonemapping/colorspace chunks here.
 //   'post'    scene -> MSAA half-float RT -> dual-filter bloom -> single composite pass (see post.js).
 import * as THREE from 'three';
 import { makeQuality } from './quality.js';
