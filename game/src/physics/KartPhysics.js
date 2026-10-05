@@ -82,8 +82,9 @@ export class KartPhysics {
 
     this.updateDrift(k, inp, h, top, steerIn);
 
-    // inside a drift an AI stick means "plain steering": translate it to the stick that yields the same yaw rate (see Kart.driftAssist)
-    const steerYaw = d.dir !== 0 && k.driftAssist && !k._aware ? driftAlongFor(Math.max(0, (steerIn * d.dir) / st.driftTurn)) * d.dir : steerIn;
+    // stick relative to the drift (+1 = into it); AI sticks are translated from "plain steering" (see Kart.driftAssist)
+    const alongNow = d.dir !== 0 ? this.driftAlong(k, steerIn, d.dir) : 0;
+    const steerYaw = d.dir !== 0 ? alongNow * d.dir : steerIn;
 
     // ---- yaw
     const sAbs = Math.abs(k.speed);
@@ -91,15 +92,20 @@ export class KartPhysics {
     const airCtl = k.grounded ? 1 : d.hop > 0 ? T.hopAirControl : T.airControl;
     const rec = k.recover > 0 ? 1 - k.recover / T.recoverTime : 1;                 // 0 right after a spin-out .. 1 fully recovered
     const omega = P.turn * steerAuthority(sAbs, top, P) * (1 - T.surfaceSteer * (1 - sp.grip)) * lerp(T.recoverSteer, 1, rec);
-    if (d.dir !== 0) {
-      const along = clamp(steerYaw * d.dir, -1, 1);
-      const u = (along + 1) * 0.5;
-      k.heading += -d.dir * omega * st.driftTurn * driftMul(along) * airCtl * h;
-      d.angle = damp(d.angle, -d.dir * lerp(T.driftAngleMin, T.driftAngleMax, u) * P.driftAngle, T.driftAngleRate, h);
-    } else {
-      k.heading += -steerIn * omega * rev * airCtl * h;
-      d.angle = damp(d.angle, 0, 8, h);
+    let rate = -steerIn * omega * rev * airCtl;                                    // plain steering: heading rate, rad/s (+ = left)
+    const driftDir = d.dir !== 0 ? d.dir : d.lastDir;
+    if (d.blend > 0 && driftDir !== 0) {
+      // drift steering (stick relative to the drift), eased in / out so entering and leaving a drift never snaps
+      const along = d.dir !== 0 ? alongNow : this.driftAlong(k, steerIn, driftDir);
+      const driftRate = -driftDir * omega * st.driftTurn * driftMul(along) * airCtl;
+      const b = d.blend * d.blend * (3 - 2 * d.blend);
+      rate += (driftRate - rate) * b;
     }
+    k.heading += rate * h;
+    if (d.dir !== 0) {
+      const u = (alongNow + 1) * 0.5;
+      d.angle = damp(d.angle, -d.dir * lerp(T.driftAngleMin, T.driftAngleMax, u) * P.driftAngle, T.driftAngleRate, h);
+    } else d.angle = damp(d.angle, 0, 8, h);
 
     // ---- tyre grip: the travel direction chases the heading; lateral slide bleeds off
     let gripRate = st.grip * sp.grip * (1 - T.gripSpeedLoss * clamp(sAbs / top, 0, 1)) * (k.grounded ? 1 : d.hop > 0 ? 0.9 : 0.15);
@@ -217,6 +223,12 @@ export class KartPhysics {
     return lo;
   }
 
+  /** Stick relative to a drift of direction `dir` (+1 into the drift .. -1 against it); AI karts' plain steering is translated (Kart.driftAssist). */
+  driftAlong(k, steerIn, dir) {
+    if (k.driftAssist && !k._aware) return driftAlongFor(Math.max(0, (steerIn * dir) / k.stats.driftTurn));
+    return clamp(steerIn * dir, -1, 1);
+  }
+
   // ------------------------------------------------------------------ drift: hop -> committed slide -> 3 mini-turbo levels -> release
   updateDrift(k, inp, h, top, steerIn) {
     const d = k.drift, ev = this.events, st = k.stats;
@@ -235,12 +247,14 @@ export class KartPhysics {
     if (d.dir !== 0) {
       if (k.speed < top * T.driftCancelSpeed || k.spin.timer > 0) { k.cancelDrift(); return; }
       if (k.grounded || d.hop > 0) {            // the entry hop counts: charge runs from the moment you commit
-        const stick = k.driftAssist && !k._aware ? driftAlongFor(Math.max(0, (steerIn * d.dir) / st.driftTurn)) * d.dir : steerIn;
-        const along = clamp(stick * d.dir, -1, 1);
+        const along = this.driftAlong(k, steerIn, d.dir);
         d.charge += h * st.miniTurbo * lerp(T.driftChargeMin, 1, (along + 1) * 0.5);
         if (d.level < 3 && d.charge >= DRIFT_LEVEL_TIME[d.level]) { d.level++; ev.emit(EV.DRIFT_LEVEL, { kart: k, level: d.level }); }
       }
     }
+    // ease the yaw mapping between plain and drift steering
+    if (d.dir !== 0) { d.lastDir = d.dir; d.blend = Math.min(1, d.blend + h / T.driftBlendIn); }
+    else if (d.blend > 0) d.blend = Math.max(0, d.blend - h / T.driftBlendOut);
   }
 
   releaseDrift(k) {
@@ -248,10 +262,11 @@ export class KartPhysics {
     const lvl = d.level;
     d.dir = 0; d.charge = 0; d.level = 0;
     // Hand the nose over to the velocity: the kart keeps travelling exactly the way it was, and the chassis swings back
-    // in line smoothly (yaw = heading + angle stays continuous, so the heading never teleports).
+    // in line smoothly (yaw = heading + angle stays continuous, so the heading never teleports).  The tyres bite 1 / driftGrip
+    // times harder from now on, so shrinking the heading's lead by driftGrip keeps the travel direction's turn rate continuous.
     const old = k.heading;
     const lead = angleDiff(k.heading, k.moveYaw);
-    k.heading = k.moveYaw + lead * 0.25;
+    k.heading = k.moveYaw + lead * T.releaseLead;
     d.angle += old - k.heading;
     if (lvl > 0) {
       const b = DRIFT_BOOST[lvl];

@@ -194,6 +194,29 @@ function drift() {
     check(`level ${lvl}: mini-turbo fired`, evLevel, lvl, lvl, '', `(+${boostSeen.toFixed(0)} % over pre-release speed ${(pre * 3.6).toFixed(0)} km/h)`);
     if (lvl === 2) check('heading continuity at release (max yaw step / frame)', maxStep / D2R, 0, 6, 'deg');
   }
+  // -- smoothness of the travel direction's turn rate (what the camera and the player feel) at drift entry and release:
+  //    hop landing, the yaw mapping and the nose hand-off must not make it jump from frame to frame
+  for (const [name, after] of [['stick still in', -0.4], ['full lock', -1], ['stick released', 0]]) {
+    rig = newRig(); k = rig.addKart(kartOpts({ s: 60, speed: 30 }));
+    const HOLD = 1.4;
+    const ss = rig.run(HOLD + 1.2, (t) => {
+      k.input.throttle = 1;
+      k.input.steer = t < 0.5 ? 0 : t < 0.8 ? -1 : after;
+      k.input.drift = t >= 0.5 && t < HOLD;
+    }, { every: 1 / 60 });
+    let prevW = null, stepIn = 0, stepOut = 0;
+    for (let i = 1; i < ss.length; i++) {
+      const w = wrap(ss[i].moveYaw - ss[i - 1].moveYaw) * 60 / D2R;          // deg/s
+      if (prevW !== null) {
+        const d = Math.abs(w - prevW);
+        if (ss[i].t > 0.55 && ss[i].t < 1.2) stepIn = Math.max(stepIn, d);
+        if (ss[i].t > HOLD - 0.1 && ss[i].t < HOLD + 0.7) stepOut = Math.max(stepOut, d);
+      }
+      prevW = w;
+    }
+    check(`drift entry (hop, landing, commit): turn-rate step / frame, ${name}`, stepIn, 0, 12, 'deg/s');
+    check(`drift release: turn-rate step / frame, ${name}`, stepOut, 0, 12, 'deg/s');
+  }
   // -- drift is only entered with speed and while steering
   rig = newRig(); k = rig.addKart(kartOpts({ s: 60, speed: 3 }));
   rig.run(1, () => { k.input.throttle = 0.2; k.input.drift = true; k.input.steer = -1; });
@@ -524,7 +547,7 @@ function rosterTable() {
 
 function aiDrift() {
   section('AI karts: a naive plain-steering controller (steer = -err * 2.6, as in the baseline AI) must survive drifts');
-  for (const [name, def] of [['sweepers (R 90 m)', DEFS.sweepers], ['hairpins (R 45 m)', DEFS.hairpins]]) {
+  for (const [name, def] of [['sweepers (R 90 m)', DEFS.sweepers], ['hairpins (R 45 m)', DEFS.hairpins], ['Sunny Meadows (baseline)', DEFS.meadows]]) {
     const run = (assist) => soloLap(def, { driver: DRIVER, body: BODY, speedClass: CLASS, drift: true, driftAssist: assist, botOpts: { naive: true, chainLevel: 2 }, maxT: 120 });
     const a = run(true), b = run(false);
     info(`${name}: naive drifter WITH assist: ${a.time.toFixed(1)} s, wall hits ${a.counts['kart:wallHit'] ?? 0}, boosts ${a.counts['kart:driftBoost'] ?? 0}`, `without assist: ${b.finished ? b.time.toFixed(1) + ' s' : 'DNF'}, wall hits ${b.counts['kart:wallHit'] ?? 0}`);

@@ -180,7 +180,7 @@ export function aim(k, track, yawOffsetRad) {
  * Lookahead pursuit bot (like the baseline AI) with a "good player" drift policy: commit when a sustained corner is coming,
  * hold the drift through it, release at the exit.  Used for lap-time comparisons (drift vs no drift).
  */
-export function makeBot(session, kart, { drift = true, lookMin = 11, lookGain = 0.55, yawGain = 3.2, cornerSpeedMul = 1, startCurv = 0.0075, holdCurv = 0.0035, physics = null, chainLevel = 0, naive = false } = {}) {
+export function makeBot(session, kart, { drift = true, lookMin = 11, lookGain = 0.55, yawGain = 3.2, cornerSpeedMul = 1, startCurv = 0.0075, holdCurv = 0.0035, flipCurv = 0.0035, physics = null, chainLevel = 0, naive = false } = {}) {
   const track = session.track;
   const p = new THREE.Vector3();
   let drifting = false, regap = 0, held = 0;
@@ -206,6 +206,8 @@ export function makeBot(session, kart, { drift = true, lookMin = 11, lookGain = 
         // like a human: stick into the corner while committing to the drift
         if (drifting && kart.drift.dir === 0 && Math.abs(inp.steer) < 0.5) inp.steer = Math.sign(-err || 1) * 0.5;
       } else if (held > 30 && Math.max(Math.abs(track.curvatureAt(q.s + 6)), Math.abs(track.curvatureAt(q.s + 22))) < holdCurv || speed < st.topSpeed * 0.35) drifting = false;
+      // an S-bend: the corner reverses, and a drift cannot turn the other way - let go in good time (curvature > 0 = left, drift.dir -1 = left)
+      if (drifting && kart.drift.dir !== 0 && Math.max(kart.drift.dir * track.curvatureAt(q.s + 12), kart.drift.dir * track.curvatureAt(q.s + 24)) > flipCurv) drifting = false;
       // chain mini-turbos: let go as soon as the wanted level is reached and re-hop if the corner goes on
       if (chainLevel && drifting && kart.drift.dir !== 0 && kart.drift.level >= chainLevel && Math.abs(track.curvatureAt(q.s + 30)) > startCurv) { drifting = false; regap = 3; }
     } else drifting = false;

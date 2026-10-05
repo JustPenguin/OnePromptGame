@@ -41,9 +41,11 @@ export const T = {
   driftTurnMin: 0.14, driftTurnMid: 0.5, driftTurnMax: 1.3,  // yaw-rate multiplier: steering against / neutral / into the drift (wide corners need a gentle drift too)
   driftAngleMin: 0.2, driftAngleMax: 0.46, // chassis angle (rad) shown relative to the heading
   driftAngleRate: 9,
+  driftBlendIn: 0.16, driftBlendOut: 0.22,   // the yaw-rate mapping eases between plain steering and drift steering over this long (no snap at entry / release)
+  releaseLead: 0.5,          // on release the heading keeps this fraction of its lead over the travel direction (= driftGrip: the turn rate stays continuous)
   driftEnterSpeed: 0.3,      // fraction of top speed needed to hop / drift
   driftCancelSpeed: 0.2,
-  hopVy: 5, hopTime: 0.25,
+  hopVy: 5, hopTime: 0.33,   // hopTime covers the whole flight (2 * hopVy / gravity = 0.31 s): the hop keeps its steering until the wheels touch down
   driftChargeMin: 0.3,       // charge rate = miniTurbo * lerp(driftChargeMin, 1, stick-into-drift 0..1): no free boosts from straight-line snaking
   hopAirControl: 0.9,
 

@@ -68,7 +68,7 @@ export class Kart {
     this.onRoad = true;
 
     // ---- drift / effects ----
-    this.drift = { dir: 0, charge: 0, level: 0, hop: 0, armed: false, angle: 0, held: false };
+    this.drift = { dir: 0, charge: 0, level: 0, hop: 0, armed: false, angle: 0, held: false, blend: 0, lastDir: 0 };
     this.boost = { timer: 0, duration: 0, strength: 0, source: null };
     this.spin = { timer: 0, duration: 0, dir: 1 };
     this.invincible = 0;          // seconds (shield / star)
@@ -219,7 +219,7 @@ export class Kart {
     this.speed = speed; this.slide = 0; this.vy = 0; this.grounded = true; this.airTime = 0;
     this.spin.timer = 0; this.spinAngle = 0;
     this.cancelDrift();
-    this.drift.angle = 0; this.drift.hop = 0;
+    this.drift.angle = 0; this.drift.hop = 0; this.drift.blend = 0; this.drift.lastDir = 0;
     this.draft.t = 0; this.draft.bonus = 0; this.draft.target = null;
     this.fallTimer = 0; this.stuckTimer = 0; this.scraping = false; this._wallT = 0; this._wallGap = 9;
     this.hint = -1;

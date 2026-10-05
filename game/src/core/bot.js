@@ -7,7 +7,7 @@ import * as THREE from 'three';
 import { clamp, angleDiff } from './math.js';
 
 /** @returns {(out: import('../physics/Kart.js').KartInput, dt: number) => void} a controller that fills `out` */
-export function makeBotController(session, kart, { drift = true, chain = 0, yawGain = 3.2, lookMin = 11, lookGain = 0.55, startCurv = 0.0075, holdCurv = 0.0035, cornerSpeedMul = 1 } = {}) {
+export function makeBotController(session, kart, { drift = true, chain = 0, yawGain = 3.2, lookMin = 11, lookGain = 0.55, startCurv = 0.0075, holdCurv = 0.0035, flipCurv = 0.0035, cornerSpeedMul = 1 } = {}) {
   const track = session.track;
   const p = new THREE.Vector3();
   let drifting = false, regap = 0, held = 0;
@@ -32,6 +32,8 @@ export function makeBotController(session, kart, { drift = true, chain = 0, yawG
         drifting = speed > st.topSpeed * 0.65 && c(14) > startCurv && c(40) > startCurv;
         if (drifting && kart.drift.dir === 0 && Math.abs(out.steer) < 0.5) out.steer = Math.sign(-err || 1) * 0.5;   // stick into the corner while committing
       } else if ((held > 30 && Math.max(c(6), c(22)) < holdCurv) || speed < st.topSpeed * 0.35) drifting = false;
+      // an S-bend: the corner reverses and a drift cannot turn the other way - let go in good time (curvature > 0 = left, drift.dir -1 = left)
+      if (drifting && kart.drift.dir !== 0 && Math.max(kart.drift.dir * track.curvatureAt(q.s + 12), kart.drift.dir * track.curvatureAt(q.s + 24)) > flipCurv) drifting = false;
       if (chain && drifting && kart.drift.dir !== 0 && kart.drift.level >= chain && c(30) > startCurv) { drifting = false; regap = 3; }
     } else drifting = false;
     if (regap > 0) { regap--; out.drift = false; return; }

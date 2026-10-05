@@ -33,7 +33,7 @@ Roster (`src/data/roster.js`) is unchanged: `topSpeed, accel, grip, mass, driftT
 | turn radius @ 20 m/s, full lock | 12-16 m | 13.1 m |
 | turn radius @ top speed, full lock | 22-32 m | 28.2 m |
 | free full-lock turn (speed bleeds to) | - | 81 % of top |
-| drift mini-turbo levels | 0.85 / 1.7 / 2.7 s of charge | blue 0.8 / orange 1.6 / pink 2.5 s with the stick fully into the corner; 1.0 / 2.0 / 3.2 s with a light steer (from pressing drift) |
+| drift mini-turbo levels | 0.85 / 1.7 / 2.7 s of charge | blue 0.8 / orange 1.6 / pink 2.5 s with the stick fully into the corner; 0.9 / 1.95 / 3.15 s with a light steer (from pressing drift) |
 | drift radius @ 28 m/s: inside / neutral / outside | tighter + wider than plain | 15.6 / 27.4 / 115 m (plain full lock 21.4 m) |
 | off-road (grass) speed | ~55 % | 60 % (Pip), 68 % (Bruno, heavy), 58 % (Quill) |
 | brake top speed -> 0 | - | 1.0 s |
@@ -44,16 +44,20 @@ Roster (`src/data/roster.js`) is unchanged: `topSpeed, accel, grip, mass, driftT
 
 ### Drift (the part that matters most)
 1. **Hop**: pressing drift while grounded and above 30 % of top speed hops (`T.hopVy`, EV.HOP) and *arms* the drift. Arming also works in the air so a press just before landing is not lost.
-   The tyres keep 90 % grip during the hop so turn-in is not delayed.
+   The tyres keep 90 % grip and the steering 90 % of its authority for the whole flight (`T.hopTime` = 0.33 s covers the 0.31 s flight; a shorter timer used to leave a 3-frame
+   "no steering" gap before touch-down, which showed as a hitch in the camera).
 2. **Commit**: while armed and steering > 0.25 the drift starts (`drift.dir` = -1 left / +1 right, EV.DRIFT_START). The direction is fixed until release.
 3. **Steering inside a drift** is relative to the drift: `along = steer * dir` (+1 stick into the corner, -1 against it). Yaw-rate multiplier is piecewise-linear:
    0.14 (against) -> 0.5 (neutral) -> 1.3 (into) times the normal yaw-rate curve (`tuning.driftMul`). So a drift can be gentle (R ~ 115 m at 28 m/s) or tight (R ~ 16 m).
    Chassis shows `drift.angle` = 0.2..0.46 rad (more when steering into it, scaled by the driver's drift stat) on top of the slip, ~32 deg total.
+   The yaw mapping is not switched: it is *eased* between plain steering and drift steering with `drift.blend` (0..1, smoothstep; `T.driftBlendIn` 0.16 s while drifting,
+   `T.driftBlendOut` 0.22 s after release, `drift.lastDir` remembers the side), so neither commit nor release makes the turn rate jump.
 4. **Charge**: `charge += h * miniTurbo * lerp(0.3, 1, along01)` (counts during the entry hop, not while airborne otherwise). Stick into the drift charges fastest; countersteering charges slowly,
    which kills "snaking" on straights. Levels at `DRIFT_LEVEL_TIME = [0.85, 1.7, 2.7]` charge-seconds (EV.DRIFT_LEVEL).
 5. **Release**: boost `DRIFT_BOOST[level]` = +25 % 0.85 s / +33 % 1.25 s / +42 % 1.75 s (EV.BOOST source `'drift'`, EV.DRIFT_BOOST). The nose is handed over to the *velocity*
-   (`heading := moveYaw + 0.25 * lead`) and `drift.angle` absorbs the difference, so `yaw` is continuous (max 3.3 deg per frame at release) and the chassis swings back smoothly;
-   the travel direction does not change.
+   (`heading := moveYaw + T.releaseLead * lead`, 0.5 = `driftGrip`: the tyres bite twice as hard after the release, so this keeps the travel direction's turn rate continuous) and `drift.angle`
+   absorbs the difference, so `yaw` is continuous (max 2.4 deg per frame at release) and the chassis swings back smoothly; the travel direction's turn rate eases down instead of
+   dropping (max step 3 deg/s per frame, it was 31-45 deg/s with the old 0.25 hand-off; the report checks entry and release against 12 deg/s).
 6. Cancelled by: speed < 20 % of top, spin-out, a hard wall hit (impact > 9 m/s), respawn. Bumps/ripples do not cancel it (airborne time only pauses charging).
 7. **Landing trick**: holding drift through a ramp/crest jump (> 0.45 s of air) pays out a small boost on landing (`EV.BOOST` source `'trick'`).
 
@@ -85,8 +89,8 @@ R=45 m hairpins; the baseline Sunny Meadows has few real corners so the margin t
   `isInvulnerable()` also includes `grace`. `spinOut/launch/shrinkFor` document their false return (see above). `placeAt()` also clears drift/draft/wall state.
   `kart.orientation` includes the airborne nose pitch (up on the way up, down on the way down).
 * `Kart.driftAssist` (default **true for AI karts**, false for the player): inside a drift the AI's `input.steer` is read as a PLAIN steering command and translated to the stick that gives the same yaw rate
-  (a drift otherwise has a built-in turn bias that a naive `steer = -err * 2.6` controller cannot absorb: it hugs the inside wall; measured on the R=90 m sweepers: 59.0 s with 4 wall hits without the
-  assist, 47.4 s with 0 hits with it). A controller that already steers through `steerForYawRate()` is detected automatically (per frame), so adopting that API needs no flag; `kart.driftAssist = false` switches it off.
+  (a drift has a built-in turn bias (neutral stick = 0.5x yaw rate) that a naive `steer = -err * 2.6` controller does not know about; a naive drifting AI laps the baseline Sunny Meadows in 50.3 s with
+  0 wall hits with the assist and in 56.8 s with 3 hits without it (`node scripts/handling.mjs --only=aiDrift`; sweepers 47.4 s vs 49.9 s)). A controller that already steers through `steerForYawRate()` is detected automatically (per frame), so adopting that API needs no flag; `kart.driftAssist = false` switches it off.
 * `KartPhysics.steerForYawRate(kart, yawRate)` -> stick -1..1 that yields that yaw rate right now (speed, surface and drift aware; `+yawRate` = turn left). **AI should steer through this.**
   `maxYawRate(kart, speed?, drift?)` and `maxCornerSpeed(kart, curvature, {drift})` give the real limits for brake-point planning (verified: full lock at `maxCornerSpeed(1/R)` traces radius R within 1 %;
   e.g. R = 20 m -> 97 km/h, R = 14 m -> 76 km/h for Pip + Classic at `pro`). `track.maxSpeedAt()` assumes 24 m/s^2 lateral, the karts manage 29-41 m/s^2.
