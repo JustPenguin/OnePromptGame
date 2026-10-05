@@ -35,6 +35,8 @@ export const DEFAULT_BINDINGS = {
 const GAME_KEYS = new Set(['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Space']);
 /** Actions that never fire on the key-down edge (hold-to-use; the session reads isDown()). */
 const HOLD_ACTIONS = new Set(['respawn']);
+/** Actions whose key-down is latched until the next read(), so a tap shorter than a frame still registers as one frame of "held". */
+const LATCHED = new Set(['drift', 'item']);
 export const KEYBOARD_STEER = { attack: 5.6, attackAtSpeed: 4.2, release: 10, reverse: 17 };   // units of steer per second
 
 export class Input {
@@ -43,6 +45,7 @@ export class Input {
     this.bindings = structuredCloneSafe(DEFAULT_BINDINGS);
     this.keys = new Set();
     this.edges = new Set();
+    this._latch = new Set();
     this.enabled = false;
     this.override = null;     // debug/test: a KartInput-like object that replaces real input
     this.controller = null;   // debug/test: (out: KartInput, dt) => void, computed every frame (e.g. __kart.bot())
@@ -76,7 +79,7 @@ export class Input {
   setBindings(map) { this.bindings = { ...structuredCloneSafe(DEFAULT_BINDINGS), ...structuredCloneSafe(map ?? {}) }; }
   captureNextKey(cb) { this._capture = cb; }
   /** Forget every held key / ramp (focus loss, pause, scene changes). */
-  releaseAll() { this.keys.clear(); this._steer = 0; this._padEdgeHeld.respawn = false; }
+  releaseAll() { this.keys.clear(); this._latch.clear(); this._steer = 0; this._padEdgeHeld.respawn = false; }
 
   _down(e) {
     if (this._capture) { const cb = this._capture; this._capture = null; e.preventDefault(); cb(e.code); return; }
@@ -84,7 +87,11 @@ export class Input {
     this.keys.add(e.code);
     this.lastDevice = 'keyboard';
     if (e.code !== 'Escape') this._anyNext = true;
-    for (const [action, codes] of Object.entries(this.bindings)) if (codes.includes(e.code) && !HOLD_ACTIONS.has(action)) this.edges.add(action);
+    for (const [action, codes] of Object.entries(this.bindings)) {
+      if (!codes.includes(e.code)) continue;
+      if (!HOLD_ACTIONS.has(action)) this.edges.add(action);
+      if (LATCHED.has(action) && this.enabled) this._latch.add(action);
+    }
     if (this.enabled && (GAME_KEYS.has(e.code) || Object.values(this.bindings).some((c) => c.includes(e.code)))) e.preventDefault();
   }
   _up(e) {
@@ -156,7 +163,8 @@ export class Input {
     const target = (down('right') ? 1 : 0) - (down('left') ? 1 : 0);
     this._steer = this._rampSteer(this._steer, target, dt);
     let throttle = down('throttle') ? 1 : 0, brake = down('brake') ? 1 : 0, steer = this._steer;
-    let drift = down('drift'), item = down('item'), lookBack = down('lookBack');
+    let drift = down('drift') || this._latch.has('drift'), item = down('item') || this._latch.has('item'), lookBack = down('lookBack');
+    this._latch.clear();
     const pad = this._pollPad();
     if (pad) {
       if (pad.dpad) { this._padSteer = this._rampSteer(this._padSteer ?? 0, pad.steer, dt); if (Math.abs(this._padSteer) > Math.abs(steer)) steer = this._padSteer; }
