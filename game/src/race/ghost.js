@@ -206,6 +206,7 @@ export class GhostPlayer {
     const fl = g.flags[u > 0.5 ? i1 : i0];
     if (!this._init) { this._lastX = x; this._lastZ = z; this._lastW = w; this._init = true; }
     k.position.set(x, y, z);
+    if (this.dist) k.race.distance = this.dist[i0] + (this.dist[i1] - this.dist[i0]) * u;      // live like a real kart's (HUD gap = ghost.race.distance - me.race.distance)
     if (dt > 1e-4) {
       const spd = Math.hypot(x - this._lastX, z - this._lastZ) / dt;
       k.speed = damp(k.speed, Math.min(spd, 70), 12, dt);
