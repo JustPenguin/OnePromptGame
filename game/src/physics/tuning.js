@@ -14,7 +14,8 @@ export const T = {
 
   // ---- longitudinal
   accelScale: 1.14,          // roster accel -> launch acceleration at standstill (a = launch * (1 - v/cap))
-  boostTau: 0.36,            // while boosting the kart surges toward the boosted cap with this time constant
+  boostTau: 0.36,            // while boosting the kart surges toward the boosted cap with this time constant ...
+  boostAccelMax: 36,         // ... but never harder than this (m/s^2): a start boost from a standstill must not teleport the kart
   boostFade: 0.35,           // the last seconds of a boost taper the extra speed out (no cliff when it ends)
   brake: 34,                 // m/s^2 at full brake
   reverseCap: 0.3,           // reverse top speed as a fraction of top speed

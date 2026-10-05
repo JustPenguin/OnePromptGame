@@ -107,7 +107,7 @@ export class KartPhysics {
     if (thr > 0.01 && k.speed < cap) {
       const f = clamp(k.speed / cap, 0, 1);
       let a = P.launch * (1 - f);
-      if (boosting) a = Math.max(a, (cap - k.speed) / T.boostTau);
+      if (boosting) a = Math.max(a, Math.min((cap - k.speed) / T.boostTau, T.boostAccelMax));
       if (k.draft.t > 0) a += T.draftAccel * k.draft.t;
       k.speed = Math.min(cap, k.speed + a * thr * h);
     }
