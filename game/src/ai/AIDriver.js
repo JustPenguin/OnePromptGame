@@ -12,8 +12,10 @@ import { SURFACE_PROPS } from '../track/surfaces.js';
 import { TrackSample } from '../track/SplineTrack.js';
 import { RUBBER } from './tuning.js';
 import { AIItems } from './AIItems.js';
+import { DriveModel } from './driveModel.js';
 
 const KART_HALF_W = 1.25;
+const COIN_SPEED = 0.012;      // top-speed bonus per coin (physics: kart.coins * 1.2 %)
 
 export class AIDriver {
   constructor(mgr, kart) {
@@ -29,6 +31,7 @@ export class AIDriver {
     const mid = (T.pace[0] + T.pace[1]) / 2, half = ((T.pace[1] - T.pace[0]) / 2) * T.paceSpread * 2;
     this.pace = mid + (u - 0.5) * half * 2 * 0.5 + (this.skill - T.skill) * 0.05;
     this.cornerScale = T.cornerScale * (0.96 + 0.08 * this.persona.boldness);
+    this.limitFrac = clamp((T.limit ?? 0.9) * (0.98 + 0.04 * this.persona.boldness), 0.5, 1);      // share of the engine's full-lock corner speed
     this.driftProb = clamp(T.driftProb * (0.8 + 0.4 * (st.drift / 5)), 0, 1);
     this.laneBias = (rnd() - 0.5) * 0.5 + (this.persona.boldness - 0.5) * 0.15;   // fraction of half-width
     this.wander = { f1: 0.25 + rnd() * 0.3, f2: 0.6 + rnd() * 0.5, p1: rnd() * TAU, p2: rnd() * TAU, amp: 0.35 + (1 - this.skill) * 0.9 };
@@ -49,6 +52,11 @@ export class AIDriver {
     this.near = { ahead: null, aheadDs: 1e9, aheadDl: 0, behind: null, behindDs: -1e9, behindDl: 0, blocker: null, blockDs: 1e9, blockDl: 0 };
     this.stats = { drifts: 0, driftBoosts: 0, mistakes: 0, recoveries: 0, respawns: 0, dodges: 0, passes: 0, hazardHits: 0 };
     this.vTarget = 0; this.pacing = 1; this.finishedCruise = false;
+    this.avoid = null;                               // committed trap dodge: { e: entity, side: -1|1 }
+    this.jump = { active: false, ds: 0, need: 0, toEnd: 0 };   // the ramp-over-gap we are approaching (see AIManager.jumpAhead)
+    this.hz = { active: false, ds: 0, shift: 0 };    // the trap we are dodging right now (read by the drift logic: a drift cannot swerve)
+    this.dm = new DriveModel(this.session);          // what the engine can tell us about steering limits (with baseline fallbacks)
+    this._rg = { min: 0, neutral: 0, max: 0 };       // drift yaw-rate range scratch
     this._smp = new TrackSample(); this._p = new THREE.Vector3();
     this.items = new AIItems(this);
     this.t = rnd() * 20;
@@ -89,7 +97,9 @@ export class AIDriver {
     const Ld = clamp(4.5 + Math.max(0, v) * 0.34 + (drifting ? 3 : 0), 7, 25);
     const latT = this.planLateral(dt, s, lat, v, Ld, hw, finished);
     this.latCmd += clamp(latT - this.latCmd, -this.latRate * dt, this.latRate * dt);
-    const aim = track.pointAt(s + Ld, this.latCmd, this._p, 0);
+    // sidestepping a trap needs a sharp, early turn-in: aim at a nearer point of the new line (a long look-ahead is lazy)
+    const LdA = this.hz.active ? clamp(this.hz.ds * 0.5, 6.5, Ld) : Ld;
+    const aim = track.pointAt(s + LdA, this.latCmd, this._p, 0);
     const desired = Math.atan2(aim.x - k.position.x, aim.z - k.position.z);
     let e = angleDiff(desired, k.heading);
     const surf = SURFACE_PROPS[q.surface] ?? SURFACE_PROPS[0];
@@ -97,8 +107,10 @@ export class AIDriver {
     let steer = clamp(-kp * e, -1, 1);
 
     // ---------------------------------------------------------------- speed profile
+    // coins (+1.2 % each) and the slipstream raise the kart's real top speed; the cruise speed has to follow or the bonus is braked away
+    const topNow = top * (1 + COIN_SPEED * (k.coins || 0) + (k.draft?.bonus ?? 0));
     const boosting = k.boost.timer > 0;
-    let vCruise = finished ? top * 0.62 : (boosting ? top * (1 + k.boost.strength) : top * this.pacing);
+    let vCruise = finished ? top * 0.62 : (boosting ? topNow * (1 + k.boost.strength) : topNow * this.pacing);
     if (k.rocket > 0) vCruise = top * 1.5;
     if (k.ink > 0) vCruise *= 0.88;
     let vAllowed = this.speedProfile(s, v, top, drifting);
@@ -106,9 +118,15 @@ export class AIDriver {
     if (surf.grip < 0.4) vAllowed = Math.min(vAllowed, top * 0.74);     // ice
     if (!q.onRoad && !boosting) vAllowed = Math.min(vAllowed, top * 0.7);
     let vTarget = Math.min(vCruise, vAllowed);
+    // a ramp over a gap: the speed that clears it beats corners, class pace and traffic (a kart that falls in loses far more)
+    const jump = this.jump;
+    if (!finished && this.mgr.jumpAhead(s, jump)) {
+      vTarget = Math.max(vTarget, Math.min(jump.need, top * 1.3));
+      this.mistake.t = 0; this.mistake.kind = ''; this.mistake.cool = Math.max(this.mistake.cool, 1.5);
+    }
     // follow a slow kart we can't get around instead of ramming it
     const nb = this.near;
-    if (nb.blocker && nb.blockDs < 9 && Math.abs(nb.blockDl) < 2.1 && this.pass.side === 0) vTarget = Math.min(vTarget, Math.max(4, nb.blocker.speed - 0.5 + nb.blockDs * 0.25));
+    if (!jump.active && nb.blocker && nb.blockDs < 9 && Math.abs(nb.blockDl) < 2.1 && this.pass.side === 0) vTarget = Math.min(vTarget, Math.max(4, nb.blocker.speed - 0.5 + nb.blockDs * 0.25));
     this.vTarget = vTarget;
 
     // ---------------------------------------------------------------- drifting
@@ -217,7 +235,7 @@ export class AIDriver {
     if (ov) { target = lerp(target, ov.lat, ov.w); rate = Math.max(rate, 6.5); }
     // traps on the road
     const hz = this.hazardTarget(s, lat, target, v, hw);
-    if (hz) { target = hz.lat; rate = 11; }
+    if (hz) { target = hz.lat; rate = 14; }
     // mistakes: drift wide
     const m = this.mistake;
     if (m.kind === 'wide') target += Math.sign(target || (lat >= 0 ? 1 : -1)) * m.mag * hwL * 0.35;
@@ -280,40 +298,53 @@ export class AIDriver {
     return out;
   }
 
+  /**
+   * Traps on the road (peels, bombs).  A driver that has noticed one commits to a side and keeps to it until the trap is behind
+   * (no flip-flopping when the racing line wanders back toward it).  Whether it notices at all is rolled once per trap (class perceive).
+   */
   hazardTarget(s, lat, planned, v, hw) {
+    const hz = this.hz; hz.active = false;
     const items = this.session.items;
-    if (!items || !items.entities.length) return null;
-    const track = this.track, T = this.T;
-    let best = null, bestDs = 1e9;
-    for (const e of items.entities) {
-      if (!e.hazard || e.kind === 'projectile') continue;
-      const ds = track.deltaS(this.k.query.s, e.s);
-      const reach = (e.type === 'bomb' ? 22 : 15) + Math.max(0, v) * 0.75;
-      if (ds < 1.5 || ds > reach || ds > bestDs) continue;
-      let seen = this.seen.get(e.id);
-      if (seen === undefined) { seen = this.session.random() < T.perceive; this.seen.set(e.id, seen); if (this.seen.size > 80) this.seen.delete(this.seen.keys().next().value); }
-      if (!seen) continue;
-      const clear = (e.type === 'bomb' ? 4.6 : e.radius + 2.0);
-      // where will we be when we get there?  blend between current lane and the plan
-      const there = lat + (planned - lat) * clamp(ds / 20, 0, 1);
-      if (Math.abs(e.lat - there) > clear + 0.4) continue;
-      best = e; bestDs = ds;
+    if (!items) { this.avoid = null; return null; }
+    const track = this.track;
+    let c = this.avoid;
+    if (c && (c.e.dead || track.deltaS(s, c.e.s) < -2.5)) c = this.avoid = null;
+    if (!c && items.entities.length) {
+      let best = null, bestDs = 1e9;
+      for (const e of items.entities) {
+        if (!e.hazard || e.kind === 'projectile') continue;
+        const ds = track.deltaS(s, e.s);
+        const reach = (e.type === 'bomb' ? 26 : 19) + Math.max(0, v) * 0.85;
+        if (ds < 1.5 || ds > reach || ds > bestDs) continue;
+        let seen = this.seen.get(e.id);
+        if (seen === undefined) { seen = this.session.random() < this.T.perceive; this.seen.set(e.id, seen); if (this.seen.size > 80) this.seen.delete(this.seen.keys().next().value); }
+        if (!seen) continue;
+        const clear = (e.type === 'bomb' ? 4.6 : e.radius + 2.0);
+        // would we get near it?  our lane now, or where the plan takes us by the time we get there
+        const there = lat + (planned - lat) * clamp(ds / 20, 0, 1);
+        if (Math.min(Math.abs(e.lat - lat), Math.abs(e.lat - there)) > clear + 0.5) continue;
+        best = e; bestDs = ds;
+      }
+      if (best) { c = this.avoid = { e: best, side: 0 }; this.stats.dodges++; }
     }
-    if (!best) return null;
-    const clear = (best.type === 'bomb' ? 4.8 : best.radius + 2.2);
-    const lim = hw - 1.6;
-    // pass on the side we are already on (hazard to our right -> go left of it); flip if that side has no room
-    let tl = best.lat >= lat ? best.lat - clear : best.lat + clear;
-    if (Math.abs(tl) > lim) tl = best.lat >= lat ? best.lat + clear : best.lat - clear;
-    this.stats.dodges++;
-    return { lat: clamp(tl, -lim, lim) };
+    if (!c) return null;
+    const e = c.e, lim = hw - 1.6, clear = (e.type === 'bomb' ? 4.9 : e.radius + 2.4);
+    // pass on the side we are already on (hazard to our right -> go left of it); flip once if that side has no room
+    if (c.side === 0) c.side = lat >= e.lat ? 1 : -1;
+    let tl = e.lat + c.side * clear;
+    if (Math.abs(tl) > lim + 0.3 && Math.abs(e.lat - c.side * clear) <= lim + 0.3) { c.side = -c.side; tl = e.lat + c.side * clear; }
+    tl = clamp(tl, -lim, lim);
+    hz.active = true; hz.ds = track.deltaS(s, e.s); hz.shift = Math.abs(tl - lat);
+    return { lat: tl };
   }
 
   // =================================================================================================================
-  // speed: braking-aware corner profile (own physics-based limit, combined with the track's maxSpeedAt hint)
+  // speed: braking-aware corner profile (the engine's real corner limit when it can tell us, combined with the track's maxSpeedAt hint)
   speedProfile(s, v, top, drifting) {
-    const track = this.track, k = this.k, plan = this.dr.plan;
+    const track = this.track, k = this.k, plan = this.dr.plan, dm = this.dm;
     const aB = this.T.brakeDecel * (0.9 + 0.2 * this.skill);
+    const native = dm.caps.corner;
+    // baseline engine: our own yaw-rate model at the current speed
     const auth = 1 - 0.3 * smoothstep(0.55 * top, 1.15 * top, Math.abs(v));
     const omega = k.stats.steerRate * auth * 0.74 * this.cornerScale;
     const hor = clamp(v * v / (2 * aB) + 24 + v * 0.45, 40, 160);
@@ -323,7 +354,9 @@ export class AIDriver {
       const kappa = Math.abs(track.curvatureAt(sd));
       // a corner we intend to drift (or are drifting) can be taken faster: the drift's turn-rate range is higher
       const dg = drifting || (plan && track.deltaS(plan.s0 - 8, sd) >= 0 && track.deltaS(sd, plan.s1) >= 0) ? 1.35 : 1;
-      const own = kappa > 1e-4 ? (omega * dg) / kappa : 1e9;
+      let own = 1e9;
+      if (native) { if (kappa > 0.003) own = dm.cornerSpeed(k, kappa, dg > 1) * this.limitFrac * (dg > 1 ? 0.95 : 1); }
+      else if (kappa > 1e-4) own = (omega * dg) / kappa;
       const hint = track.maxSpeedAt(sd) * this.cornerScale * dg;
       const vc = Math.min(own, hint);
       const va = Math.sqrt(vc * vc + 2 * aB * d);
@@ -335,28 +368,28 @@ export class AIDriver {
   // =================================================================================================================
   // drifting
   driftControl(dt, s, lat, v, top, e, kp) {
-    const k = this.k, d = k.drift, dr = this.dr, track = this.track, T = this.T;
-    const out = { drift: false, steer: null };
+    const k = this.k, d = k.drift, dr = this.dr, track = this.track, T = this.T, dm = this.dm;
+    const out = this._dOut ?? (this._dOut = { drift: false, steer: null });
+    out.drift = false; out.steer = null;
     dr.cool -= dt;
     const surf = SURFACE_PROPS[k.query.surface] ?? SURFACE_PROPS[0];
     const ok = k.grounded && k.spin.timer <= 0 && v > top * 0.55 && surf.grip >= 0.75 && k.query.onRoad;                 // may START a drift
     const okHold = k.spin.timer <= 0 && v > top * 0.4 && surf.grip >= 0.5 && k.query.offset < 1.5;                      // may KEEP one (the hop is airborne)
-    const baseRate = k.stats.steerRate * k.stats.driftTurn * 0.95;
     // plan the next corner once (the latch holds until we have passed it)
     if (dr.plan && track.deltaS(s, dr.plan.s1) < -14) dr.plan = null;
-    if (dr.phase === 'idle' && dr.cool <= 0 && this.driftProb > 0.02 && !k.race.finished && (dr.latchS === null || track.deltaS(s, dr.latchS) <= 0)) this.planDrift(s, v, top, baseRate);
+    if (dr.phase === 'idle' && dr.cool <= 0 && this.driftProb > 0.02 && !k.race.finished && (dr.latchS === null || track.deltaS(s, dr.latchS) <= 0)) this.planDrift(s, v, top);
 
+    const jumpNear = this.jump.active && this.jump.ds < 70;          // never hop / drift into a jump
     if (d.dir !== 0) {
       // ------------------------------------------------ in a drift: hold, steer the arc, release at the exit
       if (dr.phase !== 'active') { dr.phase = 'active'; dr.t = 0; dr.dir = d.dir; this.stats.drifts++; dr.hold = T.driftHold ? T.driftHold[0] + this.session.random() * (T.driftHold[1] - T.driftHold[0]) : 1e9; dr.wantEnd = 0; }
       dr.t += dt;
       const turnSide = -d.dir;                          // +1 = left turn
       const eTurn = e * turnSide;                       // >0: the target is on the side we are turning to
-      // In a drift the heading always turns toward d.dir at baseRate * mul with mul = lerp(.45, 1.3, (along+1)/2),
-      // along = steer * d.dir.  Pick the turn rate that closes the pursuit error, then invert that mapping.
-      const wDes = clamp(4.6 * eTurn, 0.45 * baseRate, 1.3 * baseRate);
-      const along = clamp((wDes / baseRate - 0.875) / 0.425, -1, 1);
-      out.steer = d.dir * along;
+      // A drift turns the heading at a rate the stick can only modulate inside [min, max] (against .. into the drift).
+      // Pick the turn rate that closes the pursuit error and let the engine (or the baseline mapping) find the stick for it.
+      const rg = dm.driftRange(k, Math.max(v, 8), this._rg);
+      out.steer = dm.stick(k, turnSide * clamp(4.6 * eTurn, rg.min, rg.max));
       out.drift = true;
       // look ahead to decide when the corner is over
       const bendNext = Math.abs(this.bend(s + 3, s + 3 + 26));
@@ -365,7 +398,9 @@ export class AIDriver {
       if (eTurn < -0.12) dr.wantEnd += dt; else dr.wantEnd = Math.max(0, dr.wantEnd - dt);
       const exit = bendNext < 0.16 && Math.abs(kapNow) < 0.0055;
       const charged = d.level >= 3 && bendNext < 0.35;
-      if (exit || charged || !signOk || dr.wantEnd > 0.3 || dr.t > dr.hold || !okHold) { out.drift = false; dr.phase = 'release'; dr.cool = 0.5; if (d.level > 0) this.stats.driftBoosts++; }
+      // a drift cannot swerve (it only turns one way): let go when a trap needs a bigger sidestep than the drift can deliver
+      const swerve = this.hz.active && this.hz.shift > 1.4 && this.hz.ds < 11 + v * 0.45 && eTurn < 0.25;
+      if (exit || charged || swerve || jumpNear || !signOk || dr.wantEnd > 0.3 || dr.t > dr.hold || !okHold) { out.drift = false; dr.phase = 'release'; dr.cool = 0.5; if (d.level > 0) this.stats.driftBoosts++; }
       return out;
     }
     // ------------------------------------------------ not drifting
@@ -373,50 +408,56 @@ export class AIDriver {
     if (dr.phase === 'arming') {
       dr.t += dt;
       out.drift = true;
-      out.steer = clamp(Math.sign(dr.dir) * 0.8, -1, 1);
+      out.steer = clamp(Math.sign(dr.dir) * 0.6, -1, 1);          // enough stick for the engine to commit the drift direction
       if (dr.t > 0.55 || !okHold) { dr.phase = 'idle'; dr.cool = 1.0; out.drift = false; out.steer = null; }
       return out;
     }
     // a planned corner: press the drift button just before its entry
     const plan = dr.plan;
-    if (!ok || !plan || dr.cool > 0) return out;
+    if (!ok || !plan || dr.cool > 0 || jumpNear) return out;
     const lead = 3 + v * 0.1;
     const toEntry = track.deltaS(s, plan.s0) - lead;
     if (toEntry > 0 || track.deltaS(s, plan.s1) < 12) return out;
     dr.phase = 'arming'; dr.t = 0; dr.dir = plan.dir;
-    out.drift = true; out.steer = dr.dir * 0.8;
+    out.drift = true; out.steer = dr.dir * 0.6;
     return out;
   }
 
   /**
-   * Look for the next corner worth drifting.  The heading always turns at 0.45..1.3 x baseRate while drifting, so a corner
-   * qualifies when the turn rate it needs at (near) full speed falls inside that window, it is a real bend (>= ~30 deg)
-   * and lasts at least a second.  Decided once per corner (dr.latchS), with the class's driftProb.
+   * Look for the next corner worth drifting.  A corner qualifies when the turn rate it needs at (near) full speed lies inside
+   * the range a drift can hold (the engine's driftYawRange, or the baseline model), it is a real bend (>= ~30 deg), lasts long
+   * enough to be worth a mini-turbo and the driver feels like it (class driftProb).  Decided once per corner (dr.latchS).
    */
-  planDrift(s, v, top, baseRate) {
-    const track = this.track, dr = this.dr;
+  planDrift(s, v, top) {
+    const track = this.track, dr = this.dr, dm = this.dm, k = this.k;
     const W = clamp(Math.max(v, top * 0.7) * 2.6, 70, 160);
     let peak = 0, dPeak = 0;
     for (let d = 8; d <= W; d += 5) { const kk = track.curvatureAt(s + d); if (Math.abs(kk) > Math.abs(peak)) { peak = kk; dPeak = d; } }
-    if (Math.abs(peak) < 0.011) return;                      // nothing worth a drift in sight yet
+    if (Math.abs(peak) < 0.0075) return;                     // nothing worth a drift in sight yet
     const ap = Math.abs(peak);
     // the corner is still rising at the edge of our view: wait until we can see its peak
     if (dPeak >= W - 8 && Math.abs(track.curvatureAt(s + W)) >= 0.85 * ap && W < 160) return;
-    dr.dbg = { s: Math.round(s), peak: +peak.toFixed(4), dPeak };
-    dr.decision = dr.dbg;
+    const dbg = dr.dbg ?? (dr.dbg = { s: 0, peak: 0, need: 0, why: '' });
+    dbg.s = Math.round(s); dbg.peak = peak; dbg.why = '';
     let dEntry = 8; for (let d = 0; d <= dPeak; d += 4) if (Math.abs(track.curvatureAt(s + d)) >= 0.5 * ap) { dEntry = d; break; }
     let dEnd = dPeak; for (let d = dPeak; d <= dPeak + 130; d += 5) { dEnd = d; const kk = track.curvatureAt(s + d); if (Math.abs(kk) < 0.35 * ap || kk * peak < 0) break; }
     dr.latchS = wrapS(s + dEnd + 12, track.length);          // do not re-plan until this corner is behind us
-    const vRef = clamp(Math.max(v, top * 0.8), 0, top);
+    // the speed we expect to carry through it: our speed, held back by the track's own corner hint
+    const vHint = track.maxSpeedAt(s + dPeak) * this.cornerScale * 1.2;
+    const vRef = Math.min(clamp(Math.max(v, top * 0.8), 0, top), Math.max(vHint, top * 0.5));
     const need = ap * vRef;
-    dr.dbg.need = +need.toFixed(2); dr.dbg.baseRate = +baseRate.toFixed(2); dr.dbg.dEntry = dEntry; dr.dbg.dEnd = dEnd;
-    if (need < 0.5 * baseRate || need > 1.18 * baseRate) { dr.dbg.why = 'rate'; return; }
+    dbg.need = need;
+    const rg = dm.driftRange(k, vRef, this._rg);
+    if (need < rg.min * (dm.native ? 1.4 : 1.11) || need > rg.max * 0.92) { dbg.why = 'rate'; return; }
     const H = this.bend(s + dEntry, s + dEnd);
-    dr.dbg.H = +H.toFixed(2);
-    if (Math.abs(H) < 0.52 || H * peak < 0) { dr.dbg.why = 'bend'; return; }
-    if ((dEnd - dEntry) / vRef < 0.9) { dr.dbg.why = 'short'; return; }
-    if (this.session.random() > this.driftProb) { dr.dbg.why = 'prob'; return; }
-    dr.dbg.why = 'PLAN';
+    if (Math.abs(H) < 0.52 || H * peak < 0) { dbg.why = 'bend'; return; }
+    const dur = (dEnd - dEntry) / vRef;
+    if (dur < 0.9) { dbg.why = 'short'; return; }
+    // is it worth it?  expected charge = duration * charge rate (stick into the drift charges faster) - at least a blue mini-turbo
+    const along = dm.alongFor(need, rg);
+    if (dur * (k.stats.miniTurbo ?? 1) * dm.chargeFactor(along) < 0.72) { dbg.why = 'charge'; return; }
+    if (this.session.random() > this.driftProb) { dbg.why = 'prob'; return; }
+    dbg.why = 'PLAN';
     dr.plan = { s0: wrapS(s + dEntry, track.length), s1: wrapS(s + dEnd, track.length), dir: peak > 0 ? -1 : 1 };
   }
 

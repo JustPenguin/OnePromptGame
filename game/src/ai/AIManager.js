@@ -21,6 +21,44 @@ export class AIManager {
     this.rubber = this.classInfo.rubber ?? 0.8;
     this.lineGain = 1;                                  // test knob: scales how hard the racing line is followed
     this.rubberOn = true;                               // test knob: disable catch-up
+    this.jumps = this.buildJumps();                     // ramps that launch over a gap: { s0, s1, end, need }
+  }
+
+  /**
+   * Ramps over a gap must be taken at a minimum speed no matter what class, corner or traffic says.  The flight is ballistic:
+   * leaving a ramp of slope h/length at speed v gives vy = v * slope and a flight time (vy + sqrt(vy^2 + 2 g h)) / g over the
+   * drop h, so it covers v * time metres; the smallest v that clears the gap (+ margin) is what the drivers must hold.
+   */
+  buildJumps() {
+    const tr = this.track, out = [];
+    const ramps = tr.ramps ?? [], gaps = tr.gaps ?? [];
+    const G = 32;                                        // engine gravity (m/s^2)
+    for (const r of ramps) {
+      const g = gaps.find((q) => { const d = tr.deltaS(r.s1, q.s0); return d > -3 && d < 12; });
+      if (!g) continue;
+      const h = r.height ?? 0, slope = h / Math.max(1, r.length ?? (r.s1 - r.s0));
+      const gapEnd = tr.deltaS(r.s1, g.s1 ?? (g.s0 + g.length));        // metres from the lip to the far side
+      let need = 60;
+      for (let v = 12; v <= 60; v += 0.5) {
+        const vy = v * slope, T = (vy + Math.sqrt(vy * vy + 2 * G * h)) / G;
+        if (v * T >= gapEnd + 2.5) { need = v; break; }
+      }
+      out.push({ s0: r.s0, s1: r.s1, end: g.s1 ?? (g.s0 + g.length), need: need * 1.12 + 1 });
+    }
+    return out;
+  }
+
+  /** The jump a driver at arc length `s` has to prepare for (within `reach` m of the ramp, or still crossing it); fills `out`. */
+  jumpAhead(s, out) {
+    out.active = false;
+    for (let i = 0; i < this.jumps.length; i++) {
+      const j = this.jumps[i];
+      const ds = this.track.deltaS(s, j.s0), toEnd = this.track.deltaS(s, j.end);
+      if (ds < 110 && toEnd > -6) {
+        if (!out.active || ds < out.ds) { out.active = true; out.ds = ds; out.need = j.need; out.toEnd = toEnd; }
+      }
+    }
+    return out.active;
   }
 
   update(dt) {

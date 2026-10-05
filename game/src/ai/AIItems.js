@@ -26,7 +26,8 @@ export class AIItems {
       this.delay = lerp(lo, hi, this.session.random() * this.session.random() * 1.0 + 0.0);
     }
     if (this.cool > 0) { this.cool -= dt; return; }
-    if (st.heldTime < this.delay) return;
+    const jumpBoost = it.type === 'boost' && this.jumpNeedsBoost();
+    if (st.heldTime < this.delay && !jumpBoost) return;
     const r = this.decide(it.type, it, st);
     if (r) {
       if (items.useItem(k, r.back)) {
@@ -50,6 +51,7 @@ export class AIItems {
     const skill = d.skill;
     switch (type) {
       case 'boost': {
+        if (this.jumpNeedsBoost()) return { back: false };          // too slow for the ramp: nitro now
         const boosting = k.boost.timer > 0.5;
         const recovering = this.session.time - this.lastSpinT < 1.2 && k.spin.timer <= 0;
         const offroad = !k.query.onRoad;
@@ -111,6 +113,12 @@ export class AIItems {
       }
       default: return { back: false };
     }
+  }
+
+  /** Approaching a ramp over a gap faster boosts would help: slower than the speed that clears it, and close enough for a boost to matter. */
+  jumpNeedsBoost() {
+    const d = this.d, j = d.jump, k = d.k;
+    return j.active && j.ds > 4 && j.ds < 80 && k.speed < j.need * 1.04 && k.boost.timer < 0.4 && k.grounded;
   }
 
   padSoon(s) {
