@@ -577,6 +577,54 @@ function abuse() {
   }
 }
 
+function eventsAudit() {
+  section('Event audit (rules + pads + wrong way)');
+  {
+    // wrong way: driving against the track for >1 s raises it, turning round clears it
+    const rig = newRig(DEFS.walls);
+    const k = rig.addKart(kartOpts({ s: 400, lateral: 0, speed: 16 }));
+    const race = rig.startRace(); race.setPhase('racing'); k.locked = false;
+    const here = rig.track.getRespawn(400, 0); k.placeAt(here.position, here.yaw + Math.PI, 16);       // facing against the track
+    rig.track.project(k.position, k.query, -1); k.hint = k.query.index; k.race.s = k.query.s; k.race.distance = 400;
+    const ww = []; rig.events.on(EV.WRONG_WAY, (e) => ww.push({ t: rig.session.time, active: e.active }));
+    rig.run(2.6, () => { k.input.throttle = 0.6; }, { every: 1 });
+    const raised = ww.find((e) => e.active);
+    check('wrong way is announced after about a second', raised ? raised.t : 99, 0.8, 2.2, 's');
+    aim(k, rig.track, 0);
+    rig.run(2.0, () => { k.input.throttle = 1; });
+    check('wrong way clears after turning round', ww.some((e) => !e.active) ? 1 : 0, 1, 1, '');
+    check('no wrong-way flag while driving the right way', k.race.wrongWay ? 1 : 0, 0, 0, '');
+  }
+  {
+    // boost pad at s=1800 on the strip
+    const rig = newRig(DEFS.strip);
+    const k = rig.addKart(kartOpts({ s: 1730, speed: 25 }));
+    let pad = 0, boostPad = 0; rig.events.on(EV.PAD_BOOST, () => pad++); rig.events.on(EV.BOOST, (e) => { if (e.source === 'pad') boostPad++; });
+    const peak = Math.max(...rig.run(4, () => { k.input.throttle = 1; }, { every: 1 / 60 }).map((r) => r.speed));
+    check('boost pad fires once (event + boost)', pad === 1 && boostPad === 1 ? 1 : 0, 1, 1, '');
+    check('boost pad lifts the kart well above top speed', peak / k.stats.topSpeed, 1.2, 1.5, 'x');
+  }
+  {
+    // laps / finish / results / place events on a real course with a bot
+    const rig = newRig(DEFS.sweepers, { laps: 2 });
+    const ks = [0, 1, 2].map((i) => rig.addKart({ driver: DRIVERS[i].id, body: 'classic', s: rig.track.length - 6 - i * 7, lateral: i % 2 ? 2 : -2, speed: 0, player: i === 0 }));
+    const race = rig.startRace();
+    const bots = ks.map((k, i) => makeBot(rig.session, k, { drift: i === 0 }));
+    const seen = {}; rig.events.onAny((t) => { seen[t] = (seen[t] ?? 0) + 1; });
+    let t = 0; while (t < 200 && race.phase !== 'results') { for (const b of bots) b(); rig.step(1 / 60); t += 1 / 60; }
+    check('race reaches the results phase', race.phase === 'results' ? 1 : 0, 1, 1, '');
+    check('LAP_COMPLETE fired for every kart and lap', seen['race:lap'], 6, 6, '');
+    check('FINAL_LAP fired once per kart', seen['race:finalLap'], 3, 3, '');
+    check('KART_FINISH once per kart', seen['race:finish'], 3, 3, '');
+    check('RACE_RESULTS exactly once', seen['race:results'], 1, 1, '');
+    const times = ks.map((k) => k.race.finishTime);
+    check('finish times are consistent with lap times', Math.abs(ks[0].race.lapTimes.reduce((a, b) => a + b, 0) - ks[0].race.finishTime), 0, 0.001, 's');
+    check('places are 1..3 without duplicates', new Set(ks.map((k) => k.race.place)).size, 3, 3, '');
+    check('standings are sorted by place', race.standings().every((e, i, a) => i === 0 || a[i - 1].place < e.place) ? 1 : 0, 1, 1, '');
+    void times;
+  }
+}
+
 function chaos() {
   section('Chaos soak (12 bots + seeded random item effects, spins, launches, teleports)');
   for (const [name, def] of [['coaster (hills, banking, ramp)', DEFS.coaster], ['sunny meadows', DEFS.meadows]]) {
@@ -684,7 +732,7 @@ function terrain() {
   }
 }
 
-const sections = { longitudinal, steering, start, drift, offroad, walls, karts, spinAndAir, slipstream, frameRate, lapValue, terrain, abuse, chaos, perf };
+const sections = { longitudinal, steering, start, drift, offroad, walls, karts, spinAndAir, slipstream, frameRate, lapValue, terrain, abuse, eventsAudit, chaos, perf };
 for (const [name, fn] of Object.entries(sections)) if (want(name)) { try { fn(); } catch (e) { failures++; console.log(`  FAIL ${name} threw: ${e.stack}`); } }
 if (args.roster || (only && only.includes('roster'))) rosterTable();
 console.log(`\n${failures === 0 ? 'HANDLING REPORT: all targets met' : `HANDLING REPORT: ${failures} target(s) missed`}`);
