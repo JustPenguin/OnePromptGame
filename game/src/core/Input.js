@@ -95,8 +95,14 @@ export class Input {
 
   /** True exactly once per press of `action` (keyboard or gamepad). Hold-to-use actions (respawn) never report here: use isDown(). */
   pressed(action) { return this.edges.has(action); }
-  /** Call once per frame after everything has consumed edges. */
-  endFrame() { this.edges.clear(); this.anyPressed = this._anyNext; this._anyNext = false; }
+  /**
+   * Call once per frame after everything has consumed edges. Also samples the gamepad, so Start / Back edges registered here are
+   * visible to pressed() at the top of the NEXT frame (and while paused, when read() is not running).
+   */
+  endFrame() {
+    this.edges.clear(); this.anyPressed = this._anyNext; this._anyNext = false;
+    this._pollPad();
+  }
   isDown(action) {
     if (this.bindings[action]?.some((c) => this.keys.has(c))) return true;
     if (action === 'respawn') return this._padEdgeHeld.respawn || (this.touch.active && !!this.touch.respawn);

@@ -95,8 +95,12 @@ export class GhostRecorder {
 
 /** Decode `data` into Float32Arrays. Accepts the object from GhostRecorder.finish() or a full ghostResult ({ data }). */
 export function decodeGhost(input) {
+  try { return decodeGhostUnsafe(input); } catch { return null; }      // corrupted / foreign data must never break a race load
+}
+
+function decodeGhostUnsafe(input) {
   const d = input?.data && input.data.b !== undefined ? input.data : input;
-  if (!d || d.v !== 1 || typeof d.b !== 'string' || !(d.n > 0)) return null;
+  if (!d || d.v !== 1 || typeof d.b !== 'string' || !(d.n > 0) || d.n > 400000) return null;
   const bytes = b64ToBytes(d.b);
   const n = d.n;
   const out = { n, hz: d.hz ?? HZ, x: new Float32Array(n), y: new Float32Array(n), z: new Float32Array(n), w: new Float32Array(n), flags: new Uint8Array(n), info: d };
