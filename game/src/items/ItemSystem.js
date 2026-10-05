@@ -247,7 +247,7 @@ export class ItemSystem {
     const st = this.kartState(kart);
     const r = kart.item.roulette; r.active = false; r.shown = null;
     kart.item.type = type; kart.item.count = count;
-    st.heldTime = 0; st.lastGiven = type;
+    st.heldTime = 0; st.lastGiven = type; st.serial = (st.serial ?? 0) + 1;
     this.events.emit(EV.ITEM_GOT, { kart, type, count });
   }
   clearKartItem(kart) { const it = kart.item; it.type = null; it.count = 0; it.roulette.active = false; it.roulette.shown = null; this.kartState(kart).pending = null; }
