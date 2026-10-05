@@ -57,7 +57,8 @@ export class VFX {
     this.group.name = 'vfx';
     this.time = 0;
     this.rng = mulberry32(0x51f15e);
-    this.pm = clamp(session.quality?.particles ?? 1, 0.2, 1.5);
+    this.q = session.app?.renderer?.quality ?? session.quality;
+    this.pm = clamp(this.q?.particles ?? 1, 0.2, 1.5);
     /** colour gain for additive particles: >1 only makes sense when bloom/HDR is active (GameRenderer sets renderer.hdr) */
     this.gain = 0.55;
     const map = getSpriteAtlas();
@@ -394,7 +395,8 @@ export class VFX {
     const S = this.session;
     this.time += dt;
     const T = this.time;
-    this.pm = clamp(S.quality?.particles ?? 1, 0.2, 1.5);
+    this.q = S.app?.renderer?.quality ?? S.quality;        // the renderer's preset is the live one (settings changes call renderer.setQuality)
+    this.pm = clamp(this.q?.particles ?? 1, 0.2, 1.5);
     this.gain = S.app?.renderer?.pipeline === 'post' ? 1.0 : 0.55;   // HDR + bloom can take hotter sparks than the direct path
     if (this._sceneSync <= 0) { this._syncScene(); this._sceneSync = 1.0; } else this._sceneSync -= dt;
     this.add.setTime(T); this.alpha.setTime(T); this.skids.setTime(T); this.flames.setTime(T); this.bubbles.setTime(T);
@@ -444,7 +446,7 @@ export class VFX {
 
   _shadow(k, S) {
     if (k.visual?.ghost) return;     // translucent time-trial ghosts cast no blob shadow
-    const hq = S.quality?.shadows;
+    const hq = this.q?.shadows;
     const h = k.grounded ? 0 : Math.max(0, k.position.y - (k.query?.height ?? k.position.y));
     const a = clamp((hq ? 0.5 : 0.62) - h * 0.12, 0, 0.7) * (k.respawn?.active ? 0 : 1);
     if (a <= 0.01) return;

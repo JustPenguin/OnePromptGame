@@ -72,10 +72,17 @@ export class GameRenderer {
   get pipeline() { return this.hdrOk && !this.forceDirect && (this.quality.postfx || this.quality.bloom) ? 'post' : 'direct'; }
 
   setQuality(q) {
+    const prev = this.quality;
     this.quality = q;
     this.renderer.shadowMap.enabled = !!q.shadows;
     this._qSig = '';
     this.resize();
+    // a live change (settings menu): karts re-pick their material / livery size, the sky probe is rebuilt at the new resolution
+    const S = this._envSession;
+    if (S && prev && prev.id !== q.id) {
+      for (const k of S.karts ?? []) k.visual?.setQuality?.(q.id);
+      this._buildSessionEnv(S);
+    }
   }
   setResolutionScale(s) { this.quality.resolutionScale = s; this.resize(); }
   /** Force/disable adaptive resolution (otherwise: on when settings.quality === 'auto' and no ?quality= override). */
@@ -118,7 +125,7 @@ export class GameRenderer {
   }
   _buildSessionEnv(session) {
     const old = this.sessionEnv;
-    const q = session.quality ?? this.quality;
+    const q = this.quality ?? session.quality;
     const spec = specFromScene(session.scene, session.track);
     spec.size = q.id === 'low' ? 64 : q.id === 'medium' ? 128 : 256;
     const tex = this.envFactory.create(spec);
