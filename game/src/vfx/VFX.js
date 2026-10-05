@@ -389,6 +389,7 @@ export class VFX {
     this.time += dt;
     const T = this.time;
     this.pm = clamp(S.quality?.particles ?? 1, 0.2, 1.5);
+    this.gain = S.app?.renderer?.pipeline === 'post' ? 1.0 : 0.55;   // HDR + bloom can take hotter sparks than the direct path
     if (this._sceneSync <= 0) { this._syncScene(); this._sceneSync = 1.0; } else this._sceneSync -= dt;
     this.add.setTime(T); this.alpha.setTime(T); this.skids.setTime(T); this.flames.setTime(T); this.bubbles.setTime(T);
     const cam = S.camera;
