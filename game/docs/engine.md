@@ -32,7 +32,7 @@ Roster (`src/data/roster.js`) is unchanged: `topSpeed, accel, grip, mass, driftT
 | boost item gain | +35-45 % | +36 % (peak) |
 | turn radius @ 20 m/s, full lock | 12-16 m | 13.1 m |
 | turn radius @ top speed, full lock | 22-32 m | 28.2 m |
-| free full-lock turn (speed bleeds to) | - | 84 % of top |
+| free full-lock turn (speed bleeds to) | - | 81 % of top |
 | drift mini-turbo levels | 0.85 / 1.7 / 2.7 s of charge | blue 0.8 / orange 1.6 / pink 2.5 s with the stick fully into the corner; 1.0 / 2.0 / 3.2 s with a light steer (from pressing drift) |
 | drift radius @ 28 m/s: inside / neutral / outside | tighter + wider than plain | 15.6 / 27.4 / 115 m (plain full lock 21.4 m) |
 | off-road (grass) speed | ~55 % | 60 % (Pip), 68 % (Bruno, heavy), 58 % (Quill) |
@@ -70,7 +70,7 @@ R=45 m hairpins; the baseline Sunny Meadows has few real corners so the margin t
   16 %/s drag charged by time since the previous contact, nose swings parallel). Fires EV.WALL_HIT (impact > 3.5 m/s, 0.18 s cooldown) and, newly, **EV.WALL_SCRAPE** `{kart, active}` (starts on a repeat contact within 60 ms of the previous one while moving > 3 m/s, ends 120 ms after the last contact; a single bounce is not a scrape).
 * **Kart vs kart**: circles r = 1.15 x scale; effective mass = `mass^1.7 * scale^2`; invincible / rocket karts get x12 mass (barge through; `EV.BUMP.ram` = that kart); restitution 0.4;
   time-based 0.25 s event cooldown. No tunnelling: relative speeds up to 80 m/s move < 0.7 m per 1/120 s sub-step vs 2.3 m contact distance.
-* **Spin-out / launch**: spin angle is a pure function of elapsed time (2 turns, ease-out), speed bleeds 1.7/s. `spinOut()`/`launch()` return **false** when blocked and set `kart.blockReason`
+* **Spin-out / launch**: spin angle is a pure function of elapsed time (2 turns, ease-out), speed bleeds 1.7/s; control then comes back smoothly (`kart.recover`: steering starts at 35 % and throttle at 50 %, ramping to full over 0.45 s). `spinOut()`/`launch()` return **false** when blocked and set `kart.blockReason`
   (`'shield' | 'rocket' | 'respawn' | 'finished' | 'recovering'`); while `hitGrace` (spin duration + 0.9 s) is running further spins/launches are ignored (no chain-spins). `shrinkFor()` ignores hitGrace.
 * **Air**: gravity 32 m/s^2, 35 % steering control (90 % during a drift hop), nose follows the flight path (`finalize`), soft vertical focus for the camera. EV.JUMP / EV.LAND (impact > 5 m/s, air > 0.15 s).
 * **Slipstream**: within 14 m (min 2.2 m) directly behind a kart going >= 55 % of top speed, same direction, lateral offset < 2 m (+5 % of distance): `kart.draft.t` builds over 1 s (decays in 0.45 s);
@@ -97,7 +97,7 @@ R=45 m hairpins; the baseline Sunny Meadows has few real corners so the margin t
   (`settings.fovBoost`), landing dip, vertical focus smoothing (jumps feel soft), subtle camera roll, deterministic smooth shake (`settings.cameraShake`; everything above except pull/FOV is off with `settings.reducedMotion`).
 * **Aspect-aware** (`framing()`): below aspect ~1.35 (portrait phones) the vertical FOV widens by up to +20 deg and the camera pulls back 28 % / up 20 %; above ~2.1 the vertical FOV is trimmed by up to 6 deg (verified at 390x844, 844x390, 1280x720, 1680x640).
 * Never clips under the road or outside the walls: each frame `track.project(cameraPos)` -> height + 0.85 m minimum, and pulled inside `halfWidth + shoulder - 0.8` when the side has a wall.
-* **Intro** (`race.phase === 'intro'`, 3.4 s): a quadratic-Bezier crane shot over the grid (high on the left looking down the course -> beside the pack -> chase pose), smootherstep timing, FOV 44 -> chase FOV.
+* **Intro** (`race.phase === 'intro'`, 3.4 s): a quadratic-Bezier crane shot over the grid (high on the left -> beside the pack -> chase pose) whose aim point first sweeps along the REAL circuit ahead of the grid (`track.pointAt`: establishing shot of the first section) and then settles on the pack, smootherstep timing, FOV 44 -> chase FOV.
   The last keyframe is computed with the same numbers as the chase camera at standstill, so the hand-off is seamless (verified: the last intro frame and the first countdown frame are pixel-identical).
   Any key / tap / pad button after 0.35 s skips it (`input.anyPressed` -> `race.skipIntro()`); a skip eases into the chase pose.
 * **Finish**: when the followed kart has finished the camera orbits it; left/right (`input.pressed('left'|'right')`) cycles `session.cameraTarget` through the karts by race position.
@@ -141,7 +141,8 @@ New (engine section): `bot(on, {drift, chain, ...})` drives the player with the 
 ## 6. How to test
 ```
 cd game
-node scripts/handling.mjs                      # Node-only handling report (~3 s): every number above, exit 1 on a miss
+node scripts/handling.mjs                      # Node-only handling report (~15 s): every number above, exit 1 on a miss
+node scripts/handling.mjs --only=start,walls,eventsAudit,chaos   # sections: longitudinal steering start drift offroad walls karts spinAndAir slipstream frameRate lapValue terrain abuse eventsAudit chaos perf
 node scripts/handling.mjs --roster             # + stat-spread table for 8 driver/kart combos
 node scripts/handling.mjs --driver=bruno --body=crusher --class=master --only=drift,walls
 node scripts/check.mjs --track=all --laps=2    # headless AI races in Chromium (D's AI on this physics)

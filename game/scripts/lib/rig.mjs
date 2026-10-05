@@ -67,6 +67,10 @@ export const DEFS = {
   hairpins: { ...baseDef, id: 't-hairpins', name: 'Hairpins', width: 16, shoulder: 6, points: stadiumPoints(500, 45, 80, 10) },
   coaster: { ...baseDef, id: 't-coaster', name: 'Coaster', width: 16, shoulder: 6, points: COASTER_POINTS,
     zones: [{ type: 'ramp', s: 300, length: 12, width: 8, height: 2.4 }, { type: 'boost', s: 800, length: 12, width: 6 }] },
+  /** Every slow / slidey surface in a row on the sweepers circuit (mud, sand, water, snow, ice), full road width. */
+  surfaces: { ...baseDef, id: 't-surfaces', name: 'Surfaces', width: 16, shoulder: 6, points: stadiumPoints(500, 90, 80, 10),
+    zones: [{ type: 'mud', s: 150, length: 60, width: 18 }, { type: 'sand', s: 260, length: 60, width: 18 }, { type: 'water', s: 370, length: 60, width: 18 },
+      { type: 'snow', s: 480, length: 60, width: 18 }, { type: 'ice', s: 620, length: 80, width: 18 }, { type: 'mud', s: 1000, length: 80, width: 18 }] },
   ripples: { ...baseDef, id: 't-ripples', name: 'Ripples', width: 16, shoulder: 6, points: rippleCirclePoints(70, 8) },
   /** The shipped baseline course. */
   meadows: sunnyMeadows,

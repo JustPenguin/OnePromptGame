@@ -695,6 +695,11 @@ function terrain() {
     check('drifting bot lap times are consistent (lap 2 vs lap 1)', a.lapTimes[1] / a.lapTimes[0], 0.93, 1.03, '');
   }
   {
+    const r = soloLap(DEFS.surfaces, { driver: DRIVER, body: BODY, speedClass: CLASS, drift: true, laps: 2, maxT: 240 });
+    info('mud / sand / water / snow / ice across the whole road, 2 laps: time / respawns / wall hits', `${r.time.toFixed(1)} s / ${r.counts['kart:respawn'] ?? 0} / ${r.counts['kart:wallHit'] ?? 0}`);
+    check('slow and slidey surfaces never trap a kart (finishes, no rescues)', r.finished && !(r.counts['kart:respawn'] > 0) ? 1 : 0, 1, 1, '');
+  }
+  {
     // ripples: a bumpy circle (R 70 m, 16 m wavelength). The bot drifts round it: charge keeps building, the drift is never cancelled
     const rig = newRig(DEFS.ripples);
     const k = rig.addKart(kartOpts({ s: 30, speed: 30 }));
