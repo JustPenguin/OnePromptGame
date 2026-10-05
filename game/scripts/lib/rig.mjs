@@ -166,6 +166,11 @@ export function makeRig(def = DEFS.open, { speedClass = 'pro', seed = 1, laps = 
       return rig.race;
     },
     clearLog() { log.length = 0; for (const k of Object.keys(counts)) delete counts[k]; },
+    /** Test-only chasm: no ground between s0 and s1 (what a `gap` zone of the real SplineTrack does: query.inBounds = false). */
+    addGap(s0, s1) {
+      const orig = track.project.bind(track);
+      track.project = (p, out, hint) => { const r = orig(p, out, hint); if (r.s >= s0 && r.s <= s1) r.inBounds = false; return r; };
+    },
   };
   return rig;
 }

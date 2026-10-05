@@ -116,16 +116,17 @@ export class KartPhysics {
 
     // ---- longitudinal
     const thr = inp.throttle, brk = inp.brake;
+    const trac = k.grounded ? 1 : T.airTraction;                                   // wheels off the ground: (almost) no drive and no brakes
     if (thr > 0.01 && k.speed < cap) {
       const f = clamp(k.speed / cap, 0, 1);
-      let a = P.launch * (1 - f) * (k.burnout > 0 ? T.burnoutTraction : 1) * lerp(T.recoverAccel, 1, rec);
+      let a = P.launch * (1 - f) * (k.burnout > 0 ? T.burnoutTraction : 1) * lerp(T.recoverAccel, 1, rec) * trac;
       if (boosting) a = Math.max(a, Math.min((cap - k.speed) / T.boostTau, T.boostAccelMax));
       if (k.draft.t > 0) a += T.draftAccel * k.draft.t;
       k.speed = Math.min(cap, k.speed + a * thr * h);
     }
     if (k.speed > cap) k.speed = Math.max(cap, k.speed - ((k.speed - cap) * T.overcapRate + T.overcapConst) * h);
     if (brk > 0.01) {
-      if (k.speed > 0.8) k.speed = Math.max(0, k.speed - T.brake * brk * h);
+      if (k.speed > 0.8) k.speed = Math.max(0, k.speed - T.brake * brk * trac * h);
       else if (thr < 0.05) k.speed = Math.max(-cap * T.reverseCap, k.speed - P.launch * 0.7 * brk * h);
     }
     if (thr < 0.05 && brk < 0.05 && k.rocket <= 0) {
@@ -338,8 +339,12 @@ export class KartPhysics {
   // ------------------------------------------------------------------ ground / air
   handleGround(k, q, h, inp) {
     if (!q.inBounds || q.surface === Surface.VOID) {
-      // off the edge with no wall: no ground here, fall
-      k.grounded = false; k.vy -= T.gravity * h; k.position.y += k.vy * h;
+      // no ground here (a chasm in front of a ramp, an open edge): fly / fall.  Leaving the ground this way is a jump like any other
+      // (EV.JUMP, landing-trick bookkeeping, air time), so a ramp over a gap pays off exactly like a ramp over a road.
+      if (k.grounded) this.leaveGround(k, inp);
+      k.vy -= T.gravity * h; k.position.y += k.vy * h;
+      k.airTime += h;
+      if (k.position.y > k.air.peak) k.air.peak = k.position.y;
       return;
     }
     const ground = q.height;
@@ -348,11 +353,9 @@ export class KartPhysics {
       const ballistic = prevY + k.vy * h - 0.5 * T.gravity * h * h;
       if ((ballistic > ground + 0.2 && k.vy > 1.5) || prevY - ground > 0.6) {
         // the ground fell away faster than gravity (crest / ramp lip), or dropped away in one step (stepped edge): leave the ground
-        k.grounded = false;
+        this.leaveGround(k, inp);
         k.position.y = prevY + k.vy * h;
-        k.air.trick = !!inp.drift && k.speed > k.stats.topSpeed * 0.5;
-        k.air.peak = k.position.y;
-        this.events.emit(EV.JUMP, { kart: k });
+        k.air.peak = Math.max(k.air.peak, k.position.y);
       } else {
         const gv = clamp((ground - prevY) / h, -30, 30);
         k.vy = damp(k.vy, gv, 60, h);
@@ -363,6 +366,8 @@ export class KartPhysics {
       k.position.y += k.vy * h;
       k.airTime += h;
       if (k.position.y > k.air.peak) k.air.peak = k.position.y;
+      // fell into a chasm and reached the far side far below the road: that is the chasm's wall, not a landing - the drone fetches us
+      if (k.position.y < ground - T.chasmDepth) { this.respawnKart(k, 'fall'); return; }
       if (k.position.y <= ground && k.vy <= 0) {
         const impact = -k.vy;
         k.position.y = ground; k.vy = 0; k.grounded = true;
@@ -374,6 +379,14 @@ export class KartPhysics {
       }
     }
     if (k.grounded) k.airTime = 0;
+  }
+
+  /** The wheels left the ground without a drift hop (ramp lip, crest, stepped edge, chasm): bookkeeping + EV.JUMP. */
+  leaveGround(k, inp) {
+    k.grounded = false;
+    k.air.trick = !!inp.drift && k.speed > k.stats.topSpeed * 0.5;
+    k.air.peak = k.position.y;
+    this.events.emit(EV.JUMP, { kart: k });
   }
 
   handleZones(k, q) {

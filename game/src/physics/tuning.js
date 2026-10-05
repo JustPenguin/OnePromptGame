@@ -51,6 +51,7 @@ export const T = {
 
   // ---- air
   airControl: 0.35,
+  airTraction: 0.2,          // throttle / brake strength with the wheels off the ground (a slow kart cannot throttle its way over a gap)
   landMinImpact: 5, landMinAir: 0.15,
   trickMinAir: 0.45, trickBoost: { strength: 0.28, duration: 0.85 },
 
@@ -78,7 +79,7 @@ export const T = {
   hitGraceExtra: 0.9,        // seconds after a spin-out during which further spins/launches are ignored
 
   // ---- respawn
-  respawnTime: 1.7, respawnBack: 6, respawnSpeed: 0.28, respawnGrace: 2.2, fallTime: 1.1,
+  respawnTime: 1.7, respawnBack: 6, respawnSpeed: 0.28, respawnGrace: 2.2, fallTime: 1.1, chasmDepth: 2.5,   // chasmDepth: airborne this far below the ground = fell into a gap, no landing
   stuckTime: 4,
 
   // ---- slipstream

@@ -460,6 +460,32 @@ function spinAndAir() {
     check('landing trick fires exactly once', trick, 1, 1, '');
   }
   {
+    // ramp over a chasm (the ramp at s=1400 is 14 m long, then 14 m of no ground): fast karts fly over it like any other jump, slow ones fall and are rescued
+    const run = (speed, drift) => {
+      const rig = newRig(DEFS.strip);
+      rig.addGap(1414, 1428);
+      const k = rig.addKart(kartOpts({ s: 1380, speed }));
+      const c = { jump: 0, land: 0, respawn: 0, trick: 0, air: 0 };
+      rig.events.on(EV.JUMP, () => c.jump++); rig.events.on(EV.LAND, () => c.land++); rig.events.on(EV.RESPAWN, () => c.respawn++);
+      rig.events.on(EV.BOOST, (e) => { if (e.source === 'trick') c.trick++; });
+      const s = rig.run(8, () => { k.input.throttle = 1; k.input.drift = drift; }, { every: 1 / 60, pin: speed < 20 ? (kk) => { if (kk.query.s < 1414) kk.speed = Math.min(kk.speed, speed); } : null });
+      c.air = s.filter((r) => !r.grounded).length / 60;
+      return { c, s, k };
+    };
+    const fast = run(30, false), slow = run(13, false), trick = run(30, true);
+    info('chasm, fast kart (30 m/s): jump / land / respawn / air time / final s', `${fast.c.jump} / ${fast.c.land} / ${fast.c.respawn} / ${fast.c.air.toFixed(2)} s / ${fast.s.at(-1).s.toFixed(0)}`);
+    info('chasm, slow kart (13 m/s): jump / land / respawn', `${slow.c.jump} / ${slow.c.land} / ${slow.c.respawn}`);
+    check('chasm: a fast kart announces its jump once', fast.c.jump, 1, 1, '');
+    check('chasm: ...and its landing once', fast.c.land, 1, 1, '');
+    check('chasm: ...and clears the gap without a rescue', fast.c.respawn, 0, 0, '');
+    check('chasm: a slow kart falls and is rescued (and is not snapped up onto the far side)', slow.c.respawn >= 1 && slow.c.land === 0 ? 1 : 0, 1, 1, '', `(rescues ${slow.c.respawn}: it retries at the same pinned speed)`);
+    check('chasm: landing trick pays out once when drift is held across the gap', trick.c.trick, 1, 1, '');
+    // throttle does nothing in the air: a 20 m/s kart does not gain speed during the flight (it used to gain ~3 m/s)
+    const f = run(20, false);
+    const air = f.s.filter((r) => !r.grounded);
+    check('chasm: no free acceleration in mid-air (speed change during the flight, 20 m/s kart)', air.length ? air.at(-1).speed - air[0].speed : NaN, -1.5, 1.0, 'm/s');
+  }
+  {
     // hop + landing keeps control; no JUMP/LAND spam on flat road
     const rig = newRig();
     const k = rig.addKart(kartOpts({ s: 200, speed: 28 }));
