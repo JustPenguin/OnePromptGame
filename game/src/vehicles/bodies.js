@@ -7,7 +7,7 @@
 // that the driver builder + animation code use: wheel layout, seat/steering positions, effect mount points.
 // Model space: +Z forward, +X = kart LEFT, Y up, origin on the ground at the kart centre.
 import * as THREE from 'three';
-import { rbox, box, sph, cyl, cone, capsule, torus, tube, lathe, loft, extrude, DEG } from './build.js';
+import { rbox, box, sph, cyl, cone, capsule, torus, tube, lathe, loft, extrude, arch, DEG } from './build.js';
 
 /** Surface presets spread into PartBuilder.add options. */
 export const M = {
@@ -194,18 +194,8 @@ function steeringAssembly(B, pal, st, colLen = 0.5) {
 }
 
 // ------------------------------------------------------------------------------------------------ shared extras
-/** Arch (fender) over a wheel: annular sector in the YZ plane, extruded along X by `width`. */
-function archGeo(rIn, rOut, a0, a1, width) {
-  const sh = new THREE.Shape();
-  sh.absarc(0, 0, rOut, a0, a1, false);
-  sh.absarc(0, 0, rIn, a1, a0, true);
-  sh.closePath();
-  const d = Math.max(0.02, width - 0.04);
-  const g = new THREE.ExtrudeGeometry(sh, { depth: d, bevelEnabled: true, bevelThickness: 0.02, bevelSize: 0.02, bevelSegments: 1, curveSegments: 9 });
-  g.translate(0, 0, -d / 2);
-  g.rotateY(Math.PI / 2);
-  return g;
-}
+/** Arch (fender) over a wheel: smooth swept section, thickness rOut - rIn, `width` along X. */
+const archGeo = (rIn, rOut, a0, a1, width) => arch(rIn, rOut, a0, a1, width, 0.028);
 
 /** Vertical exhaust stack with a glowing mouth (returns the top position). */
 function addStack(B, x, y0, y1, z, { r = 0.07, mirror = true } = {}) {
@@ -308,8 +298,9 @@ function buildHopper(B, rig, pal) {
   }
   // big flared fenders
   const R = S.wheels.RL, F = S.wheels.FL;
-  B.add(archGeo(R.r + 0.06, R.r + 0.15, 0.1, Math.PI - 0.1, R.w + 0.14), { p: [R.x, R.y, R.z], ...M.paint, c: pal.paint, decal: true, bone: 'chassis', mirror: true, tag: 'fender' });
-  B.add(archGeo(F.r + 0.05, F.r + 0.11, 0.35, Math.PI - 0.35, F.w + 0.12), { p: [F.x, F.y, F.z], ...M.paint, c: pal.paint, bone: 'chassis', mirror: true, tag: 'fender' });
+  // (clearance covers the knobs: lug tips reach r + 0.106 behind, r + 0.062 in front)
+  B.add(archGeo(R.r + 0.125, R.r + 0.205, 0.1, Math.PI - 0.1, R.w + 0.14), { p: [R.x, R.y, R.z], ...M.paint, c: pal.paint, decal: true, bone: 'chassis', mirror: true, tag: 'fender' });
+  B.add(archGeo(F.r + 0.08, F.r + 0.145, 0.35, Math.PI - 0.35, F.w + 0.12), { p: [F.x, F.y, F.z], ...M.paint, c: pal.paint, bone: 'chassis', mirror: true, tag: 'fender' });
   // front bumper + skid plate, tail lights
   B.add(tube([[-0.5, 0.42, 0.9], [-0.4, 0.4, 1.5], [0.4, 0.4, 1.5], [0.5, 0.42, 0.9]], 0.06, { rs: 8 }), { ...M.chrome, c: CHROME, bone: 'chassis', tag: 'bumper' });
   B.add(rbox(0.8, 0.05, 0.5, 0.02), { p: [0, 0.27, 1.25], ...M.steel, c: '#59607a', bone: 'chassis', tag: 'skid' });
@@ -372,8 +363,9 @@ function buildCrusher(B, rig, pal) {
   steeringAssembly(B, pal, S.steer, 0.3);
   // fender plates over the wheels
   const R = S.wheels.RL, F = S.wheels.FL;
-  B.add(archGeo(R.r + 0.05, R.r + 0.13, 0.15, Math.PI - 0.15, R.w + 0.1), { p: [R.x, R.y, R.z], ...M.paint, c: pal.paint, decal: true, bone: 'chassis', mirror: true, tag: 'fender' });
-  B.add(archGeo(F.r + 0.05, F.r + 0.13, 0.3, Math.PI - 0.3, F.w + 0.1), { p: [F.x, F.y, F.z], ...M.paint, c: pal.paint, bone: 'chassis', mirror: true, tag: 'fender' });
+  // (lug tips reach r + 0.088, so the plates sit 0.02 above them)
+  B.add(archGeo(R.r + 0.11, R.r + 0.19, 0.15, Math.PI - 0.15, R.w + 0.1), { p: [R.x, R.y, R.z], ...M.paint, c: pal.paint, decal: true, bone: 'chassis', mirror: true, tag: 'fender' });
+  B.add(archGeo(F.r + 0.11, F.r + 0.19, 0.3, Math.PI - 0.3, F.w + 0.1), { p: [F.x, F.y, F.z], ...M.paint, c: pal.paint, bone: 'chassis', mirror: true, tag: 'fender' });
   const W = S.wheels;
   addWheel(B, pal, { ...W.FL, bone: 'wheelFL', bm: 'wheelFR', hub: 'disc', rim: '#59607a', lugs: 12, lugH: 0.1, lugW: 0.15, band: pal.accent });
   addWheel(B, pal, { ...W.RL, bone: 'wheelRL', bm: 'wheelRR', hub: 'disc', rim: '#59607a', lugs: 12, lugH: 0.1, lugW: 0.16, band: pal.accent });

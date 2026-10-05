@@ -115,6 +115,72 @@ export function extrude(outline, depth, { bevel = 0.02, bs = 2, curve = 10 } = {
   return g;
 }
 
+/**
+ * Smooth fender arch: a rounded-rectangle section (radial thickness rOut - rIn, axial `width`, corner radius `cr`) swept about the X
+ * axis over the angles a0..a1 (point = (x, rho * sin a, -rho * cos a), so the arch rises over the wheel and is symmetric in z).
+ * Smooth analytic normals (no faceting under the clearcoat highlights) and flat end caps.
+ */
+export function arch(rIn, rOut, a0, a1, width, cr = 0.03) {
+  return mk(`ar${rIn},${rOut},${a0},${a1},${width},${cr}`, () => {
+    const t = rOut - rIn, hw = width / 2;
+    cr = Math.max(0.004, Math.min(cr, t * 0.5 - 1e-3, hw - 1e-3));
+    const cs = DETAIL > 0.7 ? 2 : 1;
+    // section outline in (x, rho), counter-clockwise; each corner is an arc of `cs` steps, edges join equal normals
+    const sx = [], sr = [], nx = [], nr = [];
+    const corners = [[hw - cr, rOut - cr, 0], [-hw + cr, rOut - cr, Math.PI / 2], [-hw + cr, rIn + cr, Math.PI], [hw - cr, rIn + cr, Math.PI * 1.5]];
+    for (const [cx, cr0, phi0] of corners) {
+      for (let k = 0; k <= cs; k++) {
+        const phi = phi0 + (k / cs) * (Math.PI / 2);
+        const c = Math.cos(phi), s = Math.sin(phi);
+        sx.push(cx + cr * c); sr.push(cr0 + cr * s); nx.push(c); nr.push(s);
+      }
+    }
+    const P = sx.length;
+    const N = sg(Math.round((a1 - a0) / 0.16), 6);
+    const pos = [], nor = [], idx = [];
+    for (let i = 0; i <= N; i++) {
+      const a = a0 + (a1 - a0) * (i / N), sa = Math.sin(a), ca = Math.cos(a);
+      for (let j = 0; j < P; j++) {
+        pos.push(sx[j], sr[j] * sa, -sr[j] * ca);
+        nor.push(nx[j], nr[j] * sa, -nr[j] * ca);
+      }
+    }
+    // pick the outward winding from the first quad (section runs CCW in (x, rho))
+    const e = (i, j) => (i * P + j) * 3;
+    const ax = pos[e(0, 1)] - pos[e(0, 0)], ay = pos[e(0, 1) + 1] - pos[e(0, 0) + 1], az = pos[e(0, 1) + 2] - pos[e(0, 0) + 2];
+    const bx = pos[e(1, 0)] - pos[e(0, 0)], by = pos[e(1, 0) + 1] - pos[e(0, 0) + 1], bz = pos[e(1, 0) + 2] - pos[e(0, 0) + 2];
+    const cxp = ay * bz - az * by, cyp = az * bx - ax * bz, czp = ax * by - ay * bx;
+    const flip = cxp * nor[e(0, 0)] + cyp * nor[e(0, 0) + 1] + czp * nor[e(0, 0) + 2] < 0;
+    for (let i = 0; i < N; i++) {
+      for (let j = 0; j < P; j++) {
+        const a = i * P + j, b = i * P + ((j + 1) % P), c = (i + 1) * P + j, d = (i + 1) * P + ((j + 1) % P);
+        if (flip) idx.push(a, c, b, b, c, d); else idx.push(a, b, c, b, d, c);
+      }
+    }
+    // flat end caps (own vertices): the section polygon fanned around its centre, facing away from the arch
+    for (const [a, dir] of [[a0, -1], [a1, 1]]) {
+      const sa = Math.sin(a), ca = Math.cos(a);
+      const base = pos.length / 3;
+      const tx = 0, ty = ca * dir, tz = sa * dir;
+      for (let j = 0; j < P; j++) { pos.push(sx[j], sr[j] * sa, -sr[j] * ca); nor.push(tx, ty, tz); }
+      const rc = (rIn + rOut) / 2;
+      pos.push(0, rc * sa, -rc * ca); nor.push(tx, ty, tz);
+      const centre = base + P;
+      // section CCW in (x, rho) seen from +rho... the winding depends on the cap direction and on `flip`
+      const ccw = (dir > 0) !== flip;
+      for (let j = 0; j < P; j++) {
+        const p = base + j, q = base + ((j + 1) % P);
+        if (ccw) idx.push(centre, p, q); else idx.push(centre, q, p);
+      }
+    }
+    const g = new THREE.BufferGeometry();
+    g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+    g.setAttribute('normal', new THREE.Float32BufferAttribute(nor, 3));
+    g.setIndex(idx);
+    return g;
+  });
+}
+
 /** Merge a list of geometries (made non-indexed) into one. */
 export function mergeAll(list) {
   const out = mergeGeometries(list.map((g) => (g.index ? g.toNonIndexed() : g)));
