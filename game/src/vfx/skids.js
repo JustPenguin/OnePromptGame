@@ -2,6 +2,7 @@
 // Each wheel "slot" extends its streak while it slips; segments carry their own birth time + alpha and fade in the shader
 // (alpha decays over `life` seconds), so there is no per-frame CPU work except appending new segments.
 import * as THREE from 'three';
+import { DirtyRange } from './dirty.js';
 
 const VERT = /* glsl */`
 attribute vec2 aAlpha;   // alpha, birth
@@ -80,7 +81,7 @@ export class SkidMarks {
     this.mesh.renderOrder = 5;
     this.mesh.name = 'skidmarks';
     this.slots = new Map();
-    this.lo = -1; this.hi = -1;
+    this.dirty = new DirtyRange(this.mesh, [[this.aPos, 12], [this.aAlpha, 8]]);
   }
 
   /** Per-wheel state (Float64-free plain object, created once per slot key). */
@@ -116,23 +117,19 @@ export class SkidMarks {
     P[o + 9] = px + rx * w; P[o + 10] = py + ry * w; P[o + 11] = pz + rz * w;
     A[q] = s.a; A[q + 1] = time; A[q + 2] = s.a; A[q + 3] = time; A[q + 4] = a1; A[q + 5] = time; A[q + 6] = a1; A[q + 7] = time;
     s.x = px; s.y = py; s.z = pz; s.a = a1; s.rx = rx; s.ry = ry; s.rz = rz;
-    if (this.lo < 0) { this.lo = this.hi = i; } else { if (i < this.lo) this.lo = i; if (i > this.hi) this.hi = i; }
+    this.dirty.mark(i);
   }
 
   setTime(t) { this.uniforms.uTime.value = t; }
 
-  flush() {
-    if (this.lo < 0) return;
-    const lo = this.lo, n = this.hi - this.lo + 1;
-    this.aPos.clearUpdateRanges(); this.aPos.addUpdateRange(lo * 12, n * 12); this.aPos.needsUpdate = true;
-    this.aAlpha.clearUpdateRanges(); this.aAlpha.addUpdateRange(lo * 8, n * 8); this.aAlpha.needsUpdate = true;
-    this.lo = this.hi = -1;
-  }
+  flush() { this.dirty.commit(); }
 
   /** Forget everything (new race). */
   clear() {
     for (let i = 0; i < this.cap; i++) for (let k = 0; k < 4; k++) this.alpha[i * 8 + k * 2 + 1] = -1000;
+    this.aAlpha.clearUpdateRanges();      // (a stale partial range would make this a partial upload)
     this.aAlpha.needsUpdate = true;
+    this.dirty.lo = this.dirty.hi = this.dirty.plo = this.dirty.phi = -1;
     this.slots.clear();
   }
 

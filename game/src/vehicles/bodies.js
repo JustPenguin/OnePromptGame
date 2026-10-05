@@ -331,6 +331,7 @@ export const CRUSHER = {
   exhaust: [[0.64, 1.68, -0.92], [-0.64, 1.68, -0.92]],
   size: { length: 3.1, width: 2.4, height: 1.8 },
   fenderClear: 0.02,
+  exhaustDir: [0, 0.38, -0.925],            // the stacks point up and back: flames follow
 };
 
 function buildCrusher(B, rig, pal) {

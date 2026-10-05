@@ -29,7 +29,8 @@ const CYAN = hex('#22d3ff'), GOLD = hex('#ffd23f'), HOT = hex('#ff8a1f'), WHITE 
 const CONFETTI = [hex('#ff3d6a'), hex('#ffd23f'), hex('#22d3ff'), hex('#7be04a'), hex('#8b4dff'), hex('#ff7a1a'), hex('#ffffff')];
 
 const _a = new THREE.Vector3(), _b = new THREE.Vector3(), _c = new THREE.Vector3(), _d = new THREE.Vector3();
-const _q = new THREE.Quaternion(), _qf = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), Math.PI), _qq = new THREE.Quaternion();
+const _q = new THREE.Quaternion(), _qq = new THREE.Quaternion(), _exq = new THREE.Quaternion();
+const _Z = new THREE.Vector3(0, 0, 1), _ed = new THREE.Vector3(), _dw = new THREE.Vector3();
 const _white = [1, 1, 1];
 
 const SURF_FX = (() => {
@@ -91,7 +92,9 @@ export class VFX {
   /** additive spark / streak */
   spark(x, y, z, vx, vy, vz, life, size, c, gain = 2.2, grav = 11, drag = 0.5, stretch = 0.02, frame = SPR.DOT) {
     gain *= this.gain;
-    this.add.spawn(x, y, z, vx, vy, vz, life, size, size * 0.35, c[0] * gain, c[1] * gain, c[2] * gain, 1, c[0], c[1] * 0.6, c[2] * 0.6, 0, frame, drag, grav, stretch, 0, 0, 0, 2);
+    // hot start: the colour is pushed toward white at birth and settles into the effect colour over the spark's life
+    const hot = 0.3;
+    this.add.spawn(x, y, z, vx, vy, vz, life, size, size * 0.35, (c[0] + (1 - c[0]) * hot) * gain, (c[1] + (1 - c[1]) * hot) * gain, (c[2] + (1 - c[2]) * hot) * gain, 1, c[0], c[1] * 0.6, c[2] * 0.6, 0, frame, drag, grav, stretch, 0, 0, 0, 2);
   }
   /** additive soft sprite that does not move (flashes, ground glows) */
   glow(x, y, z, s0, s1, c, a, life, frame = SPR.SOFT) {
@@ -103,14 +106,17 @@ export class VFX {
   }
   /** additive star / flare */
   star(x, y, z, vx, vy, vz, life, size, c, gain = 2, frame = SPR.STAR5, grav = 0, rotSp = 3) {
+    gain *= this.gain;
     this.add.spawn(x, y, z, vx, vy, vz, life, size, size * 0.2, c[0] * gain, c[1] * gain, c[2] * gain, 1, c[0], c[1], c[2], 0, frame, 1.2, grav, 0, this.r() * 6.28, rotSp * this.sr(), 0.05, 0);
   }
   /** additive ground-aligned ring */
   ring(x, y, z, s0, s1, life, c, a = 0.9, gain = 1.6) {
+    gain *= this.gain;
     this.add.spawn(x, y + 0.05, z, 0, 0, 0, life, s0, s1, c[0] * gain, c[1] * gain, c[2] * gain, a, c[0], c[1], c[2], 0, SPR.RING, 0, 0, 0, 0, 0, 0, 1);
   }
   /** additive camera-facing ring (speed ring pop) */
   ringBB(x, y, z, s0, s1, life, c, a = 0.8, gain = 1.8) {
+    gain *= this.gain;
     this.add.spawn(x, y, z, 0, 0, 0, life, s0, s1, c[0] * gain, c[1] * gain, c[2] * gain, a, c[0], c[1], c[2], 0, SPR.RING, 0, 0, 0, 0, 0, 0, 0);
   }
   /** alpha puff (smoke / dust) */
@@ -437,6 +443,7 @@ export class VFX {
   }
 
   _shadow(k, S) {
+    if (k.visual?.ghost) return;     // translucent time-trial ghosts cast no blob shadow
     const hq = S.quality?.shadows;
     const h = k.grounded ? 0 : Math.max(0, k.position.y - (k.query?.height ?? k.position.y));
     const a = clamp((hq ? 0.5 : 0.62) - h * 0.12, 0, 0.7) * (k.respawn?.active ? 0 : 1);
@@ -489,14 +496,16 @@ export class VFX {
     if (drifting) {
       const L = dr.level;
       const c = LV[L];
-      const perSec = L === 0 ? 8 : 30 + L * 26;
+      const perSec = L === 0 ? 10 : 44 + L * 30;
       for (let w = 0; w < 2; w++) {
         const P = w ? _b : _a;
         const n = this.rate(st, w ? 'sp1' : 'sp0', perSec, dt);
         for (let i = 0; i < n; i++) {
-          const sp = 2 + this.r() * 5;
-          this.spark(P.x, P.y + 0.08, P.z, mvx * 0.35 - ux * sp * 0.5 + this.sr() * 2.2 + (w ? -1 : 1) * 0.9 * dr.dir, 2 + this.r() * 4, mvz * 0.35 - uz * sp * 0.5 + this.sr() * 2.2,
-            0.28 + this.r() * 0.34, (0.085 + this.r() * 0.075) * (L === 0 ? 0.6 : 1), c, L === 0 ? 1.1 : 2.1, 11, 0.4, 0.028);
+          const sp = 2.5 + this.r() * 5.5;
+          this.spark(P.x, P.y + 0.08, P.z, mvx * 0.35 - ux * sp * 0.5 + this.sr() * 2.4 + (w ? -1 : 1) * 1.0 * dr.dir, 2 + this.r() * 4.5, mvz * 0.35 - uz * sp * 0.5 + this.sr() * 2.4,
+            0.3 + this.r() * 0.36, (0.17 + this.r() * 0.14) * (L === 0 ? 0.55 : 1), c, L === 0 ? 1.1 : 2.4, 11, 0.4, L === 0 ? 0.04 : 0.055);
+          // a few hot glints (soft flare) so the spray reads from the chase camera
+          if (L > 0 && this.r() < 0.3) this.glow(P.x + this.sr() * 0.25, P.y + 0.12 + this.r() * 0.12, P.z + this.sr() * 0.25, 0.28 + 0.06 * L, 0.05, c, 0.9, 0.14, SPR.FLARE);
         }
         if (L > 0) this.pool(P.x, P.y, P.z, 0.9 + 0.2 * L, 1.5 + 0.3 * L, c, 0.5, 0.07);
       }
@@ -550,7 +559,12 @@ export class VFX {
     const sc = k.scale ?? 1;
     const fade = Math.min(1, k.boost.timer / 0.25 + (rocket ? 1 : 0));
     const inten = st.flame * (0.75 + 0.25 * fade);
-    _q.copy(k.orientation).multiply(_qf);
+    // flame axis: backwards along the kart unless the body's exhausts point elsewhere (Crusher's stacks aim up and back)
+    const ed = vis.assets?.body?.exhaustDir;
+    if (ed) _ed.set(ed[0], ed[1], ed[2]); else _ed.set(0, 0, -1);
+    _exq.setFromUnitVectors(_Z, _ed);
+    _q.copy(k.orientation).multiply(_exq);
+    _dw.copy(_ed).applyQuaternion(k.orientation);
     for (let m = 0; m < 2; m++) {
       vis.mountWorld(m ? 'exhaustR' : 'exhaustL', _a, k);
       this.flames.add(_a, _q, w * sc, len * sc * inten, inten, c[0], c[1], c[2], m * 2.1 + k.id);
@@ -558,9 +572,9 @@ export class VFX {
       const n = this.rate(st, m ? 'fl1' : 'fl0', 80, dt) ;
       for (let i = 0; i < n; i++) {
         const sp = 7 + this.r() * 8 + Math.abs(k.speed) * 0.2;
-        this.spark(_a.x - k.forward.x * 0.2, _a.y + this.sr() * 0.08, _a.z - k.forward.z * 0.2, -k.forward.x * sp + this.sr() * 1.3, this.sr() * 1.1, -k.forward.z * sp + this.sr() * 1.3, 0.18 + this.r() * 0.22, 0.13 * sc + this.r() * 0.08, c, 3.2, -0.5, 1.6, 0.03, this.r() < 0.5 ? SPR.FLAME : SPR.DOT);
+        this.spark(_a.x + _dw.x * 0.2, _a.y + _dw.y * 0.2 + this.sr() * 0.08, _a.z + _dw.z * 0.2, _dw.x * sp + this.sr() * 1.3, _dw.y * sp + this.sr() * 1.1, _dw.z * sp + this.sr() * 1.3, 0.18 + this.r() * 0.22, 0.13 * sc + this.r() * 0.08, c, 3.2, -0.5, 1.6, 0.03, this.r() < 0.5 ? SPR.FLAME : SPR.DOT);
       }
-      if (this.rate(st, m ? 'fs1' : 'fs0', 14, dt) > 0) this.puff(_a.x, _a.y, _a.z, -k.forward.x * 4, 0.5, -k.forward.z * 4, 0.7, 0.25, 1.1, src === 'rocket' ? [0.22, 0.2, 0.2] : [0.62, 0.7, 0.78], src === 'rocket' ? 0.55 : 0.22, this.pf(), 2.2, -0.3);
+      if (this.rate(st, m ? 'fs1' : 'fs0', 14, dt) > 0) this.puff(_a.x, _a.y, _a.z, _dw.x * 4, 0.5 + _dw.y * 3, _dw.z * 4, 0.7, 0.25, 1.1, src === 'rocket' ? [0.22, 0.2, 0.2] : [0.62, 0.7, 0.78], src === 'rocket' ? 0.55 : 0.22, this.pf(), 2.2, -0.3);
     }
   }
 

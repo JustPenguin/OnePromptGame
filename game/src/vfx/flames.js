@@ -34,8 +34,9 @@ varying vec3 vN;
 varying vec3 vView;
 void main() {
   float edge = pow(abs(dot(normalize(vN), normalize(vView))), 1.3);
-  float core = smoothstep(0.7, 0.0, vS);
-  vec3 col = mix(vCol, vec3(1.0), clamp(core * 0.85 + edge * 0.35, 0.0, 1.0)) * (1.5 + 2.2 * vI);
+  float core = smoothstep(0.55, 0.0, vS);
+  // white-hot only at the nozzle; the body keeps the effect colour (so it never clips to a flat white blob)
+  vec3 col = mix(vCol, vec3(1.0), clamp(core * 0.6 + edge * 0.16, 0.0, 0.72)) * (1.0 + 1.7 * vI);
   float a = pow(max(1.0 - vS, 0.0), 1.15) * edge * clamp(vI, 0.0, 1.0);
   if (a < 0.01) discard;
   gl_FragColor = vec4(col, a);

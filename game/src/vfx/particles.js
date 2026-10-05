@@ -9,8 +9,10 @@
 //                   2 = velocity-stretched streak (sparks, speed lines).
 import * as THREE from 'three';
 import { ATLAS_COLS, ATLAS_ROWS } from './sprites.js';
+import { DirtyRange } from './dirty.js';
 
 const STRIDE = { aPos0: 3, aVel: 3, aLife: 4, aSize: 4, aCol0: 4, aCol1: 4, aMisc: 4 };
+const STRIDE_LIST = Object.entries(STRIDE);   // (iterated every flush: keep it allocation-free)
 
 const VERT = /* glsl */`
 attribute vec3 aPos0;
@@ -53,7 +55,7 @@ void main() {
     float sp = length(vv.xy);
     vec2 dir = sp > 1e-4 ? vv.xy / sp : vec2(1.0, 0.0);
     float len = size + aSize.z * length(v);
-    mv.xy += dir * q.x * len + vec2(-dir.y, dir.x) * q.y * size * 0.5;
+    mv.xy += dir * q.x * len + vec2(-dir.y, dir.x) * q.y * size * 0.38;
   } else {
     float c = cos(ang), s = sin(ang);
     mv.xy += vec2(q.x * c - q.y * s, q.x * s + q.y * c) * size;
@@ -143,7 +145,7 @@ export class ParticleLayer {
     this.mesh.name = this.additive ? 'particles:add' : 'particles:alpha';
     this.head = 0;
     this.high = 0;
-    this.lo = -1; this.hi = -1;
+    this.dirty = new DirtyRange(this.mesh, STRIDE_LIST.map(([n, sz]) => [this.attrs[n], sz]));
     this.spawned = 0;
   }
 
@@ -169,25 +171,17 @@ export class ParticleLayer {
     A.aCol0[o] = r0; A.aCol0[o + 1] = g0; A.aCol0[o + 2] = b0; A.aCol0[o + 3] = a0;
     A.aCol1[o] = r1; A.aCol1[o + 1] = g1; A.aCol1[o + 2] = b1; A.aCol1[o + 3] = a1;
     A.aMisc[o] = frame; A.aMisc[o + 1] = rotSpeed; A.aMisc[o + 2] = fadeIn; A.aMisc[o + 3] = mode;
-    if (this.lo < 0) { this.lo = this.hi = i; } else { if (i < this.lo) this.lo = i; if (i > this.hi) this.hi = i; }
+    this.dirty.mark(i);
     this.spawned++;
   }
 
   /** Advance the layer clock (call once per frame, before rendering). */
   setTime(t) { this.uniforms.uTime.value = t; }
 
-  /** Upload what was spawned since the last flush. */
+  /** Hand what was spawned since the last flush to the GPU buffers (union-ed across steps until a render has consumed it). */
   flush() {
     this.geometry.instanceCount = this.high + 1;
-    if (this.lo < 0) return;
-    const lo = this.lo, n = this.hi - this.lo + 1;
-    for (const [name, size] of Object.entries(STRIDE)) {
-      const a = this.attrs[name];
-      a.clearUpdateRanges();
-      a.addUpdateRange(lo * size, n * size);
-      a.needsUpdate = true;
-    }
-    this.lo = this.hi = -1;
+    this.dirty.commit();
   }
 
   dispose() { this.geometry.dispose(); this.material.dispose(); }
