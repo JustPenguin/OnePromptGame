@@ -50,4 +50,10 @@ export const EV = Object.freeze({
   ITEM_HIT: 'item:hit',              // { victim, attacker, type, point }  attacker may be null
   ITEM_BLOCKED: 'item:blocked',      // { victim, type }  shield / invincibility absorbed it
   ITEM_EXPLODE: 'item:explode',      // { type, point, radius }
+  // (agent D additions)
+  ITEM_BOUNCE: 'item:bounce',        // { entity, type, point, bounces }  orb ricochet off a wall / bomb bounce
+  ITEM_LAND: 'item:land',            // { entity, type, point }           a lobbed peel/bomb touched down
+  ITEM_LOCK: 'item:lock',            // { kart, type, active, entity }    kart is being homed on (seeker) / targeted (comet): HUD "incoming!"
+  ITEM_SHOCK: 'item:shock',          // { kart, victims[] }               Storm Zap fired (screen flash / audio)
+  ITEM_END: 'item:end',              // { kart, type }                    a timed item effect ran out ('shield' | 'rocket')
 });
