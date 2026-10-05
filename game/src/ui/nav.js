@@ -77,6 +77,7 @@ export class Nav {
   setFocus(el, { silent = false, scroll = true } = {}) {
     if (!el) return;
     if (this.focused === el) { if (document.activeElement !== el) try { el.focus({ preventScroll: true }); } catch { /* detached */ } return; }
+    const from = this.focused;
     this.focused?.classList.remove('is-focus');
     this.focused = el;
     el.classList.add('is-focus');
@@ -84,7 +85,7 @@ export class Nav {
     try { el.focus({ preventScroll: true }); } catch { /* ignore */ }
     if (scroll) { try { el.scrollIntoView({ block: 'nearest', inline: 'nearest' }); } catch { /* ignore */ } }
     if (!silent) this.ui.sfx('hover');
-    el.dispatchEvent(new CustomEvent('navfocus', { bubbles: true }));
+    el.dispatchEvent(new CustomEvent('navfocus', { bubbles: true, detail: { from } }));
   }
 
   _focusIn(e) {
@@ -110,6 +111,12 @@ export class Nav {
     const cur = this.focused && scope.root.contains(this.focused) ? this.focused : null;
     if (!cur) { this.autofocus(scope); return true; }
     if ((dir === 'left' || dir === 'right') && cur._adjust?.(dir === 'left' ? -1 : 1)) return true;
+    // a focused scroll area (data-scroll) scrolls with Up/Down until it hits its end, then focus moves on
+    if (cur.hasAttribute('data-scroll') && (dir === 'up' || dir === 'down')) {
+      const before = cur.scrollTop;
+      cur.scrollTop += (dir === 'down' ? 1 : -1) * Math.max(60, cur.clientHeight * 0.3);
+      if (cur.scrollTop !== before) return true;
+    }
     const list = this.navigables(scope);
     const next = this._pick(cur, dir, list) ?? (scope.wrap ? this._wrap(cur, dir, list) : null);
     if (next && next !== cur) { this.setFocus(next); return true; }
@@ -128,10 +135,11 @@ export class Nav {
       if (dir === 'right') { along = dx; across = Math.abs(dy); } else if (dir === 'left') { along = -dx; across = Math.abs(dy); }
       else if (dir === 'down') { along = dy; across = Math.abs(dx); } else { along = -dy; across = Math.abs(dx); }
       if (along < 2) continue;                     // must be in that direction
-      // Horizontal moves use a tight cone (a row wraps instead of jumping to a button above it); vertical moves are more forgiving
+      // Horizontal moves use a tight cone (a row wraps instead of jumping to a button above it). Vertical moves have NO cone:
+      // "down" from a tab strip must reach the first row even when it is far to one side; nearest row wins, same column breaks ties.
       const horizontal = dir === 'left' || dir === 'right';
-      if (across > (horizontal ? along * 0.9 + 16 : along * 1.8 + 24)) continue;
-      const score = along + across * (horizontal ? 2.6 : 2);
+      if (horizontal && across > along * 0.9 + 16) continue;
+      const score = along + across * (horizontal ? 2.6 : 1.4);
       if (score < bestScore) { bestScore = score; best = el; }
     }
     return best;
@@ -181,10 +189,16 @@ export class Nav {
     const code = e.code;
     this._setDevice('keyboard');
     let handled = false;
+    // inside a text field: Esc / Enter finish editing (never leave the screen); only Up/Down move on
+    if (typing && (code === 'Escape' || ((code === 'Enter' || code === 'NumpadEnter') && e.target.tagName !== 'TEXTAREA'))) {
+      e.target.blur?.();
+      if (this.focused && this.scope?.root.contains(this.focused)) { try { this.focused.focus({ preventScroll: true }); } catch { /* ignore */ } }
+      e.preventDefault(); e.stopImmediatePropagation();
+      return;
+    }
     if (MOVE_KEYS[code] && !(typing && (code.startsWith('Key') || code === 'ArrowLeft' || code === 'ArrowRight'))) {
-      handled = this.move(MOVE_KEYS[code]);
-      // arrows at the list end still count as "handled" so the page never scrolls / the game never sees them
-      handled = true;
+      this.move(MOVE_KEYS[code]);
+      handled = true;   // arrows at a list end still count as handled so the page never scrolls and the game never sees them
     } else if ((code === 'Enter' || code === 'NumpadEnter' || (code === 'Space' && !typing)) && !(typing && e.target.tagName === 'TEXTAREA')) {
       if (!e.repeat) handled = this.activate();
       else handled = true;

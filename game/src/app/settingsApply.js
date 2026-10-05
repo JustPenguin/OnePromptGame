@@ -32,6 +32,6 @@ export function applySetting(app, key) {
   if (all || key === 'bindings') app.input.setBindings(app.settings.bindings);
   if (all || key === 'cameraMode') { const rig = app.session?.cameraRig; if (rig && app.settings.cameraMode) rig.mode = app.settings.cameraMode; }
   if (all || UI_KEYS.has(key)) app.ui?.applyPrefs?.();
-  if (all || key === 'showFps' || key === 'showMinimap' || key === 'showLeaderboard' || key === 'speedUnit' || key === 'touchControls' || key === 'touchScale') app.ui?.hud?.applySettings?.();
+  if (all || key === 'assists' || key === 'showFps' || key === 'showMinimap' || key === 'showLeaderboard' || key === 'speedUnit' || key === 'touchControls' || key === 'touchScale') app.ui?.hud?.applySettings?.();
   if (key !== undefined) app.save.commit();
 }
