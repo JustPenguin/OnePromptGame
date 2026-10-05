@@ -8,6 +8,7 @@ import { applySetting, resolvedQualityId } from '../../app/settingsApply.js';
 import { canFullscreen, toggleFullscreen, isFullscreen } from '../fullscreen.js';
 import { summarizeSave } from '../../save/Save.js';
 import { copyText } from '../clipboard.js';
+import { HudPreview } from '../hud/preview.js';
 
 export const settingsCss = /* css */ `
 .s-settings{align-items:center;}
@@ -17,6 +18,7 @@ export const settingsCss = /* css */ `
 .set-head .h1{flex:1;min-width:10rem;margin:0;font-size:2.3rem;}
 .set-panel{flex:1;min-height:0;display:flex;flex-direction:column;border-radius:1.2rem;overflow:hidden;}
 .set-body{flex:1;min-height:0;padding:.8rem .9rem 1rem;display:flex;flex-direction:column;gap:.45rem;}
+.set-body > *{flex:none;}   /* rows keep their natural height; the body scrolls instead of squashing them */
 .set-h{margin:.7rem .2rem .1rem;font-size:.74rem;letter-spacing:.18em;text-transform:uppercase;color:var(--kr-accent-2);font-weight:900;}
 .set-h:first-child{margin-top:.1rem;}
 .set-note{font-size:.84rem;color:var(--kr-ink-dim);padding:.2rem .4rem;}
@@ -84,7 +86,7 @@ export class SettingsScreen extends Screen {
 
   onShow() { const p = this.app.save.profile; if (!this.app.session) this.app.menuScene.setKart(p.favoriteDriver, p.favoriteKart); }
   onHide() { if (this._listening) this.cancelListen(); }
-  destroy() { if (this._listening) this.cancelListen(); }
+  destroy() { if (this._listening) this.cancelListen(); this.preview?.destroy(); }
 
   get tab() { return TABS[this.tabIndex].id; }
 
@@ -108,6 +110,7 @@ export class SettingsScreen extends Screen {
 
   renderTab() {
     if (this._listening) this.cancelListen();
+    this.preview?.destroy(); this.preview = null;
     const rows = this['tab_' + this.tab]();
     rows.forEach((r, i) => { if (r.classList?.contains('row') || r.classList?.contains('krow')) { r.classList.add('pop'); r.style.setProperty('--i', Math.min(i, 8)); } });
     this.body.replaceChildren(...rows);
@@ -158,14 +161,17 @@ export class SettingsScreen extends Screen {
 
   tab_gameplay() {
     const s = this.app.settings;
+    const preview = this.preview = new HudPreview(this.app);
+    const upd = () => preview.apply();
     return [
-      row('Speed unit', 'Used by the speedometer.', segmentedCtl([{ value: 'kmh', label: 'km/h' }, { value: 'mph', label: 'mph' }], s.speedUnit, (v) => this.set('speedUnit', v))),
+      preview.el,
+      row('Speed unit', 'Used by the speedometer.', segmentedCtl([{ value: 'kmh', label: 'km/h' }, { value: 'mph', label: 'mph' }], s.speedUnit, (v) => this.set('speedUnit', v, upd))),
       row('Camera', 'The default view. Press C in a race to cycle.', segmentedCtl([{ value: 'chase', label: 'Chase' }, { value: 'far', label: 'Far' }, { value: 'close', label: 'Close' }], s.cameraMode, (v) => this.set('cameraMode', v))),
       row('Auto-accelerate', 'The gas is always on. You only steer, drift and brake.', toggleCtl(s.assists.autoAccelerate, (v) => { s.assists.autoAccelerate = v; applySetting(this.app, 'assists'); })),
       row('Steering assist', 'Gentle help staying on the road.', toggleCtl(s.assists.steeringAssist, (v) => { s.assists.steeringAssist = v; applySetting(this.app, 'assists'); })),
-      row('Minimap', 'Show the track map during races.', toggleCtl(s.showMinimap, (v) => this.set('showMinimap', v))),
-      row('Standings list', 'Show the top racers during races.', toggleCtl(s.showLeaderboard, (v) => this.set('showLeaderboard', v))),
-      row('HUD size', 'Scale the race display.', sliderCtl({ min: 0.7, max: 1.4, step: 0.05, value: s.hudScale, format: (v) => `${Math.round(v * 100)}%`, onChange: (v) => this.set('hudScale', v) })),
+      row('Minimap', 'Show the track map during races.', toggleCtl(s.showMinimap, (v) => this.set('showMinimap', v, upd))),
+      row('Standings list', 'Show the top racers during races.', toggleCtl(s.showLeaderboard, (v) => this.set('showLeaderboard', v, upd))),
+      row('HUD size', 'Scale the race display.', sliderCtl({ min: 0.7, max: 1.4, step: 0.05, value: s.hudScale, format: (v) => `${Math.round(v * 100)}%`, onChange: (v) => this.set('hudScale', v, () => setTimeout(() => preview.layout(), 0)) })),
     ];
   }
 

@@ -14,13 +14,14 @@ export const setText = (node, s) => { if (node._t !== s) { node._t = s; node.tex
 export const setClass = (el, name, on) => { if (el._c?.[name] !== !!on) { (el._c ??= {})[name] = !!on; el.classList.toggle(name, !!on); } };
 
 // ------------------------------------------------------------------------------------------------ speedometer
+let speedoSeq = 0;
 export class Speedo {
   constructor() {
     const cx = 110, cy = 112, r = 86;
     const pt = (t, rad = r) => { const a = ((135 + 270 * t) * Math.PI) / 180; return [cx + rad * Math.cos(a), cy + rad * Math.sin(a)]; };
     const arc = (t0, t1, rad = r) => { const [x0, y0] = pt(t0, rad), [x1, y1] = pt(t1, rad); return `M${x0.toFixed(1)} ${y0.toFixed(1)}A${rad} ${rad} 0 ${(t1 - t0) * 270 > 180 ? 1 : 0} 1 ${x1.toFixed(1)} ${y1.toFixed(1)}`; };
     this.pt = pt;
-    const gradId = 'kr-spd-grad';
+    const gradId = `kr-spd-grad-${++speedoSeq}`;
     const grad = svg('linearGradient', { id: gradId, gradientUnits: 'userSpaceOnUse', x1: 20, y1: 0, x2: 200, y2: 0 },
       svg('stop', { offset: '0', 'stop-color': '#22d3ff' }), svg('stop', { offset: '.5', 'stop-color': '#7be04a' }), svg('stop', { offset: '.78', 'stop-color': '#ffd23f' }), svg('stop', { offset: '1', 'stop-color': '#ff3d6a' }));
     const ticks = [];

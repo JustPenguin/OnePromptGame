@@ -15,7 +15,7 @@ export const recordsCss = /* css */ `
 .s-records{align-items:center;}
 .s-records .scrim-all{background:radial-gradient(120% 100% at 50% 40%,rgba(6,9,26,.6),rgba(6,9,26,.92));}
 .rec-wrap{width:min(62rem,96vw);flex:1;min-height:0;display:flex;flex-direction:column;gap:.7rem;z-index:2;}
-.rec-body{flex:1;min-height:0;}
+.rec-body{flex:1;min-height:0;} .rec-body > *{flex:none;}
 .rec-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:.9rem;padding:.3rem .2rem 1rem;}
 .rcard{padding:.7rem .9rem .8rem;border-radius:1.1rem;}
 .rcard.locked{opacity:.5;filter:grayscale(.8);}

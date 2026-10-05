@@ -12,6 +12,7 @@ import { SettingsScreen, settingsCss } from './settings.js';
 import { RecordsScreen, recordsCss } from './records.js';
 import { HelpScreen, helpCss } from './help.js';
 import { trackCardCss } from '../trackCard.js';
+import { previewCss } from '../hud/preview.js';
 
 export const SCREENS = {
   title: TitleScreen,
@@ -32,4 +33,4 @@ export const SCREENS = {
   help: HelpScreen,
 };
 
-export const SCREEN_CSS = [titleCss, menuCss, loadingCss, pauseCss, resultsCss, trackCardCss, selectCss, cupsCss, vsetupCss, gpCss, settingsCss, recordsCss, helpCss];
+export const SCREEN_CSS = [titleCss, menuCss, loadingCss, pauseCss, resultsCss, trackCardCss, selectCss, cupsCss, vsetupCss, gpCss, settingsCss, previewCss, recordsCss, helpCss];

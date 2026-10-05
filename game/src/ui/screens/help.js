@@ -10,7 +10,7 @@ export const helpCss = /* css */ `
 .s-help{align-items:center;}
 .s-help .scrim-all{background:radial-gradient(120% 100% at 50% 40%,rgba(6,9,26,.6),rgba(6,9,26,.92));}
 .help-wrap{width:min(62rem,96vw);flex:1;min-height:0;display:flex;flex-direction:column;gap:.7rem;z-index:2;}
-.help-body{flex:1;min-height:0;}
+.help-body{flex:1;min-height:0;} .help-body > *{flex:none;}
 .hcols{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:.9rem;padding:.3rem .2rem 1rem;}
 .hcol{padding:.9rem 1rem 1rem;border-radius:1.1rem;display:flex;flex-direction:column;gap:.4rem;}
 .hcol h3{margin:0 0 .3rem;display:flex;align-items:center;gap:.5rem;font-family:var(--font-display);font-weight:400;font-size:1.15rem;letter-spacing:.05em;text-transform:uppercase;}
