@@ -102,6 +102,19 @@ export function installDebug(app) {
       if (!k) return false; s.items.giveItem(k, type, count); return true;
     },
 
+    /** One-line description of every harness method (for quick discovery from playwright-cli eval). */
+    help() {
+      return {
+        startRace: 'await startRace({trackId, laps, racers, speedClass, mode, ghost, seed, playerGrid, skipIntro:true})',
+        freeze: 'freeze(true) stops the real-time loop; then drive time yourself',
+        advance: 'advance(seconds, step=1/60) simulate without rendering; render() draws one frame',
+        input: 'setInput({throttle, brake, steer, drift, item, lookBack}) / clearInput() / autoDrive(on) race AI / bot(on, {drift, chain}) engine test bot',
+        inspect: 'state() / counts / camera() / trace({seconds, every, input}) / script([{t, input}], until) / perf() / physicsPerf()',
+        effects: 'teleport(kartId, s, lateral) / spin / launch / boost / shrink / invincible / respawn / setSpeed / giveItem(type, count)',
+        flow: 'skipIntro() / finishRace(order?, metresToGo) / cameraMode(m) / pause(on) / quit()',
+      };
+    },
+
     // ================================================================== A: engine helpers
     /** Drive the player with the engine test bot (drifting, rocket start). api.bot(false) hands control back. */
     bot(on = true, opts = {}) {
