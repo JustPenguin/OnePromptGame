@@ -139,7 +139,8 @@ function makePolyline(points) {
  */
 export function addWater(world, spec) {
   const level = spec.level;
-  const kind = spec.kind ?? 'stream';
+  const kind = spec.kind === 'lava' ? 'sea' : (spec.kind ?? 'stream');           // 'lava' is a look, not a shape
+  const look = spec.look ?? (spec.kind === 'lava' ? 'lava' : 'water');
   const bank = spec.bank ?? 8, depthMax = spec.depth ?? 2;
   let carve = null, depthAt = null, box;
   if (kind === 'stream') {
@@ -172,7 +173,8 @@ export function addWater(world, spec) {
     };
   } else {
     box = spec.box;
-    depthAt = spec.depthFn ?? ((px, pz) => Math.max(0, level - world.groundAt(px, pz)));
+    const raw = spec.depthFn ?? ((px, pz) => Math.max(0, level - world.groundAt(px, pz)));
+    depthAt = (px, pz) => (px < box[0] || px > box[2] || pz < box[1] || pz > box[3] ? 0 : raw(px, pz));   // a lake only exists inside its box
     carve = null; // sea / lava lakes are defined by the terrain itself (natural() dips below `level`)
   }
   if (spec.carve !== false && carve && world.terrain) world.terrain.addCarver(carve);
@@ -205,16 +207,17 @@ export function addWater(world, spec) {
     uOpacity: { value: spec.opacity ?? 0.92 }, uFoamAmt: { value: spec.foam ?? 1 },
     uLavaA: { value: toColor(col.lavaA ?? '#ff3d0a') }, uLavaB: { value: toColor(col.lavaB ?? '#ffd23f') }, uGlow: { value: spec.glow ?? 1.4 },
   };
-  const mat = shaderMaterial({ uniforms, vertex: WATER_VERT, fragment: WATER_FRAG, transparent: kind !== 'lava' && spec.look !== 'ice', depthWrite: kind === 'lava' || spec.look === 'ice', defines: kind === 'lava' ? { LAVA: 1 } : spec.look === 'ice' ? { ICE: 1 } : undefined });
+  const opaque = look === 'lava' || look === 'ice';
+  const mat = shaderMaterial({ uniforms, vertex: WATER_VERT, fragment: WATER_FRAG, transparent: !opaque, depthWrite: opaque, defines: look === 'lava' ? { LAVA: 1 } : look === 'ice' ? { ICE: 1 } : undefined });
   const geo = new THREE.PlaneGeometry(sx, sz, 1, 1);
   geo.rotateX(-Math.PI / 2);
   const mesh = new THREE.Mesh(geo, mat);
   mesh.position.set(box[0] + sx / 2, level, box[1] + sz / 2);
   mesh.renderOrder = 3;
-  mesh.name = `water:${kind}`;
+  mesh.name = `water:${look}`;
   mesh.frustumCulled = true;
   world.group.add(mesh);
-  const body = { mesh, depthAt, carve, level, box, kind, uniforms, dispose() { geo.dispose(); mat.dispose(); } };
+  const body = { mesh, depthAt, carve, level, box, kind, look, uniforms, dispose() { geo.dispose(); mat.dispose(); } };
   world.waters.push(body);
   return body;
 }

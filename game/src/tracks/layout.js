@@ -136,6 +136,13 @@ export function compileLayout(spec) {
     if (p.w !== undefined) wKeys.push([apex, p.w]);
     if (p.sh !== undefined) shKeys.push([apex, p.sh]);
     if (p.yOut !== undefined) yKeys.push([rel(p.lineOut.s0 + Math.min(20, (p.lineOut.s1 - p.lineOut.s0) / 3)), p.yOut]);
+    // extra profile keys along the straight leaving this waypoint: keys: [{ at: metres after the fillet, w, sh, y }] (tapers, necks, ramps)
+    for (const k of p.keys ?? []) {
+      const sk = rel(p.lineOut.s0 + k.at);
+      if (k.w !== undefined) wKeys.push([sk, k.w]);
+      if (k.sh !== undefined) shKeys.push([sk, k.sh]);
+      if (k.y !== undefined) yKeys.push([sk, k.y]);
+    }
   });
   // every waypoint pins width (and shoulder, when the layout has a default) so un-keyed corners stay at the default instead of drifting between keys
   V.forEach((p) => {

@@ -107,7 +107,7 @@ export function buildViaduct(world, o) {
     L.quad(P(a, -(ea - 1.2), -girder), P(b, -(eb - 1.2), -girder), P(b, eb - 1.2, -girder), P(a, ea - 1.2, -girder), c1.clone().multiplyScalar(0.55));
   }
   // piers
-  const every = o.every ?? 22;
+  const every = o.piers === false ? 1e9 : (o.every ?? 22);
   let acc = every * 0.5;
   const right = new THREE.Vector3(), fwd = new THREE.Vector3(), base = new THREE.Vector3();
   const ringC = toColor(o.ring ?? '#22d3ff').multiplyScalar(2.4);
@@ -136,5 +136,42 @@ export function buildViaduct(world, o) {
   const lit = new THREE.Mesh(L.build(), new THREE.MeshLambertMaterial({ vertexColors: true, side: THREE.DoubleSide }));
   lit.castShadow = true; lit.receiveShadow = true; lit.matrixAutoUpdate = false;
   group.add(lit, glowMesh(G.build(), { name: 'viaduct-glow' }));
+  return group;
+}
+
+/**
+ * Edge trim for OPEN (wall-less) road stretches (track.openEdges): a raised stone lip out to the physics limit (road edge + 2 m, the slack
+ * KartPhysics allows before a kart falls), a glowing outline strip, and a deep girder under the deck.  Returns a Group or null.
+ * o = { lip:'#2a2224', lipTop:'#4a3c3e', glow:'#ff6a1a', depth: 2.6, reach: 2.0, girder:'#2a2224' }
+ */
+export function buildOpenEdgeTrim(world, o = {}) {
+  const tr = world.track;
+  if (!tr.openEdges.length) return null;
+  const group = new THREE.Group();
+  group.name = 'open-edge-trim';
+  const lip = toColor(o.lip ?? '#2a2224'), lipTop = toColor(o.lipTop ?? '#4a3c3e'), glow = toColor(o.glow ?? '#ff6a1a').multiplyScalar(2.6), girderC = toColor(o.girder ?? '#2a2224');
+  const reach = o.reach ?? 2.0, depth = o.depth ?? 2.6;
+  const L = new GeoBuilder(), G = new GeoBuilder();
+  const P = (row, lat, h) => new THREE.Vector3(row.pos.x + row.right.x * lat, row.pos.y + row.right.y * lat + h, row.pos.z + row.right.z * lat);
+  for (const e of tr.openEdges) {
+    const rows = makeRows(tr, e.s0, e.s1, 1.0);
+    const sides = e.side === 'left' ? [-1] : e.side === 'right' ? [1] : [-1, 1];
+    for (let r = 0; r < rows.length - 1; r++) {
+      const a = rows[r], b = rows[r + 1];
+      for (const side of sides) {
+        const ha = a.hw, hb = b.hw, ra = ha + reach, rb = hb + reach;
+        // lip: top face, outer face, and an under-chamfer into the girder
+        L.quad(P(a, side * ha, 0.16), P(b, side * hb, 0.16), P(b, side * rb, 0.16), P(a, side * ra, 0.16), lipTop);
+        L.quad(P(a, side * ra, 0.16), P(b, side * rb, 0.16), P(b, side * rb, -depth * 0.55), P(a, side * ra, -depth * 0.55), lip);
+        L.quad(P(a, side * ra, -depth * 0.55), P(b, side * rb, -depth * 0.55), P(b, side * (rb - 1.3), -depth), P(a, side * (ra - 1.3), -depth), girderC);
+        G.quad(P(a, side * (ra - 0.34), 0.18), P(b, side * (rb - 0.34), 0.18), P(b, side * (rb - 0.04), 0.18), P(a, side * (ra - 0.04), 0.18), glow);
+        G.quad(P(a, side * (ra + 0.02), 0.0), P(b, side * (rb + 0.02), 0.0), P(b, side * (rb + 0.02), 0.2), P(a, side * (ra + 0.02), 0.2), glow);
+      }
+      L.quad(P(a, -(a.hw + reach - 1.3), -depth), P(b, -(b.hw + reach - 1.3), -depth), P(b, b.hw + reach - 1.3, -depth), P(a, a.hw + reach - 1.3, -depth), girderC.clone().multiplyScalar(0.5));
+    }
+  }
+  const lit = new THREE.Mesh(L.build(), new THREE.MeshLambertMaterial({ vertexColors: true, side: THREE.DoubleSide }));
+  lit.castShadow = true; lit.receiveShadow = true; lit.matrixAutoUpdate = false;
+  group.add(lit, glowMesh(G.build(), { name: 'edge-glow' }));
   return group;
 }

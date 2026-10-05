@@ -5,6 +5,7 @@ import { cactusCanyon } from './cactus-canyon.js';
 import { frostbitePeak } from './frostbite-peak.js';
 import { harborHeights } from './harbor-heights.js';
 import { neonNights } from './neon-nights.js';
+import { magmaMile } from './magma-mile.js';
 
 const RECIPES = {
   'sunny-meadows': sunnyMeadows,
@@ -12,6 +13,7 @@ const RECIPES = {
   'frostbite-peak': frostbitePeak,
   'harbor-heights': harborHeights,
   'neon-nights': neonNights,
+  'magma-mile': magmaMile,
 };
 
 /** Fallback for a track without a recipe: a plain daylit meadow so a brand-new track def is playable immediately. */

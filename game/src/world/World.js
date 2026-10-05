@@ -16,6 +16,7 @@ import { buildBoostPads, buildStartLine } from './features.js';
 import { buildRamps } from './ramps.js';
 import { buildCornerSigns } from './signs.js';
 import { buildSurfaceZones } from './surfaces.js';
+import { buildOpenEdgeTrim } from './infrastructure.js';
 import { GeoBuilder } from './builder.js';
 import { createSky } from './sky.js';
 import { getRecipe } from './recipes/index.js';
@@ -124,6 +125,7 @@ export class World {
     if (pads) this.group.add(pads);
     if (this.track.ramps.length) this.group.add(buildRamps(this, c.ramp ?? {}));
     { const sz = buildSurfaceZones(this, c.zones ?? {}); if (sz) this.group.add(sz); }
+    { const oe = buildOpenEdgeTrim(this, c.edgeTrim ?? {}); if (oe) this.group.add(oe); }
     if (c.signs !== false) { const signs = buildCornerSigns(this, c.signs ?? {}); if (signs) this.group.add(signs); }
     if (c.start !== false) this.group.add(buildStartLine(this, { sub: this.def.name?.toUpperCase(), ...c.start }));
     lap('features');

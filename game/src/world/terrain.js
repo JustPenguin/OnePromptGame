@@ -459,23 +459,47 @@ export class Terrain {
 }
 
 // ------------------------------------------------------------------------------------------------------------------
-/** Lambert terrain material with an anti-tiling macro sample + optional steep-slope second texture. */
+/** Lambert terrain material with an anti-tiling macro sample, and an optional emissive "glow network" (lava cracks). */
 function makeTerrainMaterial(cfg) {
   const m = new THREE.MeshLambertMaterial({ map: cfg.map ?? null, vertexColors: true });
   if (cfg.emissive) m.emissive = new THREE.Color(cfg.emissive);
-  if (cfg.map) {
+  const glow = cfg.glow ?? null;
+  m.customProgramCacheKey = () => `terrain:${cfg.map ? 'm' : '-'}:${glow ? 'g' : '-'}`;
+  if (cfg.map || glow) {
     m.onBeforeCompile = (shader) => {
-      shader.fragmentShader = shader.fragmentShader.replace(
-        '#include <map_fragment>',
-        `#ifdef USE_MAP
-          vec4 tA = texture2D( map, vMapUv );
-          vec4 tB = texture2D( map, vMapUv * 0.137 + vec2( 0.31, 0.77 ) );
-          vec4 tC = texture2D( map, vec2( vMapUv.y, vMapUv.x ) * 0.0531 + vec2( 0.62, 0.19 ) );
-          float macro = dot( tB.rgb, vec3( 0.3333 ) ) * 0.6 + dot( tC.rgb, vec3( 0.3333 ) ) * 0.4;
-          vec3 detail = tA.rgb * ( 0.62 + 0.76 * macro );
-          diffuseColor.rgb *= detail * 1.12;
-        #endif`,
-      );
+      if (glow) {
+        shader.uniforms.uGlowMap = { value: glow.map };
+        shader.uniforms.uGlowK = { value: new THREE.Vector4(glow.scale ?? 0.01, glow.threshold ?? 0.5, glow.soft ?? 0.15, glow.intensity ?? 1) };
+        shader.uniforms.uGlowCol = { value: new THREE.Color(glow.color ?? '#ffffff') };
+        shader.uniforms.uGlowTime = glow.time ?? { value: 0 };
+        shader.uniforms.uGlowUv = { value: glow.uvScale ?? 0.35 };
+        shader.vertexShader = shader.vertexShader.replace('#include <common>', '#include <common>\nvarying vec3 vGlowW; varying float vGlowUp;').replace('#include <begin_vertex>', '#include <begin_vertex>\nvGlowW = ( modelMatrix * vec4( position, 1.0 ) ).xyz; vGlowUp = normalize( mat3( modelMatrix ) * normal ).y;');
+        shader.fragmentShader = shader.fragmentShader.replace('#include <common>', `#include <common>
+          varying vec3 vGlowW; varying float vGlowUp; uniform sampler2D uGlowMap; uniform vec4 uGlowK; uniform vec3 uGlowCol; uniform float uGlowTime; uniform float uGlowUv;
+          float gh( vec2 p ) { p = fract( p * vec2( 123.34, 456.21 ) ); p += dot( p, p + 45.32 ); return fract( p.x * p.y ); }
+          float gn( vec2 p ) { vec2 i = floor( p ), f = fract( p ); f = f * f * ( 3.0 - 2.0 * f ); return mix( mix( gh( i ), gh( i + vec2( 1.0, 0.0 ) ), f.x ), mix( gh( i + vec2( 0.0, 1.0 ) ), gh( i + vec2( 1.0, 1.0 ) ), f.x ), f.y ); }`)
+          .replace('#include <emissivemap_fragment>', `#include <emissivemap_fragment>
+          {
+            float gm = smoothstep( uGlowK.y - uGlowK.z, uGlowK.y + uGlowK.z, gn( vGlowW.xz * uGlowK.x ) * 0.65 + gn( vGlowW.xz * uGlowK.x * 3.1 + 9.0 ) * 0.35 );
+            float pulse = 0.82 + 0.18 * sin( uGlowTime * 1.7 + vGlowW.x * 0.03 + vGlowW.z * 0.021 );
+            gm *= smoothstep( 0.55, 0.82, vGlowUp );          // cracks only on gentle ground: top-down UVs would smear them down cliffs
+            vec3 g1 = texture2D( uGlowMap, vMapUv * uGlowUv ).rgb, g2 = texture2D( uGlowMap, vec2( vMapUv.y, vMapUv.x ) * uGlowUv * 0.37 + 0.31 ).rgb;   // two scales: no visible tiling
+            totalEmissiveRadiance += max( g1, g2 * 0.8 ) * uGlowCol * uGlowK.w * gm * pulse;
+          }`);
+      }
+      if (cfg.map) {
+        shader.fragmentShader = shader.fragmentShader.replace(
+          '#include <map_fragment>',
+          `#ifdef USE_MAP
+            vec4 tA = texture2D( map, vMapUv );
+            vec4 tB = texture2D( map, vMapUv * 0.137 + vec2( 0.31, 0.77 ) );
+            vec4 tC = texture2D( map, vec2( vMapUv.y, vMapUv.x ) * 0.0531 + vec2( 0.62, 0.19 ) );
+            float macro = dot( tB.rgb, vec3( 0.3333 ) ) * 0.6 + dot( tC.rgb, vec3( 0.3333 ) ) * 0.4;
+            vec3 detail = tA.rgb * ( 0.62 + 0.76 * macro );
+            diffuseColor.rgb *= detail * 1.12;
+          #endif`,
+        );
+      }
     };
   }
   return m;

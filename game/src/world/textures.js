@@ -202,10 +202,39 @@ const GROUND = {
   dirt: { base: '#8a6540', dark: '#5f4228', light: '#b08a5c', pebbles: true },
   moss: { base: '#3d5a3a', dark: '#26402b', light: '#5f8650', blade: ['#1f3a22', '#7aa35f', '#35552f'], bladeAlpha: 0.45, blades: 4200, dots: ['#8fd2a0', '#c8f0d0'], dotCount: 24 },
   ash: { base: '#3a3636', dark: '#241f20', light: '#585050', pebbles: true, cracks: true },
+  // detail map only (mid-light greys): the hue and darkness of basalt come from the terrain's vertex colours
+  basalt: { base: '#bfb3b3', dark: '#7a6c6e', light: '#e6dada', pebbles: true, cracks: true },
   lava: { base: '#2a2224', dark: '#150f11', light: '#453a3c', cracks: true, glowCracks: '#ff6a1a' },
   neutral: { base: '#e6e6e6', dark: '#c8c8c8', light: '#f8f8f8', blade: ['#bcbcbc', '#ffffff', '#d4d4d4'], bladeAlpha: 0.4, blades: 4200 },
   ice: { base: '#b6dcf5', dark: '#7fb7e6', light: '#eaf8ff', cracks: true, sparkle: true },
 };
+
+function crackPaths(rnd, W, H, n = 22) {
+  const out = [];
+  for (let i = 0; i < n; i++) {
+    let x = rnd() * W, y = rnd() * H, a = rnd() * 6.28;
+    const path = [[x, y]];
+    for (let k = 0; k < 9; k++) { a += (rnd() - 0.5) * 1.3; x += Math.cos(a) * (12 + rnd() * 26); y += Math.sin(a) * (12 + rnd() * 26); path.push([x, y]); }
+    out.push(path);
+  }
+  return out;
+}
+
+/** Emissive companion of groundTexture(kind): ONLY the glowing crack network (same positions), black elsewhere. Use as the terrain's glow map. */
+export function crackGlowTexture(kind = 'lava', { core = '#ffd23f', halo = '#ff5a1a' } = {}) {
+  const cv = cachedCanvas(`crackglow:${kind}:${core}:${halo}`, () => {
+    const W = 512, H = 512, [c, g] = canvas(W, H);
+    g.fillStyle = '#000'; g.fillRect(0, 0, W, H);
+    const crng = mulberry32(hashStr(kind) + 991);
+    g.lineCap = 'round'; g.lineJoin = 'round';
+    for (const path of crackPaths(crng, W, H).slice(0, 8)) {      // a sparse subset of the albedo network: glow is the exception, not the rule
+      const line = (col, w, al) => { g.strokeStyle = rgba(hexRgb(col), al); g.lineWidth = w; g.beginPath(); path.forEach(([px, py], k) => (k ? g.lineTo(px, py) : g.moveTo(px, py))); g.stroke(); };
+      line(halo, 9, 0.35); line(halo, 4.5, 0.8); line(core, 1.8, 1);
+    }
+    return c;
+  });
+  return toTexture(cv, { aniso: 4 });
+}
 
 export function groundTexture(kind = 'grass', overrides = {}) {
   const p = { ...(GROUND[kind] ?? GROUND.grass), ...overrides };
@@ -253,10 +282,8 @@ export function groundTexture(kind = 'grass', overrides = {}) {
       }
     }
     if (p.cracks) {
-      for (let i = 0; i < 22; i++) {
-        let x = rnd() * W, y = rnd() * H, a = rnd() * 6.28;
-        const path = [[x, y]];
-        for (let k = 0; k < 9; k++) { a += (rnd() - 0.5) * 1.3; x += Math.cos(a) * (12 + rnd() * 26); y += Math.sin(a) * (12 + rnd() * 26); path.push([x, y]); }
+      const crng = mulberry32(hashStr(kind) + 991);   // own stream: crackGlowTexture() redraws the identical network
+      for (const path of crackPaths(crng, W, H)) {
         const draw = (col, w, al) => { g.strokeStyle = rgba(hexRgb(col), al); g.lineWidth = w; g.beginPath(); path.forEach(([px, py], k) => (k ? g.lineTo(px, py) : g.moveTo(px, py))); g.stroke(); };
         if (p.glowCracks) { draw(p.glowCracks, 5, 0.25); draw('#ffb347', 1.6, 0.95); } else draw(p.dark, 1.4, 0.6);
       }
