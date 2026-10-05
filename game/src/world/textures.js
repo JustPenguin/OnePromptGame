@@ -377,6 +377,56 @@ export function rampTexture(style = {}) {
   return toTexture(cv, { aniso: 8, repeat: false });
 }
 
+/**
+ * One 80 m city block (tile): streets of width `street` centred on the tile borders (dashed centre lines + zebra crossings at the
+ * intersections), sidewalks, and paved lots.  World-aligned when the terrain uses uvMeters = 80 (street centres at multiples of 80).
+ */
+export function cityGroundTexture({ street = 28, walk = 3, seed = 4, asphalt = '#23243a', paving = '#2f3049', walkCol = '#4a4c6c', line = '#e9e4cf', lineY = '#ffd23f' } = {}) {
+  const cv = cachedCanvas(`cityground:${street}:${walk}:${asphalt}:${paving}`, () => {
+    const S = 1024, k = S / 80, [c, g] = canvas(S, S);
+    const rnd = mulberry32(seed * 17 + 1);
+    g.fillStyle = paving; g.fillRect(0, 0, S, S);
+    noiseLayer(g, S, S, { seed: 31, period: 6, oct: 4, dark: '#262740', light: '#363858', alpha: 0.7, contrast: 1.4, res: 128 });
+    // paving slabs on the lot
+    g.strokeStyle = 'rgba(0,0,0,0.25)'; g.lineWidth = 1.5;
+    for (let i = 0; i <= 80; i += 4) { g.beginPath(); g.moveTo(i * k, 0); g.lineTo(i * k, S); g.moveTo(0, i * k); g.lineTo(S, i * k); g.stroke(); }
+    const sw = street / 2 * k, wk = walk * k;
+    // streets (cross-shaped along the tile borders, wrapping)
+    const roadRects = [[0, 0, sw, S], [S - sw, 0, sw, S], [0, 0, S, sw], [0, S - sw, S, sw]];
+    g.fillStyle = asphalt; for (const r of roadRects) g.fillRect(...r);
+    for (let i = 0; i < 9000; i++) { g.fillStyle = `rgba(${rnd() < 0.5 ? '0,0,0' : '120,120,160'},${0.05 + rnd() * 0.1})`; const x = rnd() * S, y = rnd() * S; const inRoad = x < sw || x > S - sw || y < sw || y > S - sw; if (inRoad) g.fillRect(x, y, 1 + rnd() * 2, 1 + rnd() * 2); }
+    // sidewalks (lighter strip between lot and street)
+    g.fillStyle = walkCol;
+    g.fillRect(sw, sw, S - 2 * sw, wk); g.fillRect(sw, S - sw - wk, S - 2 * sw, wk); g.fillRect(sw, sw, wk, S - 2 * sw); g.fillRect(S - sw - wk, sw, wk, S - 2 * sw);
+    g.fillStyle = 'rgba(0,0,0,0.35)';
+    g.fillRect(sw + wk - 2, sw, 2, S - 2 * sw); g.fillRect(S - sw - wk, sw, 2, S - 2 * sw); g.fillRect(sw, sw + wk - 2, S - 2 * sw, 2); g.fillRect(sw, S - sw - wk, S - 2 * sw, 2);
+    // centre lines: double yellow along the borders, dashes in the middle lanes
+    g.fillStyle = lineY;
+    const dash = (x0, y0, w, h) => g.fillRect(x0, y0, w, h);
+    for (let y = sw + 30; y < S - sw - 30; y += 46) { dash(-1.6, y, 3.2, 26); dash(S - 1.6, y, 3.2, 26); }
+    for (let x = sw + 30; x < S - sw - 30; x += 46) { dash(x, -1.6, 26, 3.2); dash(x, S - 1.6, 26, 3.2); }
+    // lane lines either side
+    g.fillStyle = line; g.globalAlpha = 0.8;
+    for (const off of [-sw * 0.5, sw * 0.5]) {
+      for (let y = sw + 40; y < S - sw - 40; y += 36) { dash(off - 1.2, y, 2.4, 18); dash(S + off - 1.2, y, 2.4, 18); }
+      for (let x = sw + 40; x < S - sw - 40; x += 36) { dash(x, off - 1.2, 18, 2.4); dash(x, S + off - 1.2, 18, 2.4); }
+    }
+    // zebra crossings just outside each intersection
+    g.globalAlpha = 0.85;
+    const z0 = sw + 6;
+    for (let i = 0; i < 9; i++) {
+      const o = -sw + 8 + i * ((2 * sw - 16) / 8);
+      g.fillRect(o - 3, z0, 6, 22); g.fillRect(S + o - 3, z0, 6, 22); g.fillRect(o - 3, S - z0 - 22, 6, 22); g.fillRect(S + o - 3, S - z0 - 22, 6, 22);
+      g.fillRect(z0, o - 3, 22, 6); g.fillRect(S - z0 - 22, o - 3, 22, 6); g.fillRect(z0, S + o - 3, 22, 6); g.fillRect(S - z0 - 22, S + o - 3, 22, 6);
+    }
+    g.globalAlpha = 1;
+    // manholes / drains
+    for (let i = 0; i < 6; i++) { const x = (0.2 + rnd() * 0.6) * S, y = rnd() < 0.5 ? sw * (0.3 + rnd() * 0.4) : S - sw * (0.3 + rnd() * 0.4); g.fillStyle = 'rgba(0,0,0,0.5)'; g.beginPath(); g.arc(x, y, 7, 0, 7); g.fill(); }
+    return c;
+  });
+  return toTexture(cv, { aniso: 8 });
+}
+
 /** Chevron warning board (320x256): `dir` = +1 points LEFT (left-hand corner), -1 points RIGHT. Corners are dark border (posts sample them). */
 export function arrowTexture({ dir = 1, a = '#e5413a', b = '#ffffff', border = '#22262f' } = {}) {
   const cv = cachedCanvas(`arrow:${dir}:${a}:${b}`, () => {

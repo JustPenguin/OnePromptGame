@@ -19,6 +19,7 @@ import { buildSurfaceZones } from './surfaces.js';
 import { GeoBuilder } from './builder.js';
 import { createSky } from './sky.js';
 import { getRecipe } from './recipes/index.js';
+import { wetRoad } from './wet.js';
 import { mulberry32 } from '../core/math.js';
 import { toColor } from './geo.js';
 
@@ -146,6 +147,7 @@ export class World {
     const roadTex = this.tex(roadTexture(rc.texture ?? {}));
     const roadMat = new THREE.MeshStandardMaterial({ map: roadTex, roughness: rc.roughness ?? 0.88, metalness: rc.metalness ?? 0 });
     if (rc.emissive) { roadMat.emissive = toColor(rc.emissive); roadMat.emissiveMap = roadTex; roadMat.emissiveIntensity = rc.emissiveIntensity ?? 0.2; }
+    if (rc.wet) wetRoad(roadMat, this.timeUniform, rc.wet);
     const cu = { a: '#e5413a', b: '#f8f6ee', width: 0.95, ...(rc.curb ?? {}) };
     let curbMat = null;
     if (cu.width > 0) {
