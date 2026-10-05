@@ -17,10 +17,11 @@ Plain DOM + CSS over the WebGL canvas (`#ui-root`), no UI framework, no external
 | `src/ui/UI.js` | Layers, layout/scale, screen stack + transitions, modals, toasts, hint bar, HUD mount, fatal-error card |
 | `src/ui/nav.js` | One focus model: keyboard, gamepad, mouse, touch. Scopes (screen, modal), spatial navigation, d-pad repeat |
 | `src/ui/components.js` `dom.js` `icons.js` `modal.js` `toasts.js` `hints.js` `anim.js` `clipboard.js` `fullscreen.js` | Toolkit (buttons, stat bars, sliders, segmented/stepper/toggle controls, keycaps/pad glyphs, 60 SVG icons) |
-| `src/ui/css/base.js` | The design system (tokens, buttons, panels, rows, tabs, modal, toasts, wipe). UI CSS lives in JS strings (the build only inlines `shell.css`) |
+| `src/ui/css/base.js` | The design system (tokens, buttons, panels, rows, tabs, modal, toasts, wipe) + `coarseCss` (44 px touch targets, appended last). UI CSS lives in JS strings (the build only inlines `shell.css`) |
+| `src/ui/css/gate.js` | `gateHover(css)`: rewrites every `:hover` rule to apply only while the active device is the mouse, so hover and keyboard/pad focus can never highlight two things |
 | `src/ui/screens/*.js` | One class per screen + its CSS string; registry in `screens/index.js` |
-| `src/ui/hud/*.js` | Race HUD: `Hud` (assembly + events), `widgets` (speedo, minimap, item slot, standings, drift meter), `banners`, `overlays` (boost/ink/shield/rocket), `TouchControls`, `coach`, `hudCss` |
-| `src/modes/*.js` | `catalog` (tracks/cups/outlines), `unlocks` (rule table), `achievements`, `points`, `GrandPrix` (run state), `career` (stats, records, ghosts, trophies) |
+| `src/ui/hud/*.js` | Race HUD: `Hud` (assembly + events), `widgets` (speedo, minimap, item slot, standings, drift meter, respawn ring), `banners` (countdown, final lap, finish, photo finish, intro card, event feed), `overlays` (boost/ink/shield/rocket/status chips), `TouchControls`, `coach` (first-run hints), `preview` (live HUD preview for Settings), `hudCss` (scoped under `.hud` at load) |
+| `src/modes/*.js` | `catalog` (tracks/cups/outlines), `unlocks` (rule table), `achievements`, `points`, `GrandPrix` (run state), `career` (stats, records, ghosts, trophies), `ghostGap` (HUD ghost delta + sign convention), `selftest.mjs` |
 | `src/save/*.js` | `defaults` (schema), `Save` (store + migrations + sanitizers), `codec` (export/import text code), `selftest.mjs` |
 
 ## 2. Screen map and state machine
@@ -62,6 +63,7 @@ grandPrix[cupId][class]{trophy:'gold'|'silver'|'bronze'|null, points, place, com
 unlocks{drivers[], bodies[], cups[], speedClasses[]}       stats{races, wins, podiums, finishes, distance(m), driftSeconds, itemsHit, itemsUsed, hitsTaken, boosts, overtakes, coins, laps, topSpeed(km/h), playSeconds, gpPlayed, gpWon, ttRecords, bestLapRecords}
 achievements{id: timestamp}
 ```
+`profile.seen{controls,drift,item,welcome}` records which one-off coaching/welcome UI was already shown (Settings > Data > "Show tips again" resets it).
 
 * **Load path**: `JSON.parse` -> `migrateBlob` (walk `MIGRATIONS[n]` from the stored `version` to `SAVE_VERSION`) -> `normalizeSave` (merge onto defaults, clamp ranges, enum-check, drop unknown keys, cap name length, rebuild unlocks so starter content can never be locked).
 * **Migrations**: `MIGRATIONS[1]` (baseline v1 -> v2) converts flat `records{bestTime,bestLap}` into per-class `race`/`lap` entries and ghost keys into `'track|class'`. A migrated or *newer-version* save is first copied to `kartrush.save.v1.bak`; unreadable JSON is backed up too and the game starts fresh with a toast. To add v3: bump `SAVE_VERSION`, add `MIGRATIONS[2](d)` that returns the upgraded blob, extend `normalizeSave`, add a case to `src/save/selftest.mjs`.
@@ -95,6 +97,8 @@ Achievements (`modes/achievements.js`, 13 of them) are shown on Records > Career
 Additive: `app.flow`, `app.run`, `app.menuScene`, `app.restartRace()`, `app.afterRaceContinue()`, `app.toSetup()`, `startRace(config, {transition, flow})`, app event `'race:recorded'`.
 `__kart.startRace()` still starts a race directly (adhoc run) and the HUD/results work the same; the autostart URL param skips the title.
 
+`App.tick` handles the input edges `pause` / `camera` / `respawn` both before and after `session.update` (gamepad edges are produced inside `Input.read()` and `endFrame()` clears them at the end of the tick). The camera cycle is skipped when the engine already changed `cameraRig.mode` during the update; the legacy instant manual respawn only runs when the engine has no `session.respawnHold`.
+
 ## 7. Integration contracts with other agents (all optional, all tolerated when absent)
 
 | From | What the UI uses | Fallback today |
@@ -102,7 +106,8 @@ Additive: `app.flow`, `app.run`, `app.menuScene`, `app.restartRace()`, `app.afte
 | A | `session.race` (phase, time, order, lapCount, `skipIntro()`, `endRace()`), kart fields in ARCHITECTURE §4.2, `EV.*`, `input.touch`, `input.bindings/setBindings/captureNextKey`, `session.cameraRig.mode` | baseline |
 | A | `session.ghostResult = {time, driverId, bodyId, trackId, data}` after `RACE_RESULTS`; stored whole + `{speedClass, laps, date}` and passed back as `config.ghost` | no ghost saved |
 | A | `session.ghostPlayer.kart` (or `.ghost`) with `.race.distance` for the live ghost delta; minimap dot from `.position` | HUD shows "racing" |
-| A | `DRIFT_LEVEL_TIME` export from `physics/KartPhysics.js` (mini-turbo thresholds) | 0.85 / 1.7 / 2.7 s |
+| A | `DRIFT_LEVEL_TIME` export from `physics/KartPhysics.js` (mini-turbo thresholds); `kart.driftProgress` 0..1 toward the next level | derived from `drift.charge` |
+| A | `session.ghostDelta` (+ = player AHEAD; negated for the HUD), `session.respawnHold` 0..1, `race.rocketWindowOpen`, `session.stats` (preferred for career drift time / top speed), `input.touch.respawn`; events `EV.DRAFT`, `EV.PHOTO_FINISH` | distance-based ghost gap, no ring/chip/banner |
 | B | `TRACK_DEFS`, `CUPS`, `getTrackDef`, `def.palette.{skyTop,skyHorizon,ground,accent,ui:{primary,secondary}}`, `track.minimap {points, bounds, start}` | outline rebuilt from `def.points` |
 | C | `createKartShowcase(driverId, bodyId, opts)`, `getDriverPortrait(id, size)`, `renderer.setQuality`, `renderer.setEnvironmentProfile` (called once per menu) | box kart + initial discs |
 | D | `ITEM_DEFS` (`name, desc, color, count, kind`), `ITEM_ORDER`, `getItemIcon(id, size)`, `audio.ui(name)`, `audio.unlock()`, `audio.applySettings()`, `audio.playMusic('menu'|'results')`, `audio.setPaused(b)` | placeholder icons, silent |
@@ -112,6 +117,7 @@ Additive: `app.flow`, `app.run`, `app.menuScene`, `app.restartRace()`, `app.afte
 ```
 npm run build && node scripts/serve.mjs --port=8105 &       # then playwright-cli -s=e ... (see TESTING.md)
 node src/save/selftest.mjs                                  # save layer
+node src/modes/selftest.mjs                                 # modes: ghost gap sign, GP points/grid/trophies, unlocks, achievements, records, ghosts
 node scripts/check.mjs --track=all --laps=2                 # AI races (the UI wraps session.update only to collect stats)
 URL params (QA only):  ?mocktracks=1 (8 stand-in tracks)  ?unlockall=1  ?gpraces=2&gplaps=1 (short Grand Prix)  + the engine's ?quality= ?scale= ?autostart=1 ...
 ```
@@ -125,6 +131,9 @@ Storage-blocked path: `Object.defineProperty(window,'localStorage',{get(){throw 
 * **HUD CSS is scoped** under `.hud` at build time (`hudCss.js`) so its short class names cannot collide with menu classes.
 * **Reduced motion** (OS setting or `settings.reducedMotion`): transitions collapse, menu camera sway/particles stop, count-ups jump, wipes are skipped. **Reduce flashes** disables boost pulses, rainbow star edge, screen-burst and wrong-way blink.
 * The race clock, not UI frames, drives timed UI logic (coach) so it behaves under throttled frame rates and test fast-forward.
+* **Input hygiene**: Nav swallows menu keydowns (so they never reach the game's `Input`) but lets every keyup through (a key released during a pause must not stay "held"); a freshly opened screen/modal swallows gamepad buttons that are already down (Start opens the pause menu and must not instantly close it).
+* **Touch**: first tap on a driver/kart card previews it, a second tap (or "Choose") confirms; all targets are >= 44 px under `(any-pointer: coarse)`; the first coarse pointer switches `ui.device` to `touch`, which shows the on-screen race controls.
+* **Scroll bodies** (`.set-body`, `.rec-body`, `.help-body`) never shrink their children (`> * { flex: none }`) and focus only scrolls inside the nearest scroll area (`nav.reveal`), never the `overflow:hidden` screen.
 
 ## 10. Known issues / next steps
 
