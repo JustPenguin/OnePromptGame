@@ -42,6 +42,8 @@ export class KartPhysics {
     const n = Math.max(1, Math.ceil(dt * T.substepHz - 1e-6));
     const h = dt / n;
     this.updateDraft(dt);
+    // controllers that steer by yaw rate (steerForYawRate) already speak the drift's language: no translation for them this frame
+    for (let k = 0; k < karts.length; k++) { karts[k]._aware = karts[k]._yawAware; karts[k]._yawAware = false; }
     for (let i = 0; i < n; i++) {
       for (let k = 0; k < karts.length; k++) this.stepKart(karts[k], h);
       this.collideKarts(h);
@@ -80,6 +82,9 @@ export class KartPhysics {
 
     this.updateDrift(k, inp, h, top, steerIn);
 
+    // inside a drift an AI stick means "plain steering": translate it to the stick that yields the same yaw rate (see Kart.driftAssist)
+    const steerYaw = d.dir !== 0 && k.driftAssist && !k._aware ? driftAlongFor(Math.max(0, (steerIn * d.dir) / st.driftTurn)) * d.dir : steerIn;
+
     // ---- yaw
     const sAbs = Math.abs(k.speed);
     const rev = k.speed < -0.3 ? -1 : 1;
@@ -87,7 +92,7 @@ export class KartPhysics {
     const rec = k.recover > 0 ? 1 - k.recover / T.recoverTime : 1;                 // 0 right after a spin-out .. 1 fully recovered
     const omega = P.turn * steerAuthority(sAbs, top, P) * (1 - T.surfaceSteer * (1 - sp.grip)) * lerp(T.recoverSteer, 1, rec);
     if (d.dir !== 0) {
-      const along = clamp(steerIn * d.dir, -1, 1);
+      const along = clamp(steerYaw * d.dir, -1, 1);
       const u = (along + 1) * 0.5;
       k.heading += -d.dir * omega * st.driftTurn * driftMul(along) * airCtl * h;
       d.angle = damp(d.angle, -d.dir * lerp(T.driftAngleMin, T.driftAngleMax, u) * P.driftAngle, T.driftAngleRate, h);
@@ -122,7 +127,7 @@ export class KartPhysics {
       k.speed -= Math.sign(k.speed) * Math.min(sAbs, dec * h);
     }
     // cornering scrub: hard lock at speed costs speed (less while drifting); sliding sideways costs speed too
-    const scrub = (d.dir !== 0 ? T.scrubDriftSteer : T.scrubSteer) * Math.abs(steerIn) * clamp(k.speed / top, 0, 1) + T.scrubSlip * Math.abs(Math.sin(slip));
+    const scrub = (d.dir !== 0 ? T.scrubDriftSteer : T.scrubSteer) * Math.abs(steerYaw) * clamp(k.speed / top, 0, 1) + T.scrubSlip * Math.abs(Math.sin(slip));
     k.speed -= k.speed * scrub * h;
 
     // ---- integrate position
@@ -172,6 +177,7 @@ export class KartPhysics {
    * The result is clamped to [-1, 1], so an unreachable rate just gives full lock.
    */
   steerForYawRate(k, yawRate) {
+    k._yawAware = true;                       // this controller is drift-aware: skip the AI stick translation (Kart.driftAssist) this frame
     const st = k.stats, P = k.phys;
     const sp = SURFACE_PROPS[k.query.surface] ?? SURFACE_PROPS[Surface.ROAD];
     const sAbs = Math.abs(k.speed);
@@ -229,7 +235,8 @@ export class KartPhysics {
     if (d.dir !== 0) {
       if (k.speed < top * T.driftCancelSpeed || k.spin.timer > 0) { k.cancelDrift(); return; }
       if (k.grounded || d.hop > 0) {            // the entry hop counts: charge runs from the moment you commit
-        const along = clamp(steerIn * d.dir, -1, 1);
+        const stick = k.driftAssist && !k._aware ? driftAlongFor(Math.max(0, (steerIn * d.dir) / st.driftTurn)) * d.dir : steerIn;
+        const along = clamp(stick * d.dir, -1, 1);
         d.charge += h * st.miniTurbo * lerp(T.driftChargeMin, 1, (along + 1) * 0.5);
         if (d.level < 3 && d.charge >= DRIFT_LEVEL_TIME[d.level]) { d.level++; ev.emit(EV.DRIFT_LEVEL, { kart: k, level: d.level }); }
       }

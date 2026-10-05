@@ -84,6 +84,9 @@ R=45 m hairpins; the baseline Sunny Meadows has few real corners so the margin t
   `slipAngle` (chassis vs travel direction, rad) and `skid` (0..1 tyre slide: drives smoke / skid marks / squeal), getter `driftProgress` (0..1 toward the next mini-turbo level, for the HUD charge meter).
   `isInvulnerable()` also includes `grace`. `spinOut/launch/shrinkFor` document their false return (see above). `placeAt()` also clears drift/draft/wall state.
   `kart.orientation` includes the airborne nose pitch (up on the way up, down on the way down).
+* `Kart.driftAssist` (default **true for AI karts**, false for the player): inside a drift the AI's `input.steer` is read as a PLAIN steering command and translated to the stick that gives the same yaw rate
+  (a drift otherwise has a built-in turn bias that a naive `steer = -err * 2.6` controller cannot absorb: it hugs the inside wall; measured on the R=90 m sweepers: 59.0 s with 4 wall hits without the
+  assist, 47.4 s with 0 hits with it). A controller that already steers through `steerForYawRate()` is detected automatically (per frame), so adopting that API needs no flag; `kart.driftAssist = false` switches it off.
 * `KartPhysics.steerForYawRate(kart, yawRate)` -> stick -1..1 that yields that yaw rate right now (speed, surface and drift aware; `+yawRate` = turn left). **AI should steer through this.**
   `maxYawRate(kart, speed?, drift?)` and `maxCornerSpeed(kart, curvature, {drift})` give the real limits for brake-point planning (verified: full lock at `maxCornerSpeed(1/R)` traces radius R within 1 %;
   e.g. R = 20 m -> 97 km/h, R = 14 m -> 76 km/h for Pip + Classic at `pro`). `track.maxSpeedAt()` assumes 24 m/s^2 lateral, the karts manage 29-41 m/s^2.

@@ -522,6 +522,17 @@ function rosterTable() {
   }
 }
 
+function aiDrift() {
+  section('AI karts: a naive plain-steering controller (steer = -err * 2.6, as in the baseline AI) must survive drifts');
+  for (const [name, def] of [['sweepers (R 90 m)', DEFS.sweepers], ['hairpins (R 45 m)', DEFS.hairpins]]) {
+    const run = (assist) => soloLap(def, { driver: DRIVER, body: BODY, speedClass: CLASS, drift: true, driftAssist: assist, botOpts: { naive: true, chainLevel: 2 }, maxT: 120 });
+    const a = run(true), b = run(false);
+    info(`${name}: naive drifter WITH assist: ${a.time.toFixed(1)} s, wall hits ${a.counts['kart:wallHit'] ?? 0}, boosts ${a.counts['kart:driftBoost'] ?? 0}`, `without assist: ${b.finished ? b.time.toFixed(1) + ' s' : 'DNF'}, wall hits ${b.counts['kart:wallHit'] ?? 0}`);
+    check(`${name}: with the assist a naive AI drifts without hitting walls`, a.counts['kart:wallHit'] ?? 0, 0, 1, '');
+    check(`${name}: with the assist a naive AI lap is competitive`, a.time / soloLap(def, { driver: DRIVER, body: BODY, speedClass: CLASS, drift: false, botOpts: { naive: true } }).time, 0.9, 1.04, 'x');
+  }
+}
+
 function lapValue() {
   section('Value of drifting (solo laps, lookahead bot: no drift / one drift per corner / chained mini-turbos)');
   const res = {};
@@ -737,7 +748,7 @@ function terrain() {
   }
 }
 
-const sections = { longitudinal, steering, start, drift, offroad, walls, karts, spinAndAir, slipstream, frameRate, lapValue, terrain, abuse, eventsAudit, chaos, perf };
+const sections = { longitudinal, steering, start, drift, offroad, walls, karts, spinAndAir, slipstream, frameRate, aiDrift, lapValue, terrain, abuse, eventsAudit, chaos, perf };
 for (const [name, fn] of Object.entries(sections)) if (want(name)) { try { fn(); } catch (e) { failures++; console.log(`  FAIL ${name} threw: ${e.stack}`); } }
 if (args.roster || (only && only.includes('roster'))) rosterTable();
 console.log(`\n${failures === 0 ? 'HANDLING REPORT: all targets met' : `HANDLING REPORT: ${failures} target(s) missed`}`);

@@ -93,6 +93,7 @@ export class Kart {
     this.input = new KartInput();  // written by Input (player) / AIManager (AI) each frame
     this.locked = true;            // RaceManager unlocks at GO
     this.autopilot = false;        // true while an AI/ghost controller drives this kart (finish cruise, rocket)
+    this.driftAssist = this.isAI;  // AI karts: inside a drift the stick is read as a PLAIN steering command and translated to the stick that gives the same yaw rate (set false once a controller steers by yaw rate itself)
 
     // ---- race progress (written by RaceManager) ----
     this.race = {
@@ -133,6 +134,8 @@ export class Kart {
     this._spinCount = 0;
     this._respawnHold = 0;
     this._assist = 0;        // steering-assist correction added to the input steer this frame
+    this._yawAware = false;  // a controller used steerForYawRate() since the last physics update
+    this._aware = false;     // ... latched for the current physics update
     this._prevSpeed = 0;
   }
 

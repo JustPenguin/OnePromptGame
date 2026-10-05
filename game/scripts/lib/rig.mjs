@@ -178,7 +178,7 @@ export function aim(k, track, yawOffsetRad) {
  * Lookahead pursuit bot (like the baseline AI) with a "good player" drift policy: commit when a sustained corner is coming,
  * hold the drift through it, release at the exit.  Used for lap-time comparisons (drift vs no drift).
  */
-export function makeBot(session, kart, { drift = true, lookMin = 11, lookGain = 0.55, yawGain = 3.2, cornerSpeedMul = 1, startCurv = 0.0075, holdCurv = 0.0035, physics = null, chainLevel = 0 } = {}) {
+export function makeBot(session, kart, { drift = true, lookMin = 11, lookGain = 0.55, yawGain = 3.2, cornerSpeedMul = 1, startCurv = 0.0075, holdCurv = 0.0035, physics = null, chainLevel = 0, naive = false } = {}) {
   const track = session.track;
   const p = new THREE.Vector3();
   let drifting = false, regap = 0, held = 0;
@@ -191,7 +191,7 @@ export function makeBot(session, kart, { drift = true, lookMin = 11, lookGain = 
     track.pointAt(sT, clamp(off, -q.halfWidth * 0.8, q.halfWidth * 0.8), p);
     const desired = Math.atan2(p.x - kart.position.x, p.z - kart.position.z);
     const err = angleDiff(desired, kart.heading);
-    const phys = physics ?? session.physicsRef;
+    const phys = naive ? null : (physics ?? session.physicsRef);
     const wDes = clamp(err * yawGain, -2.5, 2.5);            // desired heading rate, + = left
     inp.steer = phys ? phys.steerForYawRate(kart, wDes) : clamp(-err * 2.6, -1, 1);
     const corner = track.maxSpeedAt(q.s + 10 + speed * 0.9) * cornerSpeedMul;
@@ -216,9 +216,10 @@ export function makeBot(session, kart, { drift = true, lookMin = 11, lookGain = 
 }
 
 /** Solo flying lap(s) with the bot; returns { time, respawns, events } (time = seconds until finished or maxT). */
-export function soloLap(def, { driver = 'pip', body = 'classic', speedClass = 'pro', drift = true, laps = 1, maxT = 240, botOpts = {} } = {}) {
+export function soloLap(def, { driver = 'pip', body = 'classic', speedClass = 'pro', drift = true, laps = 1, maxT = 240, botOpts = {}, driftAssist = null } = {}) {
   const rig = makeRig(def, { speedClass, laps });
   const k = rig.addKart({ driver, body, s: rig.track.length - 6, speed: 0 });
+  if (driftAssist !== null) k.driftAssist = driftAssist;
   const race = rig.startRace();
   race.setPhase('countdown');
   rig.session.karts[0].input.reset();
