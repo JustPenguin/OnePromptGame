@@ -127,7 +127,7 @@ function drift() {
   info('charge timeline (blue / orange / pink)', tl.map((t) => t.toFixed(2)).join(' / '), 's');
   check('blue mini-turbo after', tl[0], 0.6, 1.2, 's');
   check('orange mini-turbo after', tl[1], 1.2, 2.2, 's');
-  check('pink mini-turbo after', tl[2], 2.0, 3.2, 's');
+  check('pink mini-turbo after', tl[2], 2.0, 3.4, 's');
   const mid = s.find((r) => r.t >= 1.5);
   check('chassis angle vs travel (committed drift)', Math.abs(wrap(mid.yaw - mid.moveYaw)) / D2R, 18, 45, 'deg');
 
@@ -471,7 +471,7 @@ function lapValue() {
     res[name] = { g1, g2 };
     info(`${name}: none ${plain.time.toFixed(2)} s | one ${one.time.toFixed(2)} s (${g1.toFixed(1)} %) | chained ${chain.time.toFixed(2)} s (${g2.toFixed(1)} %)`, `drifts ${chain.counts['kart:driftStart'] ?? 0}, boosts ${chain.counts['kart:driftBoost'] ?? 0}, wall hits ${chain.counts['kart:wallHit'] ?? 0}`);
   }
-  check('chained mini-turbos clearly beat never drifting (sweepers)', res['sweepers (R 90 m)'].g2, 3, 10, '%');
+  check('chained mini-turbos clearly beat never drifting (sweepers)', res['sweepers (R 90 m)'].g2, 2, 10, '%');
   check('chained mini-turbos beat never drifting (hairpins, 2 corners per lap)', res['hairpins (R 45 m)'].g2, 1.5, 12, '%');
   check('a single drift per corner is never a loss (sweepers)', res['sweepers (R 90 m)'].g1, -0.5, 10, '%');
 }
@@ -528,7 +528,56 @@ function perf() {
   check('physics step for 12 karts (no AI)', ms, 0, 0.6, 'ms/frame');
 }
 
-const sections = { longitudinal, steering, drift, offroad, walls, karts, spinAndAir, slipstream, frameRate, lapValue, abuse, perf };
+function terrain() {
+  section('Awkward geometry (hills, banking, ripples)');
+  {
+    const lap = (drift) => soloLap(DEFS.coaster, { driver: DRIVER, body: BODY, speedClass: CLASS, drift, laps: 2, maxT: 200 });
+    const a = lap(true), b = lap(false);
+    info('coaster 2 laps (drifting bot): time / lap times / respawns / wall hits / jumps', `${a.time.toFixed(1)} s / ${a.lapTimes.map((t) => t.toFixed(1)).join(', ')} / ${a.counts['kart:respawn'] ?? 0} / ${a.counts['kart:wallHit'] ?? 0} / ${a.counts['kart:jump'] ?? 0}`);
+    check('hilly banked circuit: bot finishes 2 laps (drifting)', a.finished ? 1 : 0, 1, 1, '');
+    check('hilly banked circuit: bot finishes 2 laps (no drift)', b.finished ? 1 : 0, 1, 1, '');
+    check('no rescue needed on the coaster', (a.counts['kart:respawn'] ?? 0) + (b.counts['kart:respawn'] ?? 0), 0, 0, '');
+    check('drifting bot lap times are consistent (lap 2 vs lap 1)', a.lapTimes[1] / a.lapTimes[0], 0.93, 1.03, '');
+  }
+  {
+    // ripples: a bumpy circle (R 70 m, 16 m wavelength). The bot drifts round it: charge keeps building, the drift is never cancelled
+    const rig = newRig(DEFS.ripples);
+    const k = rig.addKart(kartOpts({ s: 30, speed: 30 }));
+    const bot = makeBot(rig.session, k, { drift: true, startCurv: 0.005, holdCurv: 0.002 });
+    let cancels = 0, maxLevel = 0, airFrames = 0, frames = 0, walls = 0;
+    rig.events.on(EV.DRIFT_CANCEL, () => cancels++); rig.events.on(EV.WALL_HIT, () => walls++);
+    for (let i = 0; i < 60 * 14; i++) { bot(); k.input.throttle = k.speed < 30 ? 1 : 0.8; rig.step(1 / 60); frames++; if (!k.grounded) airFrames++; maxLevel = Math.max(maxLevel, k.drift.level); }
+    info('ripple circle: airborne fraction / max drift level / cancels / wall hits', `${(airFrames / frames).toFixed(2)} / ${maxLevel} / ${cancels} / ${walls}`);
+    check('drift survives bumps (not cancelled)', cancels, 0, 0, '');
+    check('drift charge keeps building over bumps', maxLevel, 2, 3, '');
+    check('kart mostly stays on the ripples (airborne fraction)', airFrames / frames, 0, 0.25, '');
+  }
+  {
+    // snaking exploit check: alternating short drifts on a straight must not out-run plain driving by much
+    const run = (snake) => {
+      const rig = newRig(DEFS.strip);
+      const k = rig.addKart(kartOpts({ s: 200, speed: 0 }));
+      let boosts = 0; rig.events.on(EV.DRIFT_BOOST, () => boosts++);
+      let sign = -1, held = 0;
+      rig.run(18, () => {
+        k.input.throttle = 1;
+        if (!snake) { k.input.steer = 0; return; }
+        // keep the nose along the road with the stick (countering the drift's turn bias); swap sides every 1.1 s
+        const err = angleDiff(rig.track.sampleAt(k.query.s + 14).yaw, k.heading) - k.query.lateral * 0.02;
+        k.input.steer = clampN(rig.physics.steerForYawRate(k, clampN(err * 3, -1.5, 1.5)), -1, 1);
+        held += 1 / 60;
+        if (held < 1.1) { k.input.drift = true; if (k.drift.dir === 0) k.input.steer = sign; }
+        else if (held < 1.2) k.input.drift = false; else { held = 0; sign = -sign; }
+      }, { every: 1 });
+      return { dist: k.query.s, boosts, walls: rig.counts['kart:wallHit'] ?? 0 };
+    };
+    const plain = run(false), snk = run(true);
+    info('18 s on a straight: plain vs snaking (distance, boosts, wall hits)', `${plain.dist.toFixed(0)} m vs ${snk.dist.toFixed(0)} m, ${snk.boosts} boosts, ${snk.walls} wall hits`);
+    check('snaking does not out-run plain driving by more than 6 %', snk.dist / plain.dist, 0, 1.06, 'x');
+  }
+}
+
+const sections = { longitudinal, steering, drift, offroad, walls, karts, spinAndAir, slipstream, frameRate, lapValue, terrain, abuse, perf };
 for (const [name, fn] of Object.entries(sections)) if (want(name)) { try { fn(); } catch (e) { failures++; console.log(`  FAIL ${name} threw: ${e.stack}`); } }
 if (args.roster || (only && only.includes('roster'))) rosterTable();
 console.log(`\n${failures === 0 ? 'HANDLING REPORT: all targets met' : `HANDLING REPORT: ${failures} target(s) missed`}`);

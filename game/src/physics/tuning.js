@@ -42,7 +42,7 @@ export const T = {
   driftEnterSpeed: 0.3,      // fraction of top speed needed to hop / drift
   driftCancelSpeed: 0.2,
   hopVy: 5, hopTime: 0.25,
-  driftChargeBase: 0.8, driftChargeSteer: 0.2,   // charge rate = miniTurbo * (base + steer * along)
+  driftChargeMin: 0.3,       // charge rate = miniTurbo * lerp(driftChargeMin, 1, stick-into-drift 0..1): no free boosts from straight-line snaking
   hopAirControl: 0.9,
 
   // ---- air

@@ -201,7 +201,7 @@ export class KartPhysics {
       if (k.speed < top * T.driftCancelSpeed || k.spin.timer > 0) { k.cancelDrift(); return; }
       if (k.grounded || d.hop > 0) {            // the entry hop counts: charge runs from the moment you commit
         const along = clamp(steerIn * d.dir, -1, 1);
-        d.charge += h * st.miniTurbo * (T.driftChargeBase + T.driftChargeSteer * along);
+        d.charge += h * st.miniTurbo * lerp(T.driftChargeMin, 1, (along + 1) * 0.5);
         if (d.level < 3 && d.charge >= DRIFT_LEVEL_TIME[d.level]) { d.level++; ev.emit(EV.DRIFT_LEVEL, { kart: k, level: d.level }); }
       }
     }

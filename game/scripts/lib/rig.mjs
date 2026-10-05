@@ -29,6 +29,24 @@ export function stadiumPoints(Ls = 2400, R = 400, straightStep = 100, arcStepDeg
   return pts;
 }
 
+/** Hilly, banked, twisty circuit with a ramp and a pad: [x, y, z, width, bankDeg] (positive bank rolls into a RIGHT turn). */
+export const COASTER_POINTS = [
+  [0, 0, 0, 16, 0], [0, 0, 120, 16, 0], [30, 3, 240, 16, 6], [110, 8, 320, 16, 10], [210, 12, 340, 16, 10], [300, 10, 290, 16, 6],
+  [330, 4, 200, 16, 0], [300, 0, 100, 16, -6], [230, -2, 20, 15, -9], [240, -4, -90, 14, -10], [180, -2, -190, 14, -6], [80, 0, -240, 14, 8],
+  [-20, 2, -210, 14, 10], [-90, 5, -140, 14, 4], [-110, 6, -50, 16, 0], [-60, 3, 20, 16, 0],
+];
+
+/** Circle of radius R whose centre line ripples: control points every ~8 m with alternating +-0.14 m heights (16 m wavelength). */
+export function rippleCirclePoints(R = 70, spacing = 8) {
+  const n = Math.round((2 * Math.PI * R) / spacing / 2) * 2;
+  const pts = [];
+  for (let i = 0; i < n; i++) {
+    const a = (i / n) * 2 * Math.PI;
+    pts.push([-R + R * Math.cos(a), i % 2 ? 0.14 : -0.14, R * Math.sin(a)]);   // starts at (0,0,0) heading +Z, curving right (-X)
+  }
+  return pts;
+}
+
 const basePalette = { skyTop: '#3d8bff', skyHorizon: '#cfe9ff', ground: '#5da13a', accent: '#ffd23f' };
 const baseDef = { cup: 'test', theme: 'meadow', music: 'meadow', laps: 1, difficulty: 1, description: 'test', palette: basePalette };
 
@@ -47,6 +65,9 @@ export const DEFS = {
   /** Circuits with sustained corners (for the value-of-drifting lap-time comparison). */
   sweepers: { ...baseDef, id: 't-sweepers', name: 'Sweepers', width: 16, shoulder: 6, points: stadiumPoints(500, 90, 80, 10) },
   hairpins: { ...baseDef, id: 't-hairpins', name: 'Hairpins', width: 16, shoulder: 6, points: stadiumPoints(500, 45, 80, 10) },
+  coaster: { ...baseDef, id: 't-coaster', name: 'Coaster', width: 16, shoulder: 6, points: COASTER_POINTS,
+    zones: [{ type: 'ramp', s: 300, length: 12, width: 8, height: 2.4 }, { type: 'boost', s: 800, length: 12, width: 6 }] },
+  ripples: { ...baseDef, id: 't-ripples', name: 'Ripples', width: 16, shoulder: 6, points: rippleCirclePoints(70, 8) },
   /** The shipped baseline course. */
   meadows: sunnyMeadows,
 };
