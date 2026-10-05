@@ -167,6 +167,7 @@ export class PodiumScreen extends Screen {
   onShow() {
     this.app.menuScene.showPodium(this.rows3, { trophy: this.res.trophy });
     this.app.audio?.playMusic?.('results');
+    (this.res.achievements ?? []).forEach((a, i) => setTimeout(() => this.ui.toast({ title: 'Achievement unlocked', text: a.name, kind: 'unlock', icon: a.icon, ms: 4200 }), 5200 + i * 900));
     (this.res.unlocked ?? []).forEach((u, i) => setTimeout(() => this.ui.toast({ title: 'Unlocked!', text: unlockName(u), kind: 'unlock', driverId: u.kind === 'driver' ? u.target : undefined, icon: 'lock', ms: 4200 }), 2600 + i * 700));
   }
 

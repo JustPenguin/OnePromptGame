@@ -14,6 +14,7 @@ import { Speedo, Minimap, ItemSlot, Leaderboard, DriftMeter, setText, setClass }
 import { Countdown, Banners, IntroCard, EventFeed, replay } from './banners.js';
 import { Effects, StatusChips } from './overlays.js';
 import { TouchControls } from './TouchControls.js';
+import { Coach } from './coach.js';
 
 const MS = { kmh: 3.6, mph: 2.23694 };
 const UNIT = { kmh: 'km/h', mph: 'mph' };
@@ -72,22 +73,25 @@ export class Hud {
     this.pauseBtn.addEventListener('click', () => this.app.setPaused(true));
     this.fps = h('div', { class: 'fps', style: { display: 'none' } });
     this.touch = new TouchControls(this.app);
+    this.coach = new Coach(this);
 
     this.root = h('div', { class: 'hud', 'data-phase': session.race?.phase ?? 'intro' },
       this.effects.el,
       h('div', { class: 'hz tl' }, this.item.el, this.coins, this.status.el),
       h('div', { class: 'hz ml' }, this.board.el),
       h('div', { class: 'hz bl' }, this.posEl),
-      h('div', { class: 'hz tr' }, this.lapbox, this.timerEl, this.lapList, this.ghostBox),
+      h('div', { class: 'hz tr' }, h('div', { class: 'trrow' }, this.lapbox, this.pauseBtn), this.timerEl, this.lapList, this.ghostBox),
       h('div', { class: 'hz mr' }, this.mini.el),
       h('div', { class: 'hz br' }, this.speedo.el),
       h('div', { class: 'hz bc' }, h('div', { style: { position: 'relative' } }, this.drift.label, this.drift.el)),
+      this.coach.el,
       h('div', { class: 'hz tc' }, this.feed.el),
       this.countdown.el, this.banners.el, this.introCard.el, this.skip,
-      this.pauseBtn, this.touch.root, this.fps);
+      this.touch.root, this.fps);
 
     this.mini.setTrack(session);
     this._bindEvents();
+    this.coach.bind(session, (type, fn) => this.offs.push(session.events.on(type, fn)));
     this._bindInput();
     this.applySettings();
     this.onDevice(ui.device);
@@ -208,6 +212,7 @@ export class Hud {
     this.root.classList.toggle('touch', this.touchWanted());
     this.touch.setShown(this.touchWanted());
     this.item.setHint(this._itemHint());
+    this.coach.onDevice(d);
     if (this._skipKind) { const k = this._skipKind; this._skipKind = null; this._setSkip(k); }
   }
 
@@ -318,6 +323,8 @@ export class Hud {
         this.ghostD.className = `gd ${this._gd > 0.05 ? 'dn' : this._gd < -0.05 ? 'up' : ''}`;
       } else setText(this.ghostD, 'racing');
     }
+
+    this.coach.update(dt, session);
 
     // finishing: offer to skip the wait for the other racers
     if (race.phase === 'finishing' && me.race.finished && this.finishedAt >= 0 && this.t - this.finishedAt > 2.4 && !this.gotoResultsReady) { this.gotoResultsReady = true; this._setSkip('finish'); }

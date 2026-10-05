@@ -56,13 +56,15 @@ export function sanitizeSettings(raw) {
 }
 
 function sanitizeProfile(raw, base) {
-  const out = { ...base };
+  const out = { ...base, versus: { ...base.versus }, seen: { ...base.seen } };
   if (!isObj(raw)) return out;
   if (typeof raw.name === 'string') out.name = raw.name.replace(/[\u0000-\u001f<>]/g, '').trim().slice(0, 14) || base.name;
   for (const k of ['favoriteDriver', 'favoriteKart', 'lastSpeedClass', 'lastCup', 'lastTrack']) if (typeof raw[k] === 'string' && raw[k].length < 40) out[k] = raw[k];
   if (Number.isFinite(raw.created)) out.created = raw.created;
   if (typeof raw.tutorialDone === 'boolean') out.tutorialDone = raw.tutorialDone;
   if (typeof raw.nameSet === 'boolean') out.nameSet = raw.nameSet;
+  if (isObj(raw.seen)) { out.seen = { ...base.seen }; for (const k of Object.keys(base.seen)) if (typeof raw.seen[k] === 'boolean') out.seen[k] = raw.seen[k]; }
+  else out.seen = { ...base.seen };
   if (isObj(raw.versus)) {
     const v = raw.versus;
     out.versus = { ...base.versus };
@@ -252,7 +254,7 @@ export function summarizeSave(d) {
 
 // ------------------------------------------------------------------------------------------------ the store
 /** Objects other modules may hold references to (app.settings etc.) are updated in place, never replaced. */
-const KEEP_IDENTITY = new Set(['settings', 'profile', 'assists', 'versus', 'stats']);
+const KEEP_IDENTITY = new Set(['settings', 'profile', 'assists', 'versus', 'stats', 'seen']);
 function assignInPlace(target, source) {
   for (const k of Object.keys(target)) if (!(k in source)) delete target[k];
   for (const [k, v] of Object.entries(source)) {

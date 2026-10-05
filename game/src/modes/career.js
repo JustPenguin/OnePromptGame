@@ -7,6 +7,7 @@ import { EV } from '../core/events.js';
 import { MAX_GHOSTS } from '../save/defaults.js';
 import { getTrackDef } from './catalog.js';
 import { evaluateUnlocks } from './unlocks.js';
+import { evaluateAchievements } from './achievements.js';
 import { betterTrophy, trophyForPlace } from './points.js';
 
 export class RaceStats {
@@ -100,6 +101,7 @@ export function recordRace(app, session, standings, ctx = {}) {
     }
   }
   summary.unlocked = evaluateUnlocks(save);
+  summary.achievements = evaluateAchievements(save, { summary });
   save.commit(true);
   session._krSummary = summary;
   return summary;
@@ -144,6 +146,7 @@ export function recordGrandPrix(app, gp) {
   save.data.stats.gpPlayed++;
   if (place === 1) save.data.stats.gpWon++;
   const unlocked = evaluateUnlocks(save);
+  const achievements = evaluateAchievements(save, null);
   save.commit(true);
-  return { trophy, isNewTrophy, points, place, unlocked, entry: byClass[gp.speedClass] };
+  return { trophy, isNewTrophy, points, place, unlocked, achievements, entry: byClass[gp.speedClass] };
 }

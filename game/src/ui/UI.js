@@ -18,6 +18,7 @@ import { Toasts } from './toasts.js';
 import { SCREENS, SCREEN_CSS } from './screens/index.js';
 import { Hud } from './hud/Hud.js';
 import { hudCss } from './hud/hudCss.js';
+import { coachCss } from './hud/coach.js';
 
 export class UI {
   constructor(app) {
@@ -32,7 +33,7 @@ export class UI {
 
     const style = document.createElement('style');
     style.id = 'kr-ui-css';
-    style.textContent = [baseCss, headerCss, ...SCREEN_CSS, hudCss].join('\n');
+    style.textContent = [baseCss, headerCss, ...SCREEN_CSS, hudCss, coachCss].join('\n');
     document.head.appendChild(style);
 
     this.layers = {};

@@ -2,9 +2,10 @@
 import { h } from '../dom.js';
 import { icon } from '../icons.js';
 import { Screen } from './Screen.js';
-import { button, portrait } from '../components.js';
+import { button, portrait, iconButton } from '../components.js';
+import { copyText } from '../clipboard.js';
 import { formatTime, ordinal } from '../../core/math.js';
-import { getDriver } from '../../data/roster.js';
+import { getDriver, SPEED_CLASSES } from '../../data/roster.js';
 import { getTrackDef } from '../../modes/catalog.js';
 import { TROPHY_COLORS } from '../../modes/points.js';
 import { unlockName } from '../../modes/unlocks.js';
@@ -115,6 +116,7 @@ export class ResultsScreen extends Screen {
       if (mode === 'versus') acts.push(button({ label: 'Change setup', icon: 'sliders', variant: 'cyan', onClick: () => this.app.toSetup() }));
     }
     acts.push(button({ label: 'Menu', icon: 'home', variant: 'glass', onClick: () => this._menu(mode) }));
+    acts.push(iconButton({ icon: 'exportOut', title: 'Share result', onClick: () => this.share(s, standings) }));
 
     // ---- right column: table
     const best = winner?.finished ? winner.time : null;
@@ -143,6 +145,22 @@ export class ResultsScreen extends Screen {
       return h('div', { class: 'res-place' }, h('div', { class: 'place-n tt' }, formatTime(s.time)), h('div', { class: 'place-t' }, h('div', { class: 'h2' }, s.newRecord ? 'New record!' : 'Finished')));
     }
     return h('div', { class: 'res-place' }, h('div', { class: 'place-n' }, s.finished ? ordinal(s.place) : 'DNF'), h('div', { class: 'place-t' }, h('div', { class: 'h2' }, ps.t)));
+  }
+
+  /** A short text card the player can paste anywhere. Clipboard may be blocked, so the dialog shows it selectable too. */
+  async share(s, standings) {
+    const cls = SPEED_CLASSES[s.speedClass]?.name ?? '';
+    const mode = { grandprix: 'Grand Prix', timetrial: 'Time Trial', versus: 'Versus Race' }[s.mode] ?? 'Race';
+    const lines = [`Kart Rush GP - ${s.trackName} (${cls}, ${mode})`];
+    if (s.racers <= 1) lines.push(`Finished in ${s.finished ? formatTime(s.time) : 'DNF'}${s.bestLap != null ? `  |  best lap ${formatTime(s.bestLap)}` : ''}`);
+    else lines.push(`${s.finished ? ordinal(s.place) : 'DNF'} of ${s.racers}${s.finished ? `  |  ${formatTime(s.time)}` : ''}${s.bestLap != null ? `  |  best lap ${formatTime(s.bestLap)}` : ''}`);
+    if (s.newRecord) lines.push('New record!');
+    const ta = h('textarea', { class: 'txt', readonly: true, 'data-nav': '', 'aria-label': 'Result text', style: { height: '6rem', fontFamily: 'var(--font-ui)', fontSize: '.95rem', fontWeight: '800', wordBreak: 'normal' } });
+    ta.value = lines.join('\n');
+    ta.addEventListener('focus', () => ta.select());
+    const st = h('div', { class: 'st', style: { minHeight: '1.3rem', marginTop: '.3rem' } });
+    await this.ui.modal({ title: 'Share your result', body: h('div', {}, h('p', { style: { margin: '0 0 .4rem' } }, 'Copy this and paste it wherever you like.'), ta, st),
+      buttons: [{ label: 'Copy', icon: 'copy', variant: 'cyan', onClick: async () => { const r = await copyText(ta.value, ta); st.style.color = '#b5f67d'; st.textContent = r === 'ok' ? 'Copied to the clipboard.' : 'Selected. Press Ctrl+C (or Cmd+C) to copy.'; } }, { label: 'Done', value: true, variant: 'green', icon: 'check', def: true }] });
   }
 
   _nextTrack() {

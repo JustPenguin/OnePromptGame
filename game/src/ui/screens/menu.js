@@ -102,6 +102,20 @@ export class MainMenuScreen extends Screen {
   onShow() {
     const p = this.app.save.profile;
     this.app.menuScene.setKart(p.favoriteDriver, p.favoriteKart);
+    if (!p.seen.welcome) setTimeout(() => { if (this.root?.isConnected && this.ui.currentId === 'menu') this.welcome(); }, 650);
+  }
+
+  /** First launch: say hello and ask for a name (skippable; works with keyboard, gamepad and touch). */
+  async welcome() {
+    const p = this.app.save.profile;
+    p.seen.welcome = true; this.app.save.commit();
+    const input = h('input', { type: 'text', class: 'txt', maxlength: 14, placeholder: 'Racer', 'aria-label': 'Your racer name', spellcheck: 'false', autocomplete: 'off', 'data-nav': '', 'data-default': '' });
+    input.value = p.nameSet ? p.name : '';
+    const body = h('div', {}, h('p', { style: { margin: '0 0 .7rem' } }, 'Pick a name for the results board. You can change it any time in Settings.'), input);
+    const go = await this.ui.modal({ title: 'Welcome to Kart Rush GP!', body, dismissValue: false,
+      buttons: [{ label: 'Skip', value: false, variant: 'glass', icon: 'right' }, { label: 'Let\'s race', value: true, variant: 'green', icon: 'check', def: true }] });
+    const v = input.value.replace(/[<>]/g, '').trim().slice(0, 14);
+    if (go && v) { p.name = v; p.nameSet = true; this.app.save.commit(); this.root?.querySelector('.profile .pn')?.replaceChildren(v); }
   }
 
   choose(id) {

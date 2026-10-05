@@ -171,8 +171,9 @@ const RAW = /* css */ `
 .fps{position:absolute;left:max(.6em,var(--sal));bottom:.5em;font-family:ui-monospace,Menlo,Consolas,monospace;font-weight:700;font-size:.72em;text-shadow:0 .08em .2em #000;color:#cfe;background:rgba(0,0,0,.45);padding:.2em .5em;border-radius:.3em;white-space:pre;}
 
 /* ------------------------------------------------------------ pause + touch */
-.hud-pause{position:absolute;right:max(.7em,var(--sar));top:max(.7em,var(--sat));pointer-events:auto;opacity:0;width:2.6em;height:2.6em;border:0;border-radius:.8em;background:rgba(8,12,34,.62);color:#fff;font-size:1.1em;display:grid;place-items:center;cursor:pointer;box-shadow:inset 0 0 0 .08em rgba(255,255,255,.25);transition:opacity .2s,transform .15s var(--ease-spring);z-index:6;}
-[data-device="mouse"] .hud-pause,[data-device="touch"] .hud-pause{opacity:.9;} .hud-pause:hover{transform:scale(1.1);}
+.trrow{display:flex;gap:.5em;align-items:stretch;}
+.hud-pause{pointer-events:auto;opacity:.45;width:2.7em;border:0;border-radius:.8em;background:linear-gradient(180deg,var(--glass1),var(--glass2));color:#fff;font-size:1em;display:grid;place-items:center;cursor:pointer;box-shadow:inset 0 0 0 .08em rgba(255,255,255,.2),0 .22em 0 rgba(0,0,0,.3);transition:opacity .2s,transform .15s var(--ease-spring);}
+[data-device="mouse"] .hud-pause,[data-device="touch"] .hud-pause{opacity:.95;} .hud-pause:hover{opacity:1;transform:scale(1.08);}
 .touchc{position:absolute;inset:0;pointer-events:none;display:none;z-index:5;}
 .hud.touch .touchc{display:block;}
 .tzone{position:absolute;left:0;bottom:0;width:52%;height:62%;pointer-events:auto;touch-action:none;}
@@ -186,8 +187,6 @@ const RAW = /* css */ `
 .tbtn.t-item{background:radial-gradient(circle at 35% 28%,rgba(34,211,255,.7),rgba(15,180,228,.35));} .tbtn.t-brake{background:radial-gradient(circle at 35% 28%,rgba(255,61,106,.7),rgba(223,34,80,.35));}
 .tbtn.t-back{background:radial-gradient(circle at 35% 28%,rgba(160,170,220,.55),rgba(90,100,160,.25));}
 
-.hud.touch .hz.tr{right:calc(max(var(--pad),var(--sar)) + 3.4em);}
-.hud.touch .hud-pause{opacity:.95;}
 .l-compact .hud.touch .hz.mr{top:calc(max(var(--pad),var(--sat)) + 4.6em);} .l-compact .hud.touch .mini{width:5.4em;height:5.4em;}
 
 /* ------------------------------------------------------------ states */

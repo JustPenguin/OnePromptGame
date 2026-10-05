@@ -7,6 +7,7 @@ import { button, row, sliderCtl, toggleCtl, segmentedCtl, keycap } from '../comp
 import { applySetting, resolvedQualityId } from '../../app/settingsApply.js';
 import { canFullscreen, toggleFullscreen, isFullscreen } from '../fullscreen.js';
 import { summarizeSave } from '../../save/Save.js';
+import { copyText } from '../clipboard.js';
 
 export const settingsCss = /* css */ `
 .s-settings{align-items:center;}
@@ -53,14 +54,6 @@ export const BIND_ACTIONS = [
   ['item', 'Use item'], ['lookBack', 'Look back'], ['camera', 'Change camera'], ['respawn', 'Respawn'], ['pause', 'Pause'],
 ];
 const REQUIRED = new Set(['throttle', 'brake', 'left', 'right', 'drift']);
-
-/** Copy text: Clipboard API, then execCommand, then leave it selected for a manual Ctrl+C. -> 'ok' | 'manual' */
-export async function copyText(text, field) {
-  try { await navigator.clipboard.writeText(text); return 'ok'; } catch { /* sandboxed iframe or denied */ }
-  try { field?.focus(); field?.select(); if (document.execCommand('copy')) return 'ok'; } catch { /* ignore */ }
-  try { field?.focus(); field?.select(); } catch { /* ignore */ }
-  return 'manual';
-}
 
 export class SettingsScreen extends Screen {
   get stage() { return { preset: 'select', kart: true, theme: null, comp: (l) => (l.mode === 'wide' ? { x: 0.3, y: 0.02 } : { x: 0, y: -0.2 }) }; }
@@ -310,6 +303,7 @@ export class SettingsScreen extends Screen {
       h('div', { class: 'btn-row' },
         button({ label: 'Export', icon: 'exportOut', variant: 'cyan', size: 'sm', onClick: () => this.exportFlow() }),
         button({ label: 'Import', icon: 'importIn', variant: 'glass', size: 'sm', onClick: () => this.importFlow() }),
+        button({ label: 'Show tips again', icon: 'tip', variant: 'glass', size: 'sm', onClick: () => { const seen = this.app.save.profile.seen; for (const k of Object.keys(seen)) seen[k] = false; this.app.save.commit(); this.ui.toast({ title: 'Tips are back', text: 'You will see the driving hints in your next race.', icon: 'tip' }); } }),
         button({ label: 'Reset progress', icon: 'trash', variant: 'red', size: 'sm', onClick: () => this.resetFlow() })),
     ];
   }

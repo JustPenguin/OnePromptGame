@@ -72,6 +72,7 @@ export function defaultSave() {
       versus: { laps: 3, racers: 8, items: true },
       tutorialDone: false,
       nameSet: false,
+      seen: { controls: false, drift: false, item: false, welcome: false },   // one-off coaching / welcome already shown
     },
     settings: structuredClone(DEFAULT_SETTINGS),
     // records[trackId] = { tt: {[class]: Entry}, race: {[class]: Entry}, lap: {[class]: Entry} }

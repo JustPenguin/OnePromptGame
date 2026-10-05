@@ -6,6 +6,7 @@ import { button, portrait } from '../components.js';
 import { paintOutline } from '../trackCard.js';
 import { getCups, isCupUnlocked, trackColors } from '../../modes/catalog.js';
 import { UNLOCK_RULES, isUnlocked, progress, unlockName } from '../../modes/unlocks.js';
+import { ACHIEVEMENTS } from '../../modes/achievements.js';
 import { TROPHY_NAMES } from '../../modes/points.js';
 import { DRIVERS, KART_BODIES, SPEED_CLASSES, getDriver, getBody } from '../../data/roster.js';
 import { formatTime } from '../../core/math.js';
@@ -43,6 +44,8 @@ export const recordsCss = /* css */ `
 .cit .kk{width:2.8rem;height:2.8rem;border-radius:.7rem;display:grid;place-items:center;background:rgba(255,255,255,.1);font-size:1.5rem;}
 .nxt{display:flex;flex-direction:column;gap:.4rem;padding:.2rem;} .nxt .ni{display:grid;grid-template-columns:2.2rem minmax(0,1fr);gap:.7rem;align-items:center;padding:.5rem .7rem;border-radius:.9rem;background:rgba(255,255,255,.06);} .nxt .ni .portrait,.nxt .ni .nic{width:2.2rem;height:2.2rem;} .nxt .ni .nic{border-radius:.6rem;display:grid;place-items:center;background:rgba(255,255,255,.1);font-size:1.2rem;}
 .nxt .nt{font-family:var(--font-display);font-size:.98rem;} .nxt .ns{font-size:.78rem;color:var(--kr-ink-dim);} .nxt .pb{height:.35rem;border-radius:9px;background:rgba(0,0,0,.4);margin-top:.3rem;overflow:hidden;} .nxt .pb i{display:block;height:100%;background:linear-gradient(90deg,#22d3ff,#7be04a);}
+.ach-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:.5rem;padding:.2rem;} .ach{display:flex;gap:.7rem;align-items:center;padding:.5rem .7rem;border-radius:.9rem;background:rgba(255,255,255,.05);opacity:.6;} .ach .ai{width:2.3rem;height:2.3rem;border-radius:.7rem;display:grid;place-items:center;font-size:1.3rem;flex:none;background:rgba(255,255,255,.1);} .ach.got{opacity:1;background:linear-gradient(90deg,rgba(255,210,63,.18),rgba(255,255,255,.05));box-shadow:inset 0 0 0 .08rem rgba(255,210,63,.45);} .ach.got .ai{background:linear-gradient(180deg,#ffe985,#ffd23f);color:#3a2600;} .ach .an{font-family:var(--font-display);font-size:.92rem;line-height:1.05;} .ach .ad{font-size:.72rem;color:var(--kr-ink-dim);margin-top:.1rem;line-height:1.2;}
+.l-portrait .ach-grid{grid-template-columns:1fr;} .l-compact .ach-grid{grid-template-columns:repeat(2,minmax(0,1fr));}
 .l-portrait .rec-grid{grid-template-columns:1fr;} .l-portrait .stat-tiles{grid-template-columns:repeat(2,minmax(0,1fr));} .l-portrait .tro-cup{grid-template-columns:repeat(3,1fr);} .l-portrait .tro-cup > div:first-child{grid-column:1/-1;}
 .l-compact .rec-grid{grid-template-columns:repeat(2,minmax(0,1fr));} .l-compact .stat-tiles{grid-template-columns:repeat(4,minmax(0,1fr));} .l-compact .rec-wrap{width:96vw;}
 `;
@@ -169,8 +172,11 @@ export class RecordsScreen extends Screen {
     const nxt = h('div', { class: 'nxt' }, next.length ? next.map(({ r, p }) => h('div', { class: 'ni' },
       r.kind === 'driver' ? portrait(r.target, 36) : h('div', { class: 'nic' }, icon(r.kind === 'cup' ? 'cup' : r.kind === 'speedClass' ? 'gauge' : 'flag')),
       h('div', {}, h('div', { class: 'nt' }, unlockName(r)), h('div', { class: 'ns' }, `${r.hint}${p.goal > 1 ? ` (${Math.floor(p.cur)}/${p.goal})` : ''}`), p.goal > 1 ? h('div', { class: 'pb' }, h('i', { style: { width: `${Math.round((p.cur / p.goal) * 100)}%` } })) : null))) : h('div', { class: 'set-note' }, 'Everything is unlocked. Nice driving!'));
+    const done = ACHIEVEMENTS.filter((a) => save.data.achievements[a.id]).length;
+    const ach = { done, el: h('div', { class: 'ach-grid' }, ACHIEVEMENTS.map((a) => { const got = !!save.data.achievements[a.id]; return h('div', { class: `ach${got ? ' got' : ''}`, title: a.desc }, h('div', { class: 'ai' }, icon(got ? a.icon : 'lock')), h('div', {}, h('div', { class: 'an' }, a.name), h('div', { class: 'ad' }, a.desc))); })) };
     return h('div', {},
       h('div', { class: 'stat-tiles' }, tiles.map(([k, v]) => h('div', { class: 'stile' }, h('b', {}, String(v)), h('span', {}, k)))),
+      h('div', {}, h('div', { class: 'set-h' }, `Achievements  ${ach.done}/${ACHIEVEMENTS.length}`), ach.el),
       coll('Drivers', drivers), coll('Karts', bodies), h('div', {}, h('div', { class: 'set-h' }, 'Next unlocks'), nxt));
   }
 }
