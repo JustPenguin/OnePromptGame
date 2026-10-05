@@ -100,7 +100,7 @@ R=45 m hairpins; the baseline Sunny Meadows has few real corners so the margin t
 * **Intro** (`race.phase === 'intro'`, 3.4 s): a quadratic-Bezier crane shot over the grid (high on the left -> beside the pack -> chase pose) whose aim point first sweeps along the REAL circuit ahead of the grid (`track.pointAt`: establishing shot of the first section) and then settles on the pack, smootherstep timing, FOV 44 -> chase FOV.
   The last keyframe is computed with the same numbers as the chase camera at standstill, so the hand-off is seamless (verified: the last intro frame and the first countdown frame are pixel-identical).
   Any key / tap / pad button after 0.35 s skips it (`input.anyPressed` -> `race.skipIntro()`); a skip eases into the chase pose.
-* **Finish**: when the followed kart has finished the camera orbits it; left/right (`input.pressed('left'|'right')`) cycles `session.cameraTarget` through the karts by race position.
+* **Finish**: when the followed kart has finished the camera orbits it; after 5 s it auto-spectates (`cameraRig.autoSpectate`): the best-placed unfinished kart, the next one 2.5 s after each finishes, back to the player when everyone is done (`session.cameraTarget`). left/right (`input.pressed('left'|'right')`) cycles the target manually through the karts by race position and stops the automation.
 * Respawn: slower yaw follow while the drone carries the kart, gentle catch-up afterwards. Slow tabs are safe (all exponential damping, session clamps dt to 50 ms).
 
 ## 3. Input (`core/Input.js`)

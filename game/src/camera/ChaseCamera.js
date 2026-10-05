@@ -52,6 +52,8 @@ export class ChaseCamera {
     this._wasIntro = false;
     this._followed = null;
     this._finishT = 0;
+    this.autoSpectate = true;   // after the player's finish orbit, follow the other karts home (turn off to stay on the player)
+    this._manual = false;       // the player cycled the target themselves: stop auto-selecting
     this._hint = -1;
     this._q = new TrackQuery();
     this._smp = null;       // TrackSample scratch, created from the track on first use
@@ -201,7 +203,17 @@ export class ChaseCamera {
     this.camera.position.copy(this.pos);
     // left / right cycles through the other karts while the race wraps up
     const inp = this.session.app?.input;
-    if (inp && (inp.pressed('left') || inp.pressed('right'))) this.cycleTarget(inp.pressed('right') ? 1 : -1);
+    if (inp && (inp.pressed('left') || inp.pressed('right'))) { this._manual = true; this.cycleTarget(inp.pressed('right') ? 1 : -1); return; }
+    // then spectate: the best-placed kart still racing, the next one as each finishes, finally back to the player
+    if (this.autoSpectate && !this._manual) {
+      const s = this.session, player = s.player;
+      const hold = k === player ? 5 : 2.5;
+      if (this._finishT > hold) {
+        const next = (s.race?.order ?? s.karts).find((o) => o !== player && !o.race.finished);
+        if (next) s.cameraTarget = next;
+        else if (k !== player) s.cameraTarget = null;
+      }
+    }
   }
 
   /** Spectate the next / previous kart (by race position). Sets session.cameraTarget. */

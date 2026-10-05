@@ -123,7 +123,7 @@ export class RaceSession {
     const cfg = this.config;
     const n = cfg.racers;
     // opponents: explicit or auto (distinct drivers, seeded)
-    let opp = cfg.opponents;
+    let opp = cfg.opponents?.length ? cfg.opponents : null;
     if (!opp) {
       const pool = DRIVERS.filter((d) => d.id !== cfg.player.driverId).map((d) => d.id);
       for (let i = pool.length - 1; i > 0; i--) { const j = Math.floor(this.random() * (i + 1)); [pool[i], pool[j]] = [pool[j], pool[i]]; }
