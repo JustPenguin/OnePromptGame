@@ -61,6 +61,7 @@ export class ChaseCamera {
     this._a = new THREE.Vector3(); this._b = new THREE.Vector3(); this._c = new THREE.Vector3();
     this._la = new THREE.Vector3(); this._lb = new THREE.Vector3(); this._lc = new THREE.Vector3();
     this.fovKick = 0;       // legacy field (kept for anything that peeks at it)
+    this._frame = { fov: 0, dist: 1, height: 1 };
 
     const on = (t, f) => session.on(t, f);
     on(EV.WALL_HIT, ({ kart, impact }) => { if (kart === this.target) this.addShake(clamp(impact / 28, 0.12, 0.55)); });
@@ -76,6 +77,20 @@ export class ChaseCamera {
       this.boostKick = Math.max(this.boostKick, k * clamp(strength / 0.38, 0.5, 1.2));
       this.addShake(0.1 + 0.08 * k);
     });
+  }
+
+  /**
+   * Aspect-aware framing: FOV is vertical, so a portrait phone (aspect ~0.46) would see a sliver of the world. Below ~1.35 we widen the
+   * vertical FOV (up to +20 deg) and pull back / up a little; on ultra-wide screens we trim it so the horizontal FOV stays sane.
+   */
+  framing() {
+    const a = this.camera.aspect;
+    const f = this._frame;
+    if (!(a > 0)) { f.fov = 0; f.dist = 1; f.height = 1; return f; }
+    const t = clamp((1.35 - a) / 0.85, 0, 1);
+    const wide = clamp((a - 2.1) / 0.8, 0, 1);
+    f.fov = t * 20 - wide * 6; f.dist = 1 + 0.28 * t; f.height = 1 + 0.2 * t;
+    return f;
   }
 
   /** The kart being followed: session.cameraTarget (spectating) or the player. */
@@ -141,8 +156,9 @@ export class ChaseCamera {
     // distance / height: speed pulls the camera back, a boost pulls it back further for a moment
     const air = !k.grounded ? clamp(k.airTime * 2, 0, 1) : 0;
     const small = 1 - clamp((k.scale - 0.55) / 0.45, 0, 1);                   // 1 while shrunk: come closer so the tiny kart stays readable
-    const dist = (cfg.dist + cfg.speedDist * smoothstep(0, 1.1, ratio) + (reduced ? 0 : this.boostKick * 1.25) + air * 0.4) * (1 - 0.3 * small);
-    const height = (cfg.height + air * 0.5 - (d.dir !== 0 ? 0.12 : 0)) * (1 - 0.2 * small) - this.dip;
+    const fr = this.framing();
+    const dist = (cfg.dist + cfg.speedDist * smoothstep(0, 1.1, ratio) + (reduced ? 0 : this.boostKick * 1.25) + air * 0.4) * (1 - 0.3 * small) * fr.dist;
+    const height = (cfg.height + air * 0.5 - (d.dir !== 0 ? 0.12 : 0)) * (1 - 0.2 * small) * fr.height - this.dip;
 
     // focus: horizontal rigid, vertical smoothed (jumps & landings feel soft, slopes stay glued)
     const f = this.focus;
@@ -157,7 +173,7 @@ export class ChaseCamera {
     this.look.lerp(aim, 1 - Math.exp(-(this.settle > 0 ? 5 : 18) * dt));
 
     // FOV: speed + boost kick + a touch in drifts
-    let fov = cfg.fov;
+    let fov = cfg.fov + fr.fov;
     if (s.settings?.fovBoost !== false && !reduced) fov += Math.pow(clamp(ratio, 0, 1.4), 1.5) * cfg.speedFov + this.boostKick * 9 + (d.dir !== 0 ? 1.5 : 0) + (k.draft.bonus / 0.06) * 2;
     fov -= (1 - clamp(this.session.timeScale ?? 1, 0.35, 1)) * 7;          // photo finish: a longer lens compresses the dead heat
     this.fov = damp(this.fov, fov, 5, dt);
@@ -174,13 +190,14 @@ export class ChaseCamera {
     // ease from the chase yaw into a slow orbit
     const e = smoothstep(0, 1.2, this._finishT);
     const yaw = this.yaw + this.orbit * e;
-    const dist = lerp(cfg.dist, cfg.dist * 1.55, e);
-    const h = lerp(cfg.height, cfg.height * 0.8, e);
+    const fr = this.framing();
+    const dist = lerp(cfg.dist, cfg.dist * 1.55, e) * fr.dist;
+    const h = lerp(cfg.height, cfg.height * 0.8, e) * fr.height;
     const fx = Math.sin(yaw), fz = Math.cos(yaw);
     const desired = this._tmp.set(f.x - fx * dist, f.y + h, f.z - fz * dist);
     this.pos.lerp(desired, 1 - Math.exp(-5 * dt));
     this.look.lerp(this._tmp2.set(f.x, f.y + 0.9, f.z), 1 - Math.exp(-9 * dt));
-    this.fov = damp(this.fov, cfg.fov - 2, 4, dt);
+    this.fov = damp(this.fov, cfg.fov + fr.fov - 2, 4, dt);
     this.camera.position.copy(this.pos);
     // left / right cycles through the other karts while the race wraps up
     const inp = this.session.app?.input;
@@ -250,10 +267,11 @@ export class ChaseCamera {
 
   snap(k, cfg) {
     const fx = Math.sin(this.yaw), fz = Math.cos(this.yaw);
+    const fr = this.framing();
     this.focus.copy(k.position);
-    this.pos.set(k.position.x - fx * cfg.dist, k.position.y + cfg.height, k.position.z - fz * cfg.dist);
+    this.pos.set(k.position.x - fx * cfg.dist * fr.dist, k.position.y + cfg.height * fr.height, k.position.z - fz * cfg.dist * fr.dist);
     this.look.set(k.position.x + fx * cfg.look, k.position.y + cfg.lookUp, k.position.z + fz * cfg.look);
-    this.fov = cfg.fov;
+    this.fov = cfg.fov + fr.fov;
     this.camera.position.copy(this.pos);
   }
 
@@ -276,7 +294,8 @@ export class ChaseCamera {
     // keyframe positions (camera) and aim points
     const c0 = this._c.copy(P).addScaledVector(R, -30).addScaledVector(T, -34); c0.y += 34;
     const c1 = this._tmp.copy(P).addScaledVector(R, -13).addScaledVector(T, -21); c1.y += 11;
-    const c2 = this._tmp2.set(P.x - fx * cfg.dist, P.y + cfg.height, P.z - fz * cfg.dist);
+    const fr = this.framing();
+    const c2 = this._tmp2.set(P.x - fx * cfg.dist * fr.dist, P.y + cfg.height * fr.height, P.z - fz * cfg.dist * fr.dist);
     // the aim point first sweeps along the REAL circuit ahead of the grid (so curvy courses show their first corners), then settles on the pack
     const sP = k.query.s;
     const a0 = track.pointAt(sP + 210, 0, this._la, 2.5);
@@ -285,7 +304,7 @@ export class ChaseCamera {
     bezier3(this.pos, c0, c1, c2, e);
     bezier3(this.look, a0, a1, a2, e);
     cam.position.copy(this.pos);
-    this.fov = lerp(44, cfg.fov, smoothstep(0, 1, e));
+    this.fov = lerp(44 + fr.fov * 0.6, cfg.fov + fr.fov, smoothstep(0, 1, e));
     cam.up.copy(UP);
     cam.lookAt(this.look);
     if (Math.abs(cam.fov - this.fov) > 0.005) { cam.fov = this.fov; cam.updateProjectionMatrix(); }
