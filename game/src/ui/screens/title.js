@@ -41,7 +41,7 @@ const logoWord = (text, cls) => h('span', { class: `lw ${cls}`, 'aria-hidden': '
 export class TitleScreen extends Screen {
   get stage() { return { preset: 'title', kart: true, comp: { x: 0, y: 0.06 }, theme: null }; }
   hints() { return []; }
-  navOptions() { return { onBack: () => {}, wrap: false }; }
+  navOptions() { return { onBack: () => {}, wrap: false, onKey: (e) => this.anyKey(e) }; }
 
   build() {
     const save = this.app.save;
@@ -50,11 +50,6 @@ export class TitleScreen extends Screen {
     this.press.addEventListener('click', () => this.start());
     const notes = [];
     if (!save.persistent) notes.push(h('span', { class: 'note' }, icon('warning'), "Progress can't be saved in this browser mode."));
-    this.onAnyKey = (e) => {
-      if (e.repeat || e.ctrlKey || e.metaKey || e.altKey || ['ShiftLeft', 'ShiftRight', 'ControlLeft', 'ControlRight', 'AltLeft', 'AltRight', 'MetaLeft', 'MetaRight', 'Tab', 'F5', 'F11', 'F12'].includes(e.code)) return;
-      this.start();
-    };
-    window.addEventListener('keydown', this.onAnyKey);
     const root = h('div', { class: 'screen' },
       h('div', { class: 'scrim-top' }), h('div', { class: 'scrim-bottom' }),
       h('div', { class: 'logo' },
@@ -66,6 +61,13 @@ export class TitleScreen extends Screen {
       h('div', { class: 'title-foot' }, h('span', {}, 'An original game. All characters and tracks are made up.'), h('span', {}, notes)));
     root.addEventListener('pointerdown', (e) => { if (e.target === root || e.target.closest('.logo')) this.start(); });
     return root;
+  }
+
+  /** Nav hands us every key first: anything except modifiers / browser shortcuts starts the game. */
+  anyKey(e) {
+    if (e.repeat || e.ctrlKey || e.metaKey || e.altKey || ['ShiftLeft', 'ShiftRight', 'ControlLeft', 'ControlRight', 'AltLeft', 'AltRight', 'MetaLeft', 'MetaRight', 'Tab', 'F5', 'F11', 'F12', 'Escape'].includes(e.code)) return false;
+    this.start();
+    return true;
   }
 
   onDevice(d) { if (this.label) this.label.textContent = PROMPT[d] ?? PROMPT.keyboard; }
@@ -88,5 +90,4 @@ export class TitleScreen extends Screen {
     this.ui.reset('menu', {}, 'fade');
   }
 
-  destroy() { window.removeEventListener('keydown', this.onAnyKey); }
 }

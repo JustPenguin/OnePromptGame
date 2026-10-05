@@ -174,9 +174,9 @@ textarea.txt{resize:none;font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,
 .hintbar.hidden{opacity:0;}
 
 /* ---------------------------------------------------------------- modal */
-.modal-scrim{position:absolute;inset:0;display:grid;place-items:center;padding:1rem;background:radial-gradient(120% 100% at 50% 50%,rgba(6,9,26,.62),rgba(6,9,26,.88));animation:scr-fade .2s ease both;}
+.modal-scrim{position:absolute;inset:0;display:grid;place-items:center;padding:1rem;background:radial-gradient(120% 100% at 50% 50%,rgba(6,9,26,.72),rgba(6,9,26,.92));animation:scr-fade .2s ease both;}
 .modal-scrim.out{animation:scr-fade-out .18s ease both;}
-.modal{width:min(34rem,94vw);max-height:92vh;display:flex;flex-direction:column;padding:0;animation:modal-in .38s var(--ease-spring) both;}
+.modal{width:min(34rem,94vw);max-height:92vh;display:flex;flex-direction:column;padding:0;animation:modal-in .38s var(--ease-spring) both;background:linear-gradient(180deg,#1f2b72,#0e1535);}
 .modal.wide{width:min(46rem,94vw);}
 .modal-scrim.out .modal{animation:modal-out .18s ease both;}
 @keyframes modal-in{from{opacity:0;transform:translateY(1.6rem) scale(.9)}to{opacity:1;transform:none}}

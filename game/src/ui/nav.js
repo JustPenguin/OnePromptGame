@@ -28,6 +28,9 @@ export class Nav {
     this._rep = { dir: null, next: 0 };
     this._onKey = (e) => this._keydown(e);
     window.addEventListener('keydown', this._onKey, true);
+    // Space activates a focused <button> on keyup in some browsers even when keydown was handled: swallow it while a menu is open
+    this._onKeyUp = (e) => { if (this.scope && e.code === 'Space' && !isTyping(e.target) && !this.capturing) { e.preventDefault(); e.stopImmediatePropagation(); } };
+    window.addEventListener('keyup', this._onKeyUp, true);
     window.addEventListener('pointermove', (e) => this._pointerMove(e), { passive: true });
     window.addEventListener('pointerdown', (e) => this._pointerDown(e), { passive: true, capture: true });
     this.root = ui.root;
@@ -41,7 +44,7 @@ export class Nav {
   push(root, opts = {}) {
     const prevTop = this.scope;
     if (prevTop && this.focused) prevTop.last = this.focused;
-    const scope = { root, onBack: opts.onBack, onTab: opts.onTab, onAction: opts.onAction, onStart: opts.onStart, wrap: opts.wrap !== false, last: null, backKeys: opts.backKeys ?? null };
+    const scope = { root, onBack: opts.onBack, onTab: opts.onTab, onAction: opts.onAction, onStart: opts.onStart, onKey: opts.onKey, wrap: opts.wrap !== false, last: null, backKeys: opts.backKeys ?? null };
     this.scopes.push(scope);
     if (opts.autofocus !== false) requestAnimationFrame(() => { if (this.scope === scope) this.autofocus(scope); });
     return scope;
@@ -189,6 +192,7 @@ export class Nav {
     const code = e.code;
     this._setDevice('keyboard');
     let handled = false;
+    if (scope.onKey?.(e)) { e.preventDefault(); e.stopImmediatePropagation(); return; }   // screens may claim a key first (title: any key)
     // inside a text field: Esc / Enter finish editing (never leave the screen); only Up/Down move on
     if (typing && (code === 'Escape' || ((code === 'Enter' || code === 'NumpadEnter') && e.target.tagName !== 'TEXTAREA'))) {
       e.target.blur?.();
@@ -245,7 +249,7 @@ export class Nav {
     this._padPrev = pad.buttons.map((b) => !!b?.pressed);
   }
 
-  dispose() { window.removeEventListener('keydown', this._onKey, true); }
+  dispose() { window.removeEventListener('keydown', this._onKey, true); window.removeEventListener('keyup', this._onKeyUp, true); }
 }
 
 export { clamp };

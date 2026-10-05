@@ -50,6 +50,12 @@ export class UI {
     this.resize();
     window.addEventListener('resize', () => this.resize());
     window.addEventListener('orientationchange', () => setTimeout(() => this.resize(), 120));
+    // every interactive element names its sound with data-sfx; one delegated listener plays it (capture: runs even if a handler stops the event)
+    this.root.addEventListener('click', (e) => {
+      const el = e.target.closest?.('[data-sfx]');
+      if (!el) return;
+      this.sfx(el.getAttribute('aria-disabled') === 'true' ? 'error' : el.dataset.sfx);
+    }, true);
     // browsers only allow audio after a gesture: unlock on the very first one, wherever it happens
     const unlock = () => { this.app.audio?.unlock?.(); window.removeEventListener('pointerdown', unlock, true); window.removeEventListener('keydown', unlock, true); };
     window.addEventListener('pointerdown', unlock, true);

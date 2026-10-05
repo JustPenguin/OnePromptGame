@@ -220,7 +220,7 @@ export class Leaderboard {
 export class DriftMeter {
   constructor() {
     this.segs = [0, 1, 2].map(() => h('i'));
-    this.el = h('div', { class: 'drift', 'aria-hidden': 'true' }, this.segs);
+    this.el = h('div', { class: 'dmeter', 'aria-hidden': 'true' }, this.segs);
     this.label = h('div', { class: 'driftlbl' });
     this.prevLevel = 0;
     this.times = KartPhysics['DRIFT_LEVEL_TIME'] ?? [0.85, 1.7, 2.7];

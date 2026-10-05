@@ -66,6 +66,14 @@ export class App {
       const s = this.session;
       if (s?.loaded && !this.paused && s.race.phase !== 'results') this.setPaused(true);
     });
+    // losing window focus mid-race (alt-tab, clicking the host page around the iframe) pauses too, after a short grace period
+    window.addEventListener('blur', () => {
+      setTimeout(() => {
+        const s = this.session;
+        if (document.hasFocus() || !s?.loaded || this.paused || this._hold) return;
+        if (s.race.phase === 'racing' || s.race.phase === 'countdown') this.setPaused(true);
+      }, 250);
+    });
     // unexpected errors in event handlers: keep playing, tell the player once
     let warned = false;
     const soft = (e) => { console.error(e?.error ?? e?.reason ?? e); if (!warned) { warned = true; this.ui.toast({ title: 'Something hiccuped', text: 'If anything looks odd, reload the page.', kind: 'bad', icon: 'warning' }); } };

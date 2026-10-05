@@ -254,6 +254,8 @@ export class Hud {
     if (race.phase !== this._phase) { this._phase = race.phase; this.root.dataset.phase = race.phase; }
 
     // position
+    const solo = session.karts.length <= 1;
+    if (solo !== this._solo) { this._solo = solo; this.posEl.style.display = solo ? 'none' : ''; this.board.el.style.display = solo ? 'none' : ''; }
     const place = me.race.place;
     if (place !== this._place) {
       this._place = place;

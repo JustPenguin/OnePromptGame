@@ -8,9 +8,9 @@ import { clamp } from '../../core/math.js';
 
 const MIN_HOLD_MS = 90;
 const BTN_LAYOUT = {
-  // [size, right, bottom] in em (relative to the HUD font-size * touchScale)
-  manual: { gas: [6.4, 1.2, 1.4], drift: [5, 8.4, 1.8], item: [4.6, 2.4, 8.8], brake: [4, 9, 7.8] },
-  auto: { drift: [6.4, 1.2, 1.4], item: [4.8, 2.4, 8.8], brake: [4.2, 8.8, 2] },
+  // [size, right, bottom] in em (relative to the HUD font-size * touchScale); one set per layout mode and per accelerator mode
+  manual: { gas: [6.4, 1.2, 1.4], drift: [5, 8.4, 1.8], item: [4.4, 2.2, 8.6], brake: [3.8, 9.4, 7.4] },
+  auto: { drift: [6.4, 1.2, 1.4], item: [4.6, 2.2, 8.6], brake: [4, 8.8, 2] },
 };
 
 export class TouchControls {
@@ -38,7 +38,7 @@ export class TouchControls {
       el.addEventListener('pointerup', up); el.addEventListener('pointercancel', up); el.addEventListener('lostpointercapture', up);
       el.addEventListener('contextmenu', (e) => e.preventDefault());
     };
-    mk('gas', 'up', 'GAS', 'gas'); mk('brake', 'down', 'BRAKE', 'brake'); mk('drift', 'drift', 'DRIFT', 'drift'); mk('item', 'bolt', 'ITEM', 'item');
+    mk('gas', 'up', 'GAS', 't-gas'); mk('brake', 'down', 'BRAKE', 't-brake'); mk('drift', 'drift', 'DRIFT', 't-drift'); mk('item', 'bolt', 'ITEM', 't-item');
     this._bindZone();
     this.applySettings();
   }
@@ -101,7 +101,8 @@ export class TouchControls {
     const st = this.app.settings;
     const auto = !!st.assists?.autoAccelerate;
     const lay = auto ? BTN_LAYOUT.auto : BTN_LAYOUT.manual;
-    this.root.style.fontSize = `${st.touchScale ?? 1}em`;
+    const compact = document.getElementById('ui-root')?.classList.contains('l-compact');
+    this.root.style.fontSize = `${(st.touchScale ?? 1) * (compact ? 0.86 : 1)}em`;
     for (const [id, el] of Object.entries(this.btns)) {
       const l = lay[id];
       el.style.display = l ? '' : 'none';

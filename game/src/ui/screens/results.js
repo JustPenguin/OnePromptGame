@@ -17,6 +17,7 @@ export const resultsCss = /* css */ `
 .res-place{display:flex;align-items:flex-end;gap:1rem;}
 .place-n{font-family:var(--font-display);font-size:9rem;line-height:.82;transform:skewX(-8deg);background:linear-gradient(180deg,#fff,var(--pc,#ff9a2a));-webkit-background-clip:text;background-clip:text;color:transparent;filter:drop-shadow(0 .28rem 0 rgba(0,0,0,.55)) drop-shadow(0 0 1.6rem var(--pg,rgba(255,150,40,.5)));animation:place-in .8s var(--ease-spring) both;}
 @keyframes place-in{from{opacity:0;transform:skewX(-8deg) scale(2.2) rotate(-6deg)}to{opacity:1;transform:skewX(-8deg)}}
+.place-n.tt{font-size:5.4rem;line-height:.9;}
 .place-t{padding-bottom:.6rem;}
 .place-t .h2{font-size:2rem;color:var(--pc,#fff);}
 .res-times{display:grid;grid-template-columns:auto 1fr;gap:.2rem 1rem;align-items:baseline;}
@@ -51,8 +52,8 @@ export const resultsCss = /* css */ `
 .rrow.me{background:linear-gradient(90deg,rgba(255,122,26,.42),rgba(255,122,26,.12));box-shadow:inset .3rem 0 0 var(--kr-accent);}
 .rrow.me .nm::after{content:'YOU';font-family:var(--font-ui);font-weight:900;font-size:.62rem;letter-spacing:.12em;padding:.1rem .45rem;border-radius:99px;background:var(--kr-accent);color:#fff;}
 .rrow.dnf .tm{color:var(--kr-bad);}
-.l-portrait .s-results{flex-direction:column;overflow:auto;gap:.8rem;} .l-portrait .place-n{font-size:5.4rem;} .l-portrait .res-right{flex:none;} .l-portrait .res-left{flex:none;justify-content:flex-start;} .l-portrait .place-t .h2{font-size:1.4rem;} .l-portrait .res-stats{grid-template-columns:repeat(2,minmax(0,1fr));} .l-portrait .res-table .th,.l-portrait .rrow{grid-template-columns:2rem 2.4rem minmax(0,1fr) 5.4rem 4.2rem;gap:.5rem;padding:.3rem .6rem;}
-.l-compact .s-results{gap:1rem;} .l-compact .res-left{gap:.4rem;justify-content:flex-start;overflow:auto;} .l-compact .place-n{font-size:4.6rem;} .l-compact .place-t{padding-bottom:.2rem;} .l-compact .place-t .h2{font-size:1.2rem;} .l-compact .res-times .v{font-size:1.2rem;} .l-compact .res-times .k{font-size:.66rem;} .l-compact .res-stats{display:none;} .l-compact .res-badges .chip{font-size:.74rem;padding:.15rem .6rem;} .l-compact .unlock-card{padding:.3rem .7rem .3rem .4rem;} .l-compact .unlock-card .ui-ic{width:1.9rem;height:1.9rem;font-size:1.1rem;} .l-compact .unlock-card .portrait{width:1.9rem;height:1.9rem;} .l-compact .unlock-card .ut{font-size:.8rem;} .l-compact .unlock-card .us{font-size:.7rem;} .l-compact .res-actions{margin-top:.1rem;gap:.7rem;}
+.l-portrait .s-results{flex-direction:column;overflow:auto;gap:.8rem;} .l-portrait .place-n{font-size:5.4rem;} .l-portrait .place-n.tt{font-size:3.6rem;} .l-portrait .res-right{flex:none;} .l-portrait .res-left{flex:none;justify-content:flex-start;} .l-portrait .place-t .h2{font-size:1.4rem;} .l-portrait .res-stats{grid-template-columns:repeat(2,minmax(0,1fr));} .l-portrait .res-table .th,.l-portrait .rrow{grid-template-columns:2rem 2.4rem minmax(0,1fr) 5.4rem 4.2rem;gap:.5rem;padding:.3rem .6rem;}
+.l-compact .s-results{gap:1rem;} .l-compact .res-left{gap:.4rem;justify-content:flex-start;overflow:auto;} .l-compact .place-n{font-size:4.6rem;} .l-compact .place-n.tt{font-size:3rem;} .l-compact .place-t{padding-bottom:.2rem;} .l-compact .place-t .h2{font-size:1.2rem;} .l-compact .res-times .v{font-size:1.2rem;} .l-compact .res-times .k{font-size:.66rem;} .l-compact .res-stats{display:none;} .l-compact .res-badges .chip{font-size:.74rem;padding:.15rem .6rem;} .l-compact .unlock-card{padding:.3rem .7rem .3rem .4rem;} .l-compact .unlock-card .ui-ic{width:1.9rem;height:1.9rem;font-size:1.1rem;} .l-compact .unlock-card .portrait{width:1.9rem;height:1.9rem;} .l-compact .unlock-card .ut{font-size:.8rem;} .l-compact .unlock-card .us{font-size:.7rem;} .l-compact .res-actions{margin-top:.1rem;gap:.7rem;}
 .l-compact .res-right{justify-content:flex-start;overflow:auto;} .l-compact .res-table .th{padding:.3rem .7rem 0;font-size:.6rem;} .l-compact .rrow{min-height:2.25rem;padding:.1rem .7rem;grid-template-columns:1.6rem 1.9rem minmax(0,1fr) 5rem 3.6rem;gap:.45rem;} .l-compact .rrow .portrait{width:1.7rem;height:1.7rem;} .l-compact .rrow .pl{font-size:1.05rem;} .l-compact .rrow .nm{font-size:.9rem;} .l-compact .rrow .tm{font-size:.82rem;} .l-compact .rrow .gap{font-size:.7rem;}
 `;
 
@@ -131,9 +132,17 @@ export class ResultsScreen extends Screen {
       h('div', { class: 'scrim-all' }),
       h('div', { class: 'res-left' },
         h('div', { class: 'kicker' }, `${def.name} · ${{ grandprix: 'Grand Prix', timetrial: 'Time Trial', versus: 'Versus Race' }[s.mode] ?? 'Race'}`),
-        h('div', { class: 'res-place' }, h('div', { class: 'place-n' }, s.finished ? ordinal(s.place) : 'DNF'), h('div', { class: 'place-t' }, h('div', { class: 'h2' }, ps.t))),
+        this._headline(s, ps),
         times, badges, stats, unlocks, h('div', { class: 'res-actions' }, acts)),
-      h('div', { class: 'res-right' }, h('div', { class: 'panel res-table' }, h('div', { class: 'th' }, h('span', {}, '#'), h('span', {}), h('span', {}, 'Racer'), h('span', { style: { textAlign: 'right' } }, 'Time'), h('span', { style: { textAlign: 'right' } }, 'Gap')), rows)));
+      s.racers <= 1 ? null : h('div', { class: 'res-right' }, h('div', { class: 'panel res-table' }, h('div', { class: 'th' }, h('span', {}, '#'), h('span', {}), h('span', {}, 'Racer'), h('span', { style: { textAlign: 'right' } }, 'Time'), h('span', { style: { textAlign: 'right' } }, 'Gap')), rows)));
+  }
+
+  /** Big headline: your place (races) or your time (solo Time Trial, where "1st" means nothing). */
+  _headline(s, ps) {
+    if (s.racers <= 1 && s.finished) {
+      return h('div', { class: 'res-place' }, h('div', { class: 'place-n tt' }, formatTime(s.time)), h('div', { class: 'place-t' }, h('div', { class: 'h2' }, s.newRecord ? 'New record!' : 'Finished')));
+    }
+    return h('div', { class: 'res-place' }, h('div', { class: 'place-n' }, s.finished ? ordinal(s.place) : 'DNF'), h('div', { class: 'place-t' }, h('div', { class: 'h2' }, ps.t)));
   }
 
   _nextTrack() {
