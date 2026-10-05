@@ -258,14 +258,13 @@ export class KartPhysics {
     const W = this._wall;
     if (k._wallCool > 0) k._wallCool -= h;
     if (!this.track.resolveWalls(q, k.radius * k.scale, W)) {
-      k._wallT = 0;
       k._wallGap += h;
       if (k.scraping && k._wallGap > 0.12) { k.scraping = false; this.events.emit(EV.WALL_SCRAPE, { kart: k, active: false }); }
       return;
     }
-    const fresh = k._wallGap > 0.06;          // first contact after a gap = a real impact; otherwise we are sliding along it
+    const gap = k._wallGap;
+    const fresh = gap > 0.06;                 // first contact after a gap = a real impact; otherwise we are sliding along it
     k._wallGap = 0;
-    k._wallT += h;
     k.position.x += W.nx * W.depth;
     k.position.z += W.nz * W.depth;
     const f = Math.sin(k.moveYaw), g = Math.cos(k.moveYaw);
@@ -309,9 +308,9 @@ export class KartPhysics {
         this.events.emit(EV.WALL_HIT, { kart: k, impact, point: pt, normal: nm });
       }
     }
-    // pressed against the wall: keep scraping (small continuous drag), announce it once
-    k.speed -= k.speed * T.wallDrag * h * (k.speed > 0 ? 1 : 0);
-    if (!k.scraping && k._wallT > 0.05 && Math.abs(k.speed) > 3) { k.scraping = true; this.events.emit(EV.WALL_SCRAPE, { kart: k, active: true }); }
+    // sliding along the wall: continuous drag. Contact is intermittent between sub-steps, so charge the time since the last contact.
+    if (!fresh && k.speed > 0) k.speed *= Math.exp(-T.wallDrag * Math.min(0.1, gap + h));
+    if (!fresh && !k.scraping && Math.abs(k.speed) > 3) { k.scraping = true; this.events.emit(EV.WALL_SCRAPE, { kart: k, active: true }); }
   }
 
   // ------------------------------------------------------------------ ground / air

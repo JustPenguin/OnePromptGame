@@ -56,7 +56,7 @@ export const T = {
   wallBounce: 0.18,          // restitution of the normal velocity component
   wallScrape: 0.025,         // tangential speed lost per impact even when scraping flat
   wallAngleLoss: 0.45,       // extra tangential loss ~ sin^2(impact angle)
-  wallDrag: 0.22,            // continuous speed loss rate (1/s) while pressed against a wall
+  wallDrag: 0.16,            // continuous speed loss rate (1/s) while sliding along a wall
   wallAlign: 16,             // 1/s: how fast the nose swings parallel to the wall on a shallow hit
   wallAlignSliding: 22,      // ... while already sliding along it
   wallHitMin: 3.5,           // m/s into the wall that fires EV.WALL_HIT

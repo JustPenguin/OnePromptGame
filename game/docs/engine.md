@@ -33,11 +33,11 @@ Roster (`src/data/roster.js`) is unchanged: `topSpeed, accel, grip, mass, driftT
 | turn radius @ 20 m/s, full lock | 12-16 m | 13.1 m |
 | turn radius @ top speed, full lock | 22-32 m | 28.2 m |
 | free full-lock turn (speed bleeds to) | - | 84 % of top |
-| drift mini-turbo levels (steering into the drift) | 0.85 / 1.7 / 2.7 s of charge | blue 0.9, orange 1.8, pink 2.9 s (from pressing drift) |
+| drift mini-turbo levels | 0.85 / 1.7 / 2.7 s of charge | blue 0.8 / orange 1.6 / pink 2.5 s with the stick fully into the corner; 1.0 / 2.0 / 3.2 s with a light steer (from pressing drift) |
 | drift radius @ 28 m/s: inside / neutral / outside | tighter + wider than plain | 15.6 / 27.4 / 115 m (plain full lock 21.4 m) |
 | off-road (grass) speed | ~55 % | 60 % (Pip), 68 % (Bruno, heavy), 58 % (Quill) |
 | brake top speed -> 0 | - | 1.0 s |
-| wall scrape 8 deg / 15 deg / 30 deg / 60 deg / head-on | keeps most / ... / real loss | keeps 89 % / 85 % / 65 % / 21 % / ~0 % |
+| wall scrape 8 deg / 15 deg / 30 deg / 60 deg / head-on | keeps most / ... / real loss | keeps 87 % / 82 % / 61 % / 21 % / ~0 % (0.6 s after contact) |
 | chain-hit protection | no chain spins | spin 1.3 s + 0.9 s grace |
 | 12-kart physics step | <= 0.6 ms | 0.03 ms (browser, 12 karts) |
 | ghost size, 3 laps | <= 40 KB | 25.6 KB JSON |
@@ -67,7 +67,7 @@ R=45 m hairpins; the baseline Sunny Meadows has few real corners so the margin t
 * **Longitudinal**: `a = launch * (1 - v/cap)` (exponential approach: strong launch, long taper). Boosts surge toward the boosted cap at <= 30 m/s^2 (a start boost must not teleport the kart),
   and the last 0.35 s of a boost taper out (no cliff). Over-cap speed is shed at 1.7/s + 4 m/s^2.
 * **Walls**: first contact after a gap is an *impact* (normal part bounces 18 %, tangential part loses 2.5 % + 45 % sin^2(angle)); continued contact is *sliding* (wall acts as a guide,
-  22 %/s drag, nose swings parallel). Fires EV.WALL_HIT (impact > 3.5 m/s, 0.18 s cooldown) and, newly, **EV.WALL_SCRAPE** `{kart, active}` (starts after 50 ms of contact, ends 120 ms after).
+  16 %/s drag charged by time since the previous contact, nose swings parallel). Fires EV.WALL_HIT (impact > 3.5 m/s, 0.18 s cooldown) and, newly, **EV.WALL_SCRAPE** `{kart, active}` (starts on a repeat contact within 60 ms of the previous one while moving > 3 m/s, ends 120 ms after the last contact; a single bounce is not a scrape).
 * **Kart vs kart**: circles r = 1.15 x scale; effective mass = `mass^1.7 * scale^2`; invincible / rocket karts get x12 mass (barge through; `EV.BUMP.ram` = that kart); restitution 0.4;
   time-based 0.25 s event cooldown. No tunnelling: relative speeds up to 80 m/s move < 0.7 m per 1/120 s sub-step vs 2.3 m contact distance.
 * **Spin-out / launch**: spin angle is a pure function of elapsed time (2 turns, ease-out), speed bleeds 1.7/s. `spinOut()`/`launch()` return **false** when blocked and set `kart.blockReason`

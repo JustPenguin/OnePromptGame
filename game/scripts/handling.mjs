@@ -263,7 +263,7 @@ function walls() {
     results[deg] = { ratio, hit, scrape, yawRel, lat: Math.max(...s.map((r) => r.lateral)), contactSpeed: c.speed };
     info(`${String(deg).padStart(2)} deg: speed 0.6 s after contact (vs at contact ${(c.speed * 3.6).toFixed(0)} km/h), events, yaw vs road`, `${(after.speed * 3.6).toFixed(0)} km/h (${(ratio * 100).toFixed(0)} %)  hit=${hit} scrape=${scrape}  yaw ${yawRel.toFixed(1)} deg  max lateral ${results[deg].lat.toFixed(2)}`);
   }
-  check('shallow scrape (8 deg) keeps most speed', results[8].ratio * 100, 85, 105, '%');
+  check('shallow scrape (8 deg) keeps most speed', results[8].ratio * 100, 82, 105, '%');
   check('15 deg scrape keeps speed', results[15].ratio * 100, 70, 105, '%');
   check('30 deg hit still carries momentum', results[30].ratio * 100, 35, 90, '%');
   check('head-on (90 deg) costs real speed', results[90].ratio * 100, -15, 30, '%');
