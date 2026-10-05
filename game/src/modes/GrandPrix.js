@@ -5,6 +5,7 @@
 //   gp.finished / gp.finalRows / gp.playerPlace / gp.trophy
 import { DRIVERS, KART_BODIES } from '../data/roster.js';
 import { mulberry32 } from '../core/math.js';
+import { paramNum } from '../core/params.js';
 import { pointsForPlace, trophyForPlace } from './points.js';
 
 export class GrandPrixRun {
@@ -13,8 +14,10 @@ export class GrandPrixRun {
     this.speedClass = speedClass;
     this.seed = seed ?? ((Math.random() * 0xffffffff) >>> 0);
     this.index = 0;                       // races completed
-    this.tracks = cup.tracks;
+    this.tracks = cup.tracks.slice(0, paramNum('gpraces', 0) || undefined);   // ?gpraces=N: QA shortcut
     this.history = [];                    // per race: [{key, place, points}]
+    this.lastRecord = null;               // result of the latest record(): { rows, gained, prev }
+    this.recorded = false;                // career/trophy bookkeeping done for the finished cup
     const rng = mulberry32(this.seed);
     // fixed field: the player + (racers-1) distinct rivals, each with a body picked once so identities stay stable
     const pool = DRIVERS.filter((d) => d.id !== driverId).map((d) => d.id);
@@ -43,7 +46,7 @@ export class GrandPrixRun {
     const order = sorted ? others : [...others].sort(() => rng() - 0.5);   // race 1: shuffled; after that: by standings
     const playerGrid = sorted ? sorted.findIndex((e) => e.isPlayer) : 'last';
     return {
-      mode: 'grandprix', trackId: def.id, laps: def.laps ?? 3, speedClass: this.speedClass, racers: this.entrants.length,
+      mode: 'grandprix', trackId: def.id, laps: paramNum('gplaps', 0) || (def.laps ?? 3), speedClass: this.speedClass, racers: this.entrants.length,
       player: { driverId: this.player.driverId, bodyId: this.player.bodyId, name: this.player.name },
       opponents: order.map((e) => ({ driverId: e.driverId, bodyId: e.bodyId })),
       playerGrid, items: true, seed: (this.seed + this.index * 7919) >>> 0,
@@ -67,7 +70,8 @@ export class GrandPrixRun {
     }
     this.history.push(entry);
     this.index++;
-    return { rows: this.rows(), gained, prev };
+    this.lastRecord = { rows: this.rows(), gained, prev };
+    return this.lastRecord;
   }
 
   get playerPlace() { return this.rows().find((r) => r.isPlayer)?.rank ?? this.entrants.length; }

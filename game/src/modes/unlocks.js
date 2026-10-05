@@ -5,7 +5,8 @@
 //   when.type 'stat'    -> save.stats[stat] >= gte
 //   when.type 'trophy'  -> some Grand Prix result (cup '*' = any, cls '*' = any) at least `min` (bronze < silver < gold)
 //   when.type 'records' -> number of record entries (time-trial + race) >= gte
-import { UNLOCK_ALL } from './catalog.js';
+import { UNLOCK_ALL, getCup } from './catalog.js';
+import { getDriver, getBody, SPEED_CLASSES } from '../data/roster.js';
 
 export const UNLOCK_RULES = [
   { kind: 'driver', target: 'luna',      when: { type: 'stat', stat: 'races', gte: 3 },              hint: 'Finish 3 races' },
@@ -70,4 +71,13 @@ export function evaluateUnlocks(save) {
   }
   if (fresh.length) save.commit(true);
   return fresh;
+}
+
+/** Display name for an unlock entry ({kind, target}). */
+export function unlockName(u) {
+  if (u.kind === 'driver') return getDriver(u.target).name;
+  if (u.kind === 'body') return getBody(u.target).name;
+  if (u.kind === 'speedClass') return `${SPEED_CLASSES[u.target]?.name ?? u.target} class`;
+  if (u.kind === 'cup') return getCup(u.target)?.name ?? `${u.target.replace(/^./, (c) => c.toUpperCase())} Cup`;
+  return u.target;
 }

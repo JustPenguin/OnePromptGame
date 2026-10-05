@@ -7,6 +7,7 @@ import { ResultsScreen, resultsCss } from './results.js';
 import { DriverScreen, KartScreen, ClassScreen, selectCss } from './select.js';
 import { CupScreen, TrackScreen, cupsCss } from './cups.js';
 import { VersusSetupScreen, vsetupCss } from './vsetup.js';
+import { StandingsScreen, PodiumScreen, gpCss } from './gp.js';
 import { trackCardCss } from '../trackCard.js';
 
 export const SCREENS = {
@@ -21,6 +22,8 @@ export const SCREENS = {
   cup: CupScreen,
   track: TrackScreen,
   vsetup: VersusSetupScreen,
+  standings: StandingsScreen,
+  podium: PodiumScreen,
 };
 
-export const SCREEN_CSS = [titleCss, menuCss, loadingCss, pauseCss, resultsCss, trackCardCss, selectCss, cupsCss, vsetupCss];
+export const SCREEN_CSS = [titleCss, menuCss, loadingCss, pauseCss, resultsCss, trackCardCss, selectCss, cupsCss, vsetupCss, gpCss];

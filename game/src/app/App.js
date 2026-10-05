@@ -191,7 +191,7 @@ export class App {
     this.audio?.playMusic?.('menu');
     const gp = flow?.gp;
     if (!gp) { this.ui.reset('menu'); return; }
-    this.ui.reset(gp.finished ? 'podium' : 'standings', {}, 'fade');
+    this.ui.reset('standings', {}, 'fade');      // after the last race too: the final table, then its "Podium" button
   }
 
   _onResults(session, standings) {

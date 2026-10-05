@@ -7,6 +7,7 @@ import { formatTime, ordinal } from '../../core/math.js';
 import { getDriver } from '../../data/roster.js';
 import { getTrackDef } from '../../modes/catalog.js';
 import { TROPHY_COLORS } from '../../modes/points.js';
+import { unlockName } from '../../modes/unlocks.js';
 
 export const resultsCss = /* css */ `
 .s-results{flex-direction:row;gap:1.6rem;align-items:stretch;}
@@ -96,7 +97,7 @@ export class ResultsScreen extends Screen {
         .map(([k, v]) => h('div', { class: 'rs' }, h('b', {}, v), h('span', {}, k)))) : null;
 
     const unlocks = h('div', { class: 'res-unlocks' }, (s.unlocked ?? []).map((u, i) => {
-      const nm = this._unlockName(u);
+      const nm = unlockName(u);
       return h('div', { class: 'unlock-card', style: { '--i': i } },
         h('div', { class: 'ui-ic' }, u.kind === 'driver' ? portrait(u.target, 42) : icon(u.kind === 'cup' ? 'cup' : u.kind === 'speedClass' ? 'gauge' : 'flag')),
         h('div', {}, h('div', { class: 'ut' }, `New ${u.kind === 'speedClass' ? 'class' : u.kind === 'body' ? 'kart' : u.kind} unlocked`), h('div', { class: 'us' }, nm)));
@@ -134,11 +135,6 @@ export class ResultsScreen extends Screen {
         h('div', { class: 'res-place' }, h('div', { class: 'place-n' }, s.finished ? ordinal(s.place) : 'DNF'), h('div', { class: 'place-t' }, h('div', { class: 'h2' }, ps.t))),
         times, badges, stats, unlocks, h('div', { class: 'res-actions' }, acts)),
       h('div', { class: 'res-right' }, h('div', { class: 'panel res-table' }, h('div', { class: 'th' }, h('span', {}, '#'), h('span', {}), h('span', {}, 'Racer'), h('span', { style: { textAlign: 'right' } }, 'Time'), h('span', { style: { textAlign: 'right' } }, 'Gap')), rows)));
-  }
-
-  _unlockName(u) {
-    if (u.kind === 'driver') return getDriver(u.target).name;
-    return u.rule?.hint ? u.target.replace(/^./, (c) => c.toUpperCase()) : u.target;
   }
 
   _nextTrack() {

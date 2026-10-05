@@ -13,6 +13,7 @@
 import * as THREE from 'three';
 import { Reflector } from 'three/addons/objects/Reflector.js';
 import { createKartShowcase } from '../vehicles/KartVisuals.js';
+import { PodiumStage } from './Podium.js';
 import { clamp, damp, lerp, wrapAngle } from '../core/math.js';
 
 const PRESETS = {
@@ -20,7 +21,7 @@ const PRESETS = {
   select: { dist: 6.6, height: 1.75, look: [0, 0.8, 0], fov: 37, base: 0.5, sway: 0.2, speed: 0.19, spin: 0.55 },
   wide:   { dist: 10, height: 3.2, look: [0, 0.6, 0], fov: 39, base: 0.5, sway: 0.14, speed: 0.12, spin: 0.3 },
   dim:    { dist: 11, height: 3.4, look: [0, 0.4, 0], fov: 41, base: 0.45, sway: 0.1, speed: 0.1, spin: 0.2 },
-  podium: { dist: 12.5, height: 3.0, look: [0, 1.7, 0], fov: 38, base: 0, sway: 0.1, speed: 0.12, spin: 0 },
+  podium: { dist: 14.5, height: 3.4, look: [0, 1.6, 0], fov: 38, base: 0, sway: 0.08, speed: 0.12, spin: 0 },
 };
 
 /** Look applied to the renderer's post chain (Agent C) while a menu is on screen. */
@@ -52,6 +53,7 @@ export class MenuScene {
     this.showcase = null;
     this.leaving = [];
     this.podium = null;
+    this._podiumTimer = 0;
     this._disposables = [];
     this._build();
     this._bindPointer();
@@ -75,6 +77,7 @@ export class MenuScene {
     this._buildStage();
     this._buildBackdrop();
     this._buildParticles();
+    this.podium = new PodiumStage(scene);
 
     this.turntable = new THREE.Group();
     this.turntable.position.y = 0.06;
@@ -341,8 +344,24 @@ export class MenuScene {
 
   setKartVisible(v) {
     this.kartVisible = !!v;
-    if (this.showcase?.holder) this.showcase.holder.visible = this.kartVisible && !this.podium?.group.visible;
-    this.shadow.visible = this.kartVisible && !this.podium?.group.visible;
+    const pv = !!this.podium?.group.visible;
+    if (this.showcase?.holder) this.showcase.holder.visible = this.kartVisible && !pv;
+    this.shadow.visible = this.kartVisible && !pv;
+  }
+
+  /** Grand Prix finale: top-3 karts rise on a podium with confetti; `trophy` ('gold'|'silver'|'bronze'|null) spins in front. */
+  showPodium(entries, { trophy = null } = {}) {
+    this.setKartVisible(false);
+    this.podium.show(entries, { trophy });
+    clearTimeout(this._podiumTimer);
+    this._podiumTimer = setTimeout(() => this.podium?.confetti(9), 1700);
+    this.shadow.visible = false;
+  }
+
+  hidePodium() {
+    clearTimeout(this._podiumTimer);
+    this.podium?.hide();
+    this.setKartVisible(this.kartVisible !== false);
   }
 
   setPreset(name) { if (PRESETS[name]) { this.preset = name; } }
@@ -440,7 +459,7 @@ export class MenuScene {
       }
       this.particles.geometry.attributes.position.needsUpdate = true;
     }
-    this.podium?.update?.(dt, t);
+    this.podium?.update(dt, t);
   }
 
   _applyComposition() {
@@ -460,6 +479,7 @@ export class MenuScene {
   dispose() {
     for (const o of this._disposables) o.dispose?.();
     this._env?.dispose?.();
+    this.podium?.dispose();
     this.scene.traverse((o) => { o.geometry?.dispose?.(); if (o.material && !o.material.isShaderMaterial) o.material.dispose?.(); });
   }
 }

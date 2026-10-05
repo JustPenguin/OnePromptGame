@@ -135,7 +135,7 @@ export const hudCss = /* css */ `
 .banner.fin > div{background:linear-gradient(90deg,transparent,rgba(79,181,42,.94) 12%,rgba(123,224,74,.96) 50%,rgba(79,181,42,.94) 88%,transparent);color:#0e2a05;text-shadow:0 .06em 0 rgba(255,255,255,.35);}
 .banner.fin.stay.show{animation:banner-stay .6s cubic-bezier(.2,1,.3,1) both;} @keyframes banner-stay{from{opacity:0;transform:translateX(-60%)}to{opacity:1;transform:none}}
 .banner small{display:block;font-family:var(--font-ui);font-weight:900;font-size:.28em;letter-spacing:.2em;margin-top:.2em;}
-.wrongway{position:absolute;left:50%;top:26%;transform:translateX(-50%);display:flex;align-items:center;gap:.6em;padding:.25em 1em;font-size:3em;color:#fff;background:linear-gradient(180deg,#ff5577,#d6193f);border-radius:.4em;box-shadow:0 .1em 0 #7a0f27,0 0 1em rgba(255,61,106,.8);opacity:0;pointer-events:none;}
+.wrongway{position:absolute;left:50%;top:36%;transform:translateX(-50%);display:flex;align-items:center;gap:.6em;padding:.25em 1em;font-size:3em;color:#fff;background:linear-gradient(180deg,#ff5577,#d6193f);border-radius:.4em;box-shadow:0 .1em 0 #7a0f27,0 0 1em rgba(255,61,106,.8);opacity:0;pointer-events:none;}
 .wrongway.on{opacity:1;animation:ww .6s steps(2) infinite;} .noflash .wrongway.on{animation:none;}
 .wrongway .ico{font-size:1.1em;} @keyframes ww{50%{opacity:.35}}
 .intro{position:absolute;left:0;top:30%;display:flex;flex-direction:column;gap:.3em;padding:1em 3em 1em 2em;transform:translateX(-110%) skewX(-10deg);transform-origin:left;background:linear-gradient(90deg,rgba(8,12,34,.92),rgba(20,30,90,.86) 70%,transparent);animation:none;pointer-events:none;}
@@ -158,14 +158,13 @@ export const hudCss = /* css */ `
 /* ------------------------------------------------------------ full-screen effect layers */
 .fx{position:absolute;inset:0;pointer-events:none;opacity:0;}
 .fx-boost{background:radial-gradient(ellipse at center,transparent 52%,rgba(34,211,255,.18) 78%,rgba(120,240,255,.55) 100%);mix-blend-mode:screen;transition:opacity .12s;}
-.fx-star{opacity:0;background:radial-gradient(ellipse at center,transparent 55%,rgba(255,255,255,.0) 70%),conic-gradient(from 0deg,rgba(255,61,106,.55),rgba(255,210,63,.55),rgba(123,224,74,.55),rgba(34,211,255,.55),rgba(139,77,255,.55),rgba(255,61,106,.55));-webkit-mask:radial-gradient(ellipse at center,transparent 62%,#000 100%);mask:radial-gradient(ellipse at center,transparent 62%,#000 100%);animation:hue 2.4s linear infinite;}
+.fx-star{opacity:0;background:conic-gradient(from 0deg,#ff3d6a,#ffd23f,#7be04a,#22d3ff,#8b4dff,#ff3d6a);-webkit-mask:radial-gradient(ellipse at center,transparent 78%,#000 100%);mask:radial-gradient(ellipse at center,transparent 78%,#000 100%);animation:hue 2.4s linear infinite;}
 @keyframes hue{to{filter:hue-rotate(360deg)}} .noflash .fx-star{animation:none;}
 .fx-shield{background:radial-gradient(ellipse at center,transparent 58%,rgba(34,211,255,.45) 100%);}
 .fx-rocket{background:radial-gradient(ellipse at center,transparent 50%,rgba(255,122,26,.5) 100%);}
 .fx-shrink{background:radial-gradient(ellipse at center,transparent 60%,rgba(139,77,255,.4) 100%);}
-.fx-ink{opacity:0;overflow:hidden;}
-.fx-ink i{position:absolute;display:block;border-radius:50%;background:radial-gradient(circle at 35% 30%,#4b3a8a 0,#1a1238 38%,#0a0720 72%);box-shadow:inset -.4em -.5em 1em rgba(0,0,0,.6),0 0 1.4em rgba(10,6,30,.9);}
-.fx-ink i::after{content:'';position:absolute;left:18%;top:14%;width:26%;height:18%;border-radius:50%;background:rgba(255,255,255,.18);transform:rotate(-25deg);}
+.fx-ink{opacity:0;overflow:hidden;transform-origin:50% 30%;} .fx-ink canvas{width:100%;height:100%;display:block;} .fx-ink.splat{animation:inksplat .22s cubic-bezier(.2,1.3,.4,1);}
+@keyframes inksplat{from{transform:scale(1.35)}to{transform:scale(1)}}
 .status{display:flex;gap:.45em;}
 .chipst{display:inline-flex;align-items:center;gap:.35em;padding:.2em .7em .2em .4em;border-radius:99px;font-size:.95em;background:rgba(8,12,34,.72);box-shadow:inset 0 0 0 .08em var(--sc,#fff);}
 .chipst .ico{color:var(--sc,#fff);font-size:1.15em;} .chipst small{font-family:var(--font-ui);font-weight:900;font-size:.7em;letter-spacing:.1em;}

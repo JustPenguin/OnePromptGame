@@ -5,7 +5,51 @@ import { icon } from '../icons.js';
 import { clamp, damp } from '../../core/math.js';
 import { setText } from './widgets.js';
 
-const INK_BLOBS = 7;
+const INK_BLOBS = 6;
+const rnd = (a, b) => a + Math.random() * (b - a);
+
+/** One organic ink splat: a wobbly closed curve, glossy radial fill, flung droplets and a drip or two. */
+function drawSplat(g, cx, cy, r) {
+  const n = 16;
+  const pts = [];
+  for (let i = 0; i < n; i++) {
+    const a = (i / n) * Math.PI * 2 + rnd(-0.08, 0.08);
+    const spike = Math.random() < 0.2 ? rnd(1.25, 1.55) : 1;
+    const rr = r * rnd(0.72, 1.12) * spike;
+    pts.push([cx + Math.cos(a) * rr, cy + Math.sin(a) * rr]);
+  }
+  const path = () => {
+    g.beginPath();
+    for (let i = 0; i < n; i++) {
+      const p0 = pts[i], p1 = pts[(i + 1) % n];
+      const mx = (p0[0] + p1[0]) / 2, my = (p0[1] + p1[1]) / 2;
+      if (i === 0) { const pl = pts[n - 1]; g.moveTo((pl[0] + p0[0]) / 2, (pl[1] + p0[1]) / 2); }
+      g.quadraticCurveTo(p0[0], p0[1], mx, my);
+    }
+    g.closePath();
+  };
+  // drips first (they sit behind the body)
+  const drips = Math.floor(rnd(1, 3.4));
+  for (let d = 0; d < drips; d++) {
+    const x = cx + rnd(-0.6, 0.6) * r, len = r * rnd(0.5, 1.15), w = r * rnd(0.09, 0.16);
+    g.fillStyle = '#150d38';
+    g.beginPath(); g.roundRect?.(x - w / 2, cy + r * 0.3, w, len, w / 2); g.fill();
+    g.beginPath(); g.arc(x, cy + r * 0.3 + len, w * 0.85, 0, 6.2832); g.fill();
+  }
+  const grad = g.createRadialGradient(cx - r * 0.3, cy - r * 0.35, r * 0.08, cx, cy, r * 1.25);
+  grad.addColorStop(0, '#56429e'); grad.addColorStop(0.28, '#271a5a'); grad.addColorStop(0.7, '#0e0830'); grad.addColorStop(1, '#070418');
+  path(); g.fillStyle = grad; g.fill();
+  g.lineWidth = r * 0.04; g.strokeStyle = 'rgba(150,130,255,.28)'; g.stroke();
+  g.fillStyle = 'rgba(255,255,255,.2)';
+  g.beginPath(); g.ellipse(cx - r * 0.38, cy - r * 0.42, r * 0.2, r * 0.1, -0.5, 0, 6.2832); g.fill();
+  // flung droplets
+  const m = Math.floor(rnd(4, 9));
+  for (let i = 0; i < m; i++) {
+    const a = rnd(0, 6.2832), dd = r * rnd(1.25, 1.95), rr = r * rnd(0.05, 0.13);
+    g.fillStyle = '#12093a';
+    g.beginPath(); g.arc(cx + Math.cos(a) * dd, cy + Math.sin(a) * dd, rr, 0, 6.2832); g.fill();
+  }
+}
 
 export class Effects {
   constructor() {
@@ -13,7 +57,8 @@ export class Effects {
     this.shield = h('div', { class: 'fx fx-star' });
     this.rocket = h('div', { class: 'fx fx-rocket' });
     this.shrink = h('div', { class: 'fx fx-shrink' });
-    this.ink = h('div', { class: 'fx fx-ink' });
+    this.inkCanvas = h('canvas', { width: 960, height: 540 });
+    this.ink = h('div', { class: 'fx fx-ink' }, this.inkCanvas);
     this.el = h('div', { class: 'fxwrap', style: { position: 'absolute', inset: 0, pointerEvents: 'none' } }, this.boost, this.shield, this.rocket, this.shrink, this.ink);
     this.v = { boost: 0, shield: 0, rocket: 0, shrink: 0, ink: 0 };
     this.prevInk = 0;
@@ -21,13 +66,13 @@ export class Effects {
   }
 
   _splat() {
-    this.ink.replaceChildren();
+    const c = this.inkCanvas, g = c.getContext('2d');
+    g.clearRect(0, 0, c.width, c.height);
     for (let i = 0; i < INK_BLOBS; i++) {
-      const size = 16 + Math.random() * 26;                 // % of the viewport's smaller side
-      const b = h('i', { style: { width: `${size}vmin`, height: `${size * (0.8 + Math.random() * 0.35)}vmin`, left: `${6 + Math.random() * 78}%`, top: `${4 + Math.random() * 62}%`, transform: 'scale(.1)', transition: `transform ${0.18 + Math.random() * 0.2}s cubic-bezier(.2,1.4,.4,1)` } });
-      this.ink.appendChild(b);
-      requestAnimationFrame(() => requestAnimationFrame(() => { b.style.transform = `scale(1) rotate(${Math.round(Math.random() * 40 - 20)}deg)`; }));
+      const big = i < 2;
+      drawSplat(g, c.width * rnd(0.14, 0.86), c.height * rnd(big ? 0.18 : 0.08, big ? 0.55 : 0.7), Math.min(c.width, c.height) * (big ? rnd(0.17, 0.25) : rnd(0.08, 0.15)));
     }
+    this.ink.classList.remove('splat'); void this.ink.offsetWidth; this.ink.classList.add('splat');
   }
 
   update(dt, kart, snap) {
