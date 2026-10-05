@@ -165,7 +165,7 @@ export class KartVisual {
     defs.forEach((d, i) => { if (d.parent) this.bones[A.rig.index.get(d.parent)].add(this.bones[i]); });
     const I = (n) => A.rig.index.get(n) ?? -1;
     this.i = {
-      chassis: I('chassis'), hip: I('hip'), torso: I('torso'), head: I('head'), steerFL: I('steerFL'), steerFR: I('steerFR'),
+      chassis: I('chassis'), fender: I('fender'), hip: I('hip'), torso: I('torso'), head: I('head'), steerFL: I('steerFL'), steerFR: I('steerFR'),
       wheelFL: I('wheelFL'), wheelFR: I('wheelFR'), wheelRL: I('wheelRL'), wheelRR: I('wheelRR'), steerWheel: I('steerWheel'),
       armL: I('armL'), armR: I('armR'), foreL: I('foreL'), foreR: I('foreR'),
     };
@@ -412,6 +412,7 @@ export class KartVisual {
     const ch = B[I.chassis];
     ch.position.set(0, suspY, 0);
     ch.scale.set(1 + sq * 0.45, 1 - sq, 1 + sq * 0.45);
+    if (I.fender >= 0) B[I.fender].position.set(0, Math.max(suspY, -(this.assets.body.fenderClear ?? 0.02)), 0);
 
     // ---- wheels
     const WR = this.wheelRadius;

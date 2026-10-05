@@ -212,6 +212,7 @@ export const STREAK = {
   steer: { pos: [0, 0.82, 0.36], axis: [0, 0.5, -0.86], radius: 0.19 },
   exhaust: [[0.36, 0.36, -1.7], [-0.36, 0.36, -1.7]],
   size: { length: 3.2, width: 1.98, height: 1.1 },
+  fenderClear: 0.04,                       // tyre-to-arch gap: the fender bone never sinks further than this
 };
 
 function buildStreak(B, rig, pal) {
@@ -239,8 +240,8 @@ function buildStreak(B, rig, pal) {
   for (const x of [-0.18, 0, 0.18]) B.add(rbox(0.05, 0.14, 0.42, 0.02, 1), { p: [x, 0.3, -1.6], r: [0.28, 0, 0], ...M.plastic, c: '#15171f', bone: 'chassis', tag: 'diffuser' });
   // fenders over the rear wheels + small arches over the fronts
   const R = S.wheels.RL, F = S.wheels.FL;
-  B.add(archGeo(R.r + 0.05, R.r + 0.12, 0.2, Math.PI - 0.2, R.w + 0.12), { p: [R.x, R.y, R.z], ...M.paint, c: pal.paint, decal: true, bone: 'chassis', mirror: true, tag: 'fender' });
-  B.add(archGeo(F.r + 0.04, F.r + 0.09, 0.45, Math.PI - 0.45, F.w + 0.1), { p: [F.x, F.y, F.z], ...M.paint, c: pal.paint, bone: 'chassis', mirror: true, tag: 'fender' });
+  B.add(archGeo(R.r + 0.05, R.r + 0.12, 0.2, Math.PI - 0.2, R.w + 0.12), { p: [R.x, R.y, R.z], ...M.paint, c: pal.paint, decal: true, bone: 'fender', mirror: true, tag: 'fender' });
+  B.add(archGeo(F.r + 0.04, F.r + 0.09, 0.45, Math.PI - 0.45, F.w + 0.1), { p: [F.x, F.y, F.z], ...M.paint, c: pal.paint, bone: 'fender', mirror: true, tag: 'fender' });
   // big rear wing: pylons, plane, endplates, gurney
   B.add(rbox(0.07, 0.5, 0.16, 0.03), { p: [0.34, 0.95, -1.38], ...M.panel, c: '#20232e', bone: 'chassis', mirror: true, tag: 'wing' });
   B.add(rbox(1.78, 0.05, 0.44, 0.02), { p: [0, 1.2, -1.45], r: [0.1, 0, 0], ...M.paint, c: pal.stripe, decal: true, bone: 'chassis', tag: 'wing' });
@@ -267,6 +268,7 @@ export const HOPPER = {
   steer: { pos: [0, 1.0, 0.36], axis: [0, 0.6, -0.8], radius: 0.2 },
   exhaust: [[0.34, 0.74, -1.55], [-0.34, 0.74, -1.55]],
   size: { length: 3.1, width: 2.3, height: 1.7 },
+  fenderClear: 0.017,
 };
 
 function buildHopper(B, rig, pal) {
@@ -299,8 +301,8 @@ function buildHopper(B, rig, pal) {
   // big flared fenders
   const R = S.wheels.RL, F = S.wheels.FL;
   // (clearance covers the knobs: lug tips reach r + 0.106 behind, r + 0.062 in front)
-  B.add(archGeo(R.r + 0.125, R.r + 0.205, 0.1, Math.PI - 0.1, R.w + 0.14), { p: [R.x, R.y, R.z], ...M.paint, c: pal.paint, decal: true, bone: 'chassis', mirror: true, tag: 'fender' });
-  B.add(archGeo(F.r + 0.08, F.r + 0.145, 0.35, Math.PI - 0.35, F.w + 0.12), { p: [F.x, F.y, F.z], ...M.paint, c: pal.paint, bone: 'chassis', mirror: true, tag: 'fender' });
+  B.add(archGeo(R.r + 0.125, R.r + 0.205, 0.1, Math.PI - 0.1, R.w + 0.14), { p: [R.x, R.y, R.z], ...M.paint, c: pal.paint, decal: true, bone: 'fender', mirror: true, tag: 'fender' });
+  B.add(archGeo(F.r + 0.08, F.r + 0.145, 0.35, Math.PI - 0.35, F.w + 0.12), { p: [F.x, F.y, F.z], ...M.paint, c: pal.paint, bone: 'fender', mirror: true, tag: 'fender' });
   // front bumper + skid plate, tail lights
   B.add(tube([[-0.5, 0.42, 0.9], [-0.4, 0.4, 1.5], [0.4, 0.4, 1.5], [0.5, 0.42, 0.9]], 0.06, { rs: 8 }), { ...M.chrome, c: CHROME, bone: 'chassis', tag: 'bumper' });
   B.add(rbox(0.8, 0.05, 0.5, 0.02), { p: [0, 0.27, 1.25], ...M.steel, c: '#59607a', bone: 'chassis', tag: 'skid' });
@@ -328,6 +330,7 @@ export const CRUSHER = {
   steer: { pos: [0, 1.04, 0.36], axis: [0, 0.58, -0.81], radius: 0.2 },
   exhaust: [[0.64, 1.68, -0.92], [-0.64, 1.68, -0.92]],
   size: { length: 3.1, width: 2.4, height: 1.8 },
+  fenderClear: 0.02,
 };
 
 function buildCrusher(B, rig, pal) {
@@ -364,8 +367,8 @@ function buildCrusher(B, rig, pal) {
   // fender plates over the wheels
   const R = S.wheels.RL, F = S.wheels.FL;
   // (lug tips reach r + 0.088, so the plates sit 0.02 above them)
-  B.add(archGeo(R.r + 0.11, R.r + 0.19, 0.15, Math.PI - 0.15, R.w + 0.1), { p: [R.x, R.y, R.z], ...M.paint, c: pal.paint, decal: true, bone: 'chassis', mirror: true, tag: 'fender' });
-  B.add(archGeo(F.r + 0.11, F.r + 0.19, 0.3, Math.PI - 0.3, F.w + 0.1), { p: [F.x, F.y, F.z], ...M.paint, c: pal.paint, bone: 'chassis', mirror: true, tag: 'fender' });
+  B.add(archGeo(R.r + 0.11, R.r + 0.19, 0.15, Math.PI - 0.15, R.w + 0.1), { p: [R.x, R.y, R.z], ...M.paint, c: pal.paint, decal: true, bone: 'fender', mirror: true, tag: 'fender' });
+  B.add(archGeo(F.r + 0.11, F.r + 0.19, 0.3, Math.PI - 0.3, F.w + 0.1), { p: [F.x, F.y, F.z], ...M.paint, c: pal.paint, bone: 'fender', mirror: true, tag: 'fender' });
   const W = S.wheels;
   addWheel(B, pal, { ...W.FL, bone: 'wheelFL', bm: 'wheelFR', hub: 'disc', rim: '#59607a', lugs: 12, lugH: 0.1, lugW: 0.15, band: pal.accent });
   addWheel(B, pal, { ...W.RL, bone: 'wheelRL', bm: 'wheelRR', hub: 'disc', rim: '#59607a', lugs: 12, lugH: 0.1, lugW: 0.16, band: pal.accent });
@@ -386,6 +389,7 @@ export function addCoreBones(rig, spec) {
   const fl = W.FL, rl = W.RL ?? W.FL;
   rig.add('root', null, [0, 0, 0]);
   rig.add('chassis', 'root', [0, 0, 0]);
+  rig.add('fender', 'root', [0, 0, 0]);   // follows the chassis (ride height, roll, pitch) but never squashes, so arches keep their tyre clearance
   rig.add('steerFL', 'root', [fl.x, fl.y, fl.z]);
   rig.add('steerFR', 'root', [-fl.x, fl.y, fl.z]);
   rig.add('wheelFL', 'steerFL', [fl.x, fl.y, fl.z]);
