@@ -296,8 +296,8 @@ export class KartPhysics {
     if (k.grounded) {
       const prevY = k.position.y;
       const ballistic = prevY + k.vy * h - 0.5 * T.gravity * h * h;
-      if (ballistic > ground + 0.2 && k.vy > 1.5) {
-        // the ground fell away faster than gravity: launch (crest / ramp lip)
+      if ((ballistic > ground + 0.2 && k.vy > 1.5) || prevY - ground > 0.6) {
+        // the ground fell away faster than gravity (crest / ramp lip), or dropped away in one step (stepped edge): leave the ground
         k.grounded = false;
         k.position.y = prevY + k.vy * h;
         k.air.trick = !!inp.drift && k.speed > k.stats.topSpeed * 0.5;
@@ -505,6 +505,10 @@ export class KartPhysics {
       const ax = clamp((k.speed - (k._prevSpeed ?? k.speed)) / dt, -50, 40);
       k.pitch = damp(k.pitch, clamp(ax * 0.0035, -0.09, 0.07), 9, dt);
     }
+    // tyre slip for smoke / skid marks / sound
+    k.slipAngle = angleDiff(k.heading + k.drift.angle, k.moveYaw);
+    const skidT = k.grounded && Math.abs(k.speed) > 4 ? clamp(Math.abs(k.slipAngle) / 0.5 + Math.abs(k.slide) / 9, 0, 1) : 0;
+    k.skid = damp(k.skid, skidT, 18, dt);
     k._prevSpeed = k.speed;
   }
 }

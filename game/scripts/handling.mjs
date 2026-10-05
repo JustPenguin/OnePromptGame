@@ -515,6 +515,51 @@ function abuse() {
   }
 }
 
+function chaos() {
+  section('Chaos soak (12 bots + seeded random item effects, spins, launches, teleports)');
+  for (const [name, def] of [['coaster (hills, banking, ramp)', DEFS.coaster], ['sunny meadows', DEFS.meadows]]) {
+    const rig = newRig(def, { laps: 4 });
+    const L = rig.track.length;
+    const ks = [];
+    for (let i = 0; i < 12; i++) ks.push(rig.addKart({ driver: DRIVERS[i % 8].id, body: KART_BODIES[(i * 3) % 4].id, s: L - 6 - i * 4, lateral: (i % 2 ? 1 : -1) * 3.2, speed: 0, player: i === 0 }));
+    const race = rig.startRace(); race.setPhase('countdown');
+    const bots = ks.map((k, i) => makeBot(rig.session, k, { drift: i % 3 !== 2, chainLevel: i % 2 ? 2 : 0 }));
+    let s = 12345; const rnd = () => ((s = (s * 1664525 + 1013904223) >>> 0) / 4294967296);
+    let bad = 0, t = 0;
+    const distAt = new Map(ks.map((k) => [k.id, 0]));
+    let stuck = 0, maxRespawn = 0;
+    const respawnSince = new Map();
+    const dtF = 1 / 60;
+    for (let i = 0; i < 60 * 150; i++) {
+      for (const b of bots) b();
+      if (race.phase === 'racing' && i % 20 === 0) {
+        const k = ks[Math.floor(rnd() * ks.length)];
+        const r = rnd();
+        if (r < 0.22) k.spinOut(0.8 + rnd(), 'chaos');
+        else if (r < 0.34) k.launch(8 + rnd() * 6, 'chaos');
+        else if (r < 0.5) k.applyBoost(0.2 + rnd() * 0.25, 0.5 + rnd(), 'item');
+        else if (r < 0.6) k.shrinkFor(2 + rnd() * 3);
+        else if (r < 0.68) k.setInvincible(2 + rnd() * 3);
+        else if (r < 0.72) k.setRocket(1 + rnd() * 2);
+        else if (r < 0.78) rig.physics.respawnKart(k, 'manual');
+        else if (r < 0.84) { const tt = rig.track.getRespawn(rnd() * L, (rnd() - 0.5) * 8); k.placeAt(tt.position, tt.yaw + (rnd() - 0.5), 10 + rnd() * 25); }
+        else if (r < 0.88) k.addCoins(1 + Math.floor(rnd() * 3));
+      }
+      rig.step(dtF); t += dtF;
+      for (const k of ks) {
+        if (!Number.isFinite(k.position.x + k.position.y + k.position.z + k.speed + k.yaw + k.slide + k.vy + k.scale)) bad++;
+        if (k.respawn.active) { respawnSince.set(k.id, (respawnSince.get(k.id) ?? 0) + dtF); maxRespawn = Math.max(maxRespawn, respawnSince.get(k.id)); } else respawnSince.set(k.id, 0);
+      }
+      if (race.phase === 'results') break;
+    }
+    const unfinished = ks.filter((k) => !k.race.finished).length;
+    info(`${name}: sim time ${t.toFixed(0)} s, phase ${race.phase}, finished ${ks.length - unfinished}/12`, Object.entries(rig.counts).filter(([k]) => /spin|launch|respawn|wallHit|bump|draft|jump|land/.test(k)).map(([k, v]) => `${k.split(':')[1]}=${v}`).join(' '));
+    check(`${name}: no non-finite state`, bad, 0, 0, '');
+    check(`${name}: a rescue never lasts longer than the drone flight`, maxRespawn, 0, 2.0, 's');
+    check(`${name}: races still end (karts keep making progress through the chaos)`, race.phase === 'results' || ks.filter((k) => k.race.progress > 0.5).length >= 8 ? 1 : 0, 1, 1, '');
+  }
+}
+
 function perf() {
   section('Performance');
   const rig = newRig(DEFS.strip);
@@ -577,7 +622,7 @@ function terrain() {
   }
 }
 
-const sections = { longitudinal, steering, drift, offroad, walls, karts, spinAndAir, slipstream, frameRate, lapValue, terrain, abuse, perf };
+const sections = { longitudinal, steering, drift, offroad, walls, karts, spinAndAir, slipstream, frameRate, lapValue, terrain, abuse, chaos, perf };
 for (const [name, fn] of Object.entries(sections)) if (want(name)) { try { fn(); } catch (e) { failures++; console.log(`  FAIL ${name} threw: ${e.stack}`); } }
 if (args.roster || (only && only.includes('roster'))) rosterTable();
 console.log(`\n${failures === 0 ? 'HANDLING REPORT: all targets met' : `HANDLING REPORT: ${failures} target(s) missed`}`);

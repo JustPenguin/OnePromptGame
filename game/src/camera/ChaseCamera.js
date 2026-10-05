@@ -15,7 +15,7 @@
 //  * shake is deterministic smooth noise (no Math.random) so it reads as rumble, not static.
 import * as THREE from 'three';
 import { EV } from '../core/events.js';
-import { clamp, damp, dampAngle, lerp, smoothstep, wrapAngle, angleDiff } from '../core/math.js';
+import { clamp, damp, dampAngle, lerp, smoothstep, angleDiff } from '../core/math.js';
 import { TrackQuery } from '../track/SplineTrack.js';
 
 // dist/height: metres behind/above the focus point; look: metres ahead of the kart to aim at; fov: base vertical FOV (deg)

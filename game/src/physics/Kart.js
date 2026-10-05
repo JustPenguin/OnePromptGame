@@ -58,6 +58,8 @@ export class Kart {
     this.spinAngle = 0;           // extra yaw while spinning out (already included in yaw)
     this.pitch = 0;               // visual body pitch (rad), + = nose up: squat on acceleration, dive under braking (NOT in orientation)
     this.lean = 0;                // visual body roll (rad), + = roll to the right
+    this.slipAngle = 0;           // chassis (incl. drift angle, excl. spin) vs travel direction, rad (+ = nose left of travel)
+    this.skid = 0;                // 0..1 how hard the tyres are sliding right now (drifts, hard slides, impacts): drives smoke / skid marks
 
     // ---- surface ----
     this.query = new TrackQuery();
