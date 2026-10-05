@@ -167,3 +167,23 @@ and `page.screenshot` (see `docs/TESTING.md`). `scripts/lib/rig.mjs` builds real
 * Slope (uphill/downhill) does not change speed; banking is visual + height only (no extra grip).
 * Camera clearance only knows the road surface and the corridor walls; scenery that overhangs the road (tunnels, trees) is not avoided.
 * Stretch not done: replay camera at results.
+
+## 8. Integration notes
+### AI drift planning (Agent D's `AIDriver`) - recommended 20-line change
+`AIDriver.driftControl/planDrift` model the *baseline* drift (`baseRate = steerRate * driftTurn * 0.95`, window 0.5x..1.18x = 1.0..2.4 rad/s for Pip). This engine's drift holds 0.19..1.73 rad/s at 30 m/s
+(`driftYawRange`), and typical corners need 0.3..0.9 rad/s, so with the baseline model the AI rejects almost every corner ("rate"): on a scratch merge of A+B+D (8 AI racers, 2 laps, `pro`) they drifted
+0 / 10 / 62 / 0 / 2 times per race on Sunny Meadows / Cactus Canyon / Frostbite Peak / Harbor Heights / Neon Nights. With the change below (guarded, so it still runs on the baseline engine) they drift 26 / 69 / 107 / 114 / 88 times,
+0 wall hits inside drifts, 0-2 other wall hits per race, and the field finishes closer together (the slowest AI is 3-5 % faster, the fastest within +-2 %, except Neon Nights -6 %). In `AIDriver.driftControl` / `planDrift`:
+```js
+// driftControl(): after `const baseRate = ...`
+const phys = this.session.physics;
+const rg = phys?.steerForYawRate && phys?.driftYawRange ? phys.driftYawRange(k, Math.max(v, top * 0.8), this._rg ??= { min: 0, neutral: 0, max: 0 }) : null;
+... this.planDrift(s, v, top, baseRate, rg);
+// in the 'in a drift' branch, instead of inverting the baseline mapping:
+if (rg) out.steer = phys.steerForYawRate(k, turnSide * clamp(4.6 * eTurn, rg.min, rg.max));   // exact stick for that turn rate
+else { /* old wDes / along inversion */ }
+// planDrift(s, v, top, baseRate, rg = null): replace the 'rate' window check by
+if (rg ? (need < rg.min * 1.5 || need > rg.max * 0.92) : (need < 0.5 * baseRate || need > 1.18 * baseRate)) { dr.dbg.why = 'rate'; return; }
+```
+Without the change nothing breaks: `kart.driftAssist` is off by default, so the AI's drift-relative sticks are used as they are (0 wall hits in drifts on all five tracks; it just drifts rarely).
+
