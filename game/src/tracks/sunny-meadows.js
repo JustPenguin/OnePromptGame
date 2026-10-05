@@ -1,7 +1,7 @@
-// Track DEFINITION = pure data.  The runtime (SplineTrack) turns it into geometry + queries.
-// points: [x, y, z, width?, bankDeg?]  (closed loop, first point = start/finish line, road runs toward point 1)
-// zones:  [{ type: 'boost'|'ramp'|'ice'|'mud'|'sand'|'water', s, length, lateral?, width, height? }]  (s = metres from the line)
-// This one is the BASELINE oval-ish loop; Agent B turns it into the real "Sunny Meadows" and adds the other 7 courses.
+// SUNNY MEADOWS (Blossom Cup 1) - the friendly first lap.  Wide forgiving sweepers, gentle banking, a flowing esse over a crest,
+// a wooden bridge over the stream, a windmill hill and a sunflower chicane.  Difficulty 1.
+// Track DEFINITION = data.  The layout is a fillet polygon compiled to control points (src/tracks/layout.js); the scenery
+// recipe is src/world/recipes/sunny-meadows.js.  Zones / item rows are placed by marker so they follow the layout when edited.
 export const sunnyMeadows = {
   id: 'sunny-meadows',
   name: 'Sunny Meadows',
@@ -10,18 +10,28 @@ export const sunnyMeadows = {
   music: 'meadow',
   laps: 3,
   difficulty: 1,
-  description: 'Rolling green hills and a lazy windmill. A friendly first lap.',
-  width: 16,
+  description: 'Rolling green hills, a babbling stream and a lazy windmill. A friendly first lap.',
+  width: 18,
   shoulder: 6,
-  palette: { skyTop: '#3d8bff', skyHorizon: '#cfe9ff', ground: '#5da13a', accent: '#ffd23f' },
-  points: [
-    [0, 0, 0], [0, 0, 140], [20, 0.5, 250, 16, -2], [90, 1.5, 330, 16, -6], [190, 2.5, 350, 16, -6],
-    [270, 3, 300, 16, -6], [300, 3, 200], [260, 2, 110], [180, 1, 70], [150, 0.5, -10, 13, 4],
-    [190, 0, -90, 13, 3], [170, 0, -190], [90, 0, -250, 16, -4], [-10, 0, -230, 16, -4], [-80, 0, -200, 14],
-    [-35, 0, -140, 15], [0, 0, -80, 16],
-  ],
+  palette: { skyTop: '#3d8bff', skyHorizon: '#cfe9ff', ground: '#5da13a', accent: '#ffd23f', ui: { primary: '#5fd35a', secondary: '#ffd23f' } },
+  layout: {
+    width: 18,
+    start: { at: 'T', offset: 100 },
+    v: [
+      { id: 'T', x: 335, z: -175, r: 115, y: 0, w: 20, bank: 4 },
+      { id: 'A', x: 335, z: 245, r: 105, y: 4, bank: 5, w: 18 },
+      { id: 'B', x: 190, z: 318, r: 95, y: 8, bank: 4 },
+      { id: 'C', x: 40, z: 270, r: 95, y: 7, bank: 5 },
+      { id: 'D', x: -120, z: 345, r: 80, y: 2, bank: 4 },
+      { id: 'E', x: -345, z: 285, r: 52, y: 0.5, bank: 6 },
+      { id: 'F', x: -300, z: 90, r: 70, y: 6, bank: 4 },
+      { id: 'G', x: -340, z: -40, r: 60, y: 10, bank: 3 },
+      { id: 'H', x: -230, z: -150, r: 70, y: 8, bank: 3 },
+      { id: 'I', x: -60, z: -150, r: 90, y: 5, bank: 4 },
+      { id: 'J', x: 110, z: -225, r: 110, y: 3, bank: 4 },
+    ],
+  },
   zones: [
-    { type: 'boost', s: 190, length: 12, lateral: 0, width: 5 },
-    { type: 'boost', s: 900, length: 12, lateral: -3, width: 4 },
+    { type: 'boost', at: 'T>', offset: 120, length: 14, lateral: 0, width: 6 },
   ],
 };

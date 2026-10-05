@@ -1,0 +1,344 @@
+// Procedural texture library (canvas 2D, no external assets).  OWNER: Agent B.
+// Every function returns a fresh THREE.CanvasTexture built from a CACHED source canvas (small LRU), so re-loading a track is
+// fast while GPU memory is released when the World disposes its textures.  All textures are sRGB, mip-mapped + anisotropic.
+// Ground/road textures are tileable; `uvMeters` documents how many metres one tile should cover.
+import * as THREE from 'three';
+import { mulberry32 } from '../core/math.js';
+import { makeTileNoise } from './noise.js';
+
+const LRU_MAX = 22;
+const lru = new Map();
+
+function cachedCanvas(key, make) {
+  let c = lru.get(key);
+  if (c) { lru.delete(key); lru.set(key, c); return c; }
+  c = make();
+  lru.set(key, c);
+  while (lru.size > LRU_MAX) lru.delete(lru.keys().next().value);
+  return c;
+}
+
+function canvas(w, h) {
+  const c = document.createElement('canvas');
+  c.width = w; c.height = h;
+  const g = c.getContext('2d', { willReadFrequently: false });
+  return [c, g];
+}
+
+export function toTexture(cv, { repeat = true, aniso = 8, mirror = false } = {}) {
+  const t = new THREE.CanvasTexture(cv);
+  t.colorSpace = THREE.SRGBColorSpace;
+  if (repeat) t.wrapS = t.wrapT = mirror ? THREE.MirroredRepeatWrapping : THREE.RepeatWrapping;
+  t.anisotropy = aniso;
+  t.needsUpdate = true;
+  return t;
+}
+
+const hexRgb = (hex) => { const n = parseInt(String(hex).replace('#', ''), 16); return [(n >> 16) & 255, (n >> 8) & 255, n & 255]; };
+const mix3 = (a, b, t) => [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t, a[2] + (b[2] - a[2]) * t];
+const rgba = (c, a = 1) => `rgba(${c[0] | 0},${c[1] | 0},${c[2] | 0},${a})`;
+
+/** Draw a soft tileable noise layer (colour ramp dark->light) scaled up with bilinear filtering over the whole canvas. */
+function noiseLayer(g, W, H, { seed = 1, period = 4, oct = 4, gain = 0.5, dark, light, alpha = 1, res = 128, contrast = 1 }) {
+  const tn = makeTileNoise(seed);
+  const [lc, lg] = canvas(res, res);
+  const img = lg.createImageData(res, res);
+  const d = hexRgb(dark), l = hexRgb(light);
+  for (let y = 0; y < res; y++) for (let x = 0; x < res; x++) {
+    let n = tn.fbm(x / res, y / res, period, oct, gain);
+    n = Math.min(1, Math.max(0, (n - 0.5) * contrast + 0.5));
+    const o = (y * res + x) * 4;
+    img.data[o] = d[0] + (l[0] - d[0]) * n; img.data[o + 1] = d[1] + (l[1] - d[1]) * n; img.data[o + 2] = d[2] + (l[2] - d[2]) * n; img.data[o + 3] = 255;
+  }
+  lg.putImageData(img, 0, 0);
+  g.save();
+  g.globalAlpha = alpha;
+  g.imageSmoothingEnabled = true; g.imageSmoothingQuality = 'high';
+  g.drawImage(lc, 0, 0, W, H);
+  g.restore();
+}
+
+/** Run `draw(dx,dy)` once, plus wrapped copies when a feature of radius r at (x,y) touches a tile border (tileable art). */
+function wrapped(W, H, x, y, r, draw) {
+  draw(0, 0);
+  const nx = x < r ? 1 : x > W - r ? -1 : 0, ny = y < r ? 1 : y > H - r ? -1 : 0;
+  if (nx) draw(nx * W, 0);
+  if (ny) draw(0, ny * H);
+  if (nx && ny) draw(nx * W, ny * H);
+}
+
+// ------------------------------------------------------------------------------------------------------------------
+// ROAD
+/**
+ * style: { base, light, dark, wear, line, centerLine:'dash'|'double'|'solid'|'none', edgeLine:true, centerColor, edgeColor,
+ *          glowEdge (neon): colour, cracks:0..1, patches:0..1, speckle:0..1, rubber:0..1, gloss (wet sheen strokes) }
+ * Texture space: u across the road [0,1] (width varies in metres per track), v along it (tile = 12 m).
+ */
+export function roadTexture(style = {}) {
+  const s = { base: '#4f525e', light: '#666a78', dark: '#3a3d48', wear: '#2b2d36', edgeLine: true, centerLine: 'dash', edgeColor: '#f6f4ea', centerColor: '#f2efe2', cracks: 0.6, patches: 0.5, speckle: 1, rubber: 0.6, seed: 11, ...style };
+  const cv = cachedCanvas('road:' + JSON.stringify(s), () => {
+    const W = 1024, H = 1024;
+    const [c, g] = canvas(W, H);
+    g.fillStyle = s.base; g.fillRect(0, 0, W, H);
+    noiseLayer(g, W, H, { seed: s.seed, period: 3, oct: 4, dark: s.dark, light: s.light, alpha: 0.85, contrast: 1.6 });
+    const rnd = mulberry32(s.seed * 97);
+    // tyre-polished racing lines: two soft darker bands + a lighter rubbered centre
+    if (s.rubber > 0) {
+      for (const [u, w] of [[0.30, 0.12], [0.70, 0.12]]) {
+        const grd = g.createLinearGradient((u - w) * W, 0, (u + w) * W, 0);
+        grd.addColorStop(0, rgba(hexRgb(s.wear), 0)); grd.addColorStop(0.5, rgba(hexRgb(s.wear), 0.38 * s.rubber)); grd.addColorStop(1, rgba(hexRgb(s.wear), 0));
+        g.fillStyle = grd; g.fillRect((u - w) * W, 0, 2 * w * W, H);
+      }
+      // streaky wear: long faint vertical strokes
+      for (let i = 0; i < 520; i++) {
+        const u = rnd() < 0.5 ? 0.30 + (rnd() - 0.5) * 0.2 : 0.70 + (rnd() - 0.5) * 0.2;
+        const x = u * W, y = rnd() * H, len = 40 + rnd() * 220;
+        g.strokeStyle = rgba(hexRgb(rnd() < 0.5 ? s.wear : s.light), 0.05 + rnd() * 0.07);
+        g.lineWidth = 1 + rnd() * 2.5;
+        g.beginPath(); g.moveTo(x, y); g.lineTo(x + (rnd() - 0.5) * 4, y + len); g.stroke();
+        if (y + len > H) { g.beginPath(); g.moveTo(x, y - H); g.lineTo(x + (rnd() - 0.5) * 4, y + len - H); g.stroke(); }
+      }
+    }
+    // aggregate speckle
+    const nSp = Math.round(16000 * s.speckle);
+    for (let i = 0; i < nSp; i++) {
+      const v = rnd();
+      const c0 = v < 0.5 ? hexRgb(s.dark) : hexRgb(s.light);
+      g.fillStyle = rgba(c0, 0.12 + rnd() * 0.25);
+      const sz = 1 + rnd() * 2.4;
+      g.fillRect(rnd() * W, rnd() * H, sz, sz);
+    }
+    // patches (tar repairs): slightly different tone rectangles with crisp edges
+    for (let i = 0, n = Math.round(7 * s.patches); i < n; i++) {
+      const x = rnd() * W * 0.8 + W * 0.06, y = rnd() * H, w = 90 + rnd() * 240, h = 40 + rnd() * 160;
+      const c0 = mix3(hexRgb(s.base), hexRgb(rnd() < 0.5 ? s.dark : s.light), 0.5);
+      wrapped(W, H, x, y, h, (dx, dy) => { g.fillStyle = rgba(c0, 0.55); g.fillRect(x + dx, y + dy, w, h); g.strokeStyle = rgba(hexRgb(s.dark), 0.55); g.lineWidth = 2; g.strokeRect(x + dx, y + dy, w, h); });
+    }
+    // cracks: meandering thin dark polylines
+    for (let i = 0, n = Math.round(16 * s.cracks); i < n; i++) {
+      let x = rnd() * W, y = rnd() * H, a = rnd() * Math.PI * 2;
+      g.strokeStyle = rgba(hexRgb(s.wear), 0.55 + rnd() * 0.25); g.lineWidth = 1 + rnd() * 1.4;
+      g.beginPath(); g.moveTo(x, y);
+      const segs = 6 + (rnd() * 10) | 0;
+      for (let k = 0; k < segs; k++) { a += (rnd() - 0.5) * 1.1; x += Math.cos(a) * (14 + rnd() * 28); y += Math.sin(a) * (14 + rnd() * 28); g.lineTo(x, y); }
+      g.stroke();
+    }
+    // oil stains
+    for (let i = 0; i < 5; i++) {
+      const x = (0.2 + rnd() * 0.6) * W, y = rnd() * H, r = 14 + rnd() * 32;
+      wrapped(W, H, x, y, r, (dx, dy) => { const grd = g.createRadialGradient(x + dx, y + dy, 0, x + dx, y + dy, r); grd.addColorStop(0, rgba(hexRgb(s.wear), 0.35)); grd.addColorStop(1, rgba(hexRgb(s.wear), 0)); g.fillStyle = grd; g.fillRect(x + dx - r, y + dy - r, r * 2, r * 2); });
+    }
+    // edge grime + baked ambient occlusion near the barriers
+    for (const side of [0, 1]) {
+      const x0 = side ? W : 0, x1 = side ? W * 0.9 : W * 0.1;
+      const grd = g.createLinearGradient(x0, 0, x1, 0);
+      grd.addColorStop(0, rgba(hexRgb(s.wear), 0.55)); grd.addColorStop(1, rgba(hexRgb(s.wear), 0));
+      g.fillStyle = grd; g.fillRect(Math.min(x0, x1), 0, Math.abs(x1 - x0), H);
+    }
+    // painted lines go on their own layer so they can be weathered
+    const [lc, lg] = canvas(W, H);
+    const lw = W * 0.0205;
+    if (s.edgeLine) {
+      lg.fillStyle = s.edgeColor;
+      lg.fillRect(W * 0.040, 0, lw, H); lg.fillRect(W * (1 - 0.040) - lw, 0, lw, H);
+    }
+    lg.fillStyle = s.centerColor;
+    if (s.centerLine === 'dash') {
+      const cw = W * 0.0185;
+      for (let k = 0; k < 1; k++) lg.fillRect(W / 2 - cw / 2, H * 0.08, cw, H * 0.34);
+    } else if (s.centerLine === 'double') {
+      const cw = W * 0.011, gap = W * 0.014; lg.fillRect(W / 2 - gap - cw / 2, 0, cw, H); lg.fillRect(W / 2 + gap - cw / 2, 0, cw, H);
+    } else if (s.centerLine === 'solid') lg.fillRect(W / 2 - W * 0.009, 0, W * 0.018, H);
+    // weathering: punch tiny holes / scuffs through the paint
+    lg.globalCompositeOperation = 'destination-out';
+    for (let i = 0; i < 2600; i++) { lg.fillStyle = `rgba(0,0,0,${0.25 + rnd() * 0.5})`; const sz = 1 + rnd() * 3; lg.fillRect(rnd() * W, rnd() * H, sz, sz * (1 + rnd() * 2)); }
+    lg.globalCompositeOperation = 'source-over';
+    g.drawImage(lc, 0, 0);
+    // optional neon edge glow (night themes)
+    if (s.glowEdge) {
+      for (const side of [0, 1]) {
+        const x = side ? W * (1 - 0.05) : W * 0.05;
+        const grd = g.createLinearGradient(x - W * 0.07, 0, x + W * 0.07, 0);
+        grd.addColorStop(0, rgba(hexRgb(s.glowEdge), 0)); grd.addColorStop(0.5, rgba(hexRgb(s.glowEdge), 0.28)); grd.addColorStop(1, rgba(hexRgb(s.glowEdge), 0));
+        g.globalCompositeOperation = 'lighter'; g.fillStyle = grd; g.fillRect(x - W * 0.07, 0, W * 0.14, H); g.globalCompositeOperation = 'source-over';
+      }
+    }
+    return c;
+  });
+  return toTexture(cv, { aniso: 16 });
+}
+
+// ------------------------------------------------------------------------------------------------------------------
+// CURBS (stripes along v; tile = 4 m = two stripes)
+export function curbTexture({ a = '#e5413a', b = '#f8f6ee', seed = 5 } = {}) {
+  const cv = cachedCanvas(`curb:${a}:${b}`, () => {
+    const W = 128, H = 256;
+    const [c, g] = canvas(W, H);
+    const rnd = mulberry32(seed);
+    g.fillStyle = a; g.fillRect(0, 0, W, H / 2);
+    g.fillStyle = b; g.fillRect(0, H / 2, W, H / 2);
+    // bevel: bright outer lip + darker inner edge so the curb reads as a raised object
+    const grd = g.createLinearGradient(0, 0, W, 0);
+    grd.addColorStop(0, 'rgba(0,0,0,0.30)'); grd.addColorStop(0.18, 'rgba(255,255,255,0.0)'); grd.addColorStop(0.8, 'rgba(255,255,255,0.12)'); grd.addColorStop(1, 'rgba(0,0,0,0.38)');
+    g.fillStyle = grd; g.fillRect(0, 0, W, H);
+    for (let i = 0; i < 700; i++) { g.fillStyle = `rgba(${rnd() < 0.5 ? '0,0,0' : '255,255,255'},${0.05 + rnd() * 0.1})`; g.fillRect(rnd() * W, rnd() * H, 1 + rnd() * 2, 1 + rnd() * 2); }
+    g.fillStyle = 'rgba(0,0,0,0.18)'; g.fillRect(0, 0, W, 3); g.fillRect(0, H / 2 - 1, W, 3);
+    return c;
+  });
+  return toTexture(cv, { aniso: 8 });
+}
+
+// ------------------------------------------------------------------------------------------------------------------
+// GROUND (tileable, `tileMeters` ~ 10 m).  kinds: grass, sand, snow, rock, dirt, moss, lava, ash, ice
+const GROUND = {
+  grass: { base: '#5aa83a', dark: '#3f8a2c', light: '#86cc4c', blade: ['#2f7d27', '#a6dc5c', '#4c9a30'], bladeAlpha: 0.5, blades: 5200, dots: ['#fff7c4', '#ffffff', '#ffd23f'], dotCount: 36 },
+  meadow: { base: '#66b53f', dark: '#478f2e', light: '#98d654', blade: ['#2f7d27', '#b6e866', '#58a834'], bladeAlpha: 0.5, blades: 5200, dots: ['#fff7c4', '#ffffff', '#ffb0d0', '#ffe35c'], dotCount: 90 },
+  sand: { base: '#e2b774', dark: '#c99955', light: '#f3d18f', ripple: true, speck: ['#b98a4a', '#fff0c4'] },
+  snow: { base: '#eef4ff', dark: '#c4d8f4', light: '#ffffff', sparkle: true },
+  rock: { base: '#9a6b4a', dark: '#6e4630', light: '#c18d63', strata: true, cracks: true },
+  dirt: { base: '#8a6540', dark: '#5f4228', light: '#b08a5c', pebbles: true },
+  moss: { base: '#3d5a3a', dark: '#26402b', light: '#5f8650', blade: ['#1f3a22', '#7aa35f', '#35552f'], bladeAlpha: 0.45, blades: 4200, dots: ['#8fd2a0', '#c8f0d0'], dotCount: 24 },
+  ash: { base: '#3a3636', dark: '#241f20', light: '#585050', pebbles: true, cracks: true },
+  lava: { base: '#2a2224', dark: '#150f11', light: '#453a3c', cracks: true, glowCracks: '#ff6a1a' },
+  ice: { base: '#b6dcf5', dark: '#7fb7e6', light: '#eaf8ff', cracks: true, sparkle: true },
+};
+
+export function groundTexture(kind = 'grass', overrides = {}) {
+  const p = { ...(GROUND[kind] ?? GROUND.grass), ...overrides };
+  const cv = cachedCanvas(`ground:${kind}:${JSON.stringify(overrides)}`, () => {
+    const W = 512, H = 512;
+    const [c, g] = canvas(W, H);
+    const rnd = mulberry32(hashStr(kind) + 3);
+    g.fillStyle = p.base; g.fillRect(0, 0, W, H);
+    noiseLayer(g, W, H, { seed: hashStr(kind), period: 3, oct: 5, dark: p.dark, light: p.light, alpha: 0.9, contrast: 1.5, res: 128 });
+    if (p.blades) {
+      for (let i = 0; i < p.blades; i++) {
+        const x = rnd() * W, y = rnd() * H, len = 4 + rnd() * 9, a = -Math.PI / 2 + (rnd() - 0.5) * 1.4;
+        const col = p.blade[(rnd() * p.blade.length) | 0];
+        wrapped(W, H, x, y, len, (dx, dy) => {
+          g.strokeStyle = rgba(hexRgb(col), p.bladeAlpha * (0.5 + rnd() * 0.7)); g.lineWidth = 1 + rnd() * 1.2;
+          g.beginPath(); g.moveTo(x + dx, y + dy); g.lineTo(x + dx + Math.cos(a) * len, y + dy + Math.sin(a) * len); g.stroke();
+        });
+      }
+    }
+    if (p.dots) for (let i = 0; i < p.dotCount; i++) {
+      const x = rnd() * W, y = rnd() * H, r = 1.2 + rnd() * 1.6, col = p.dots[(rnd() * p.dots.length) | 0];
+      wrapped(W, H, x, y, r + 2, (dx, dy) => { g.fillStyle = col; g.beginPath(); g.arc(x + dx, y + dy, r, 0, 7); g.fill(); g.fillStyle = 'rgba(255,220,60,0.9)'; g.beginPath(); g.arc(x + dx, y + dy, r * 0.4, 0, 7); g.fill(); });
+    }
+    if (p.ripple) {
+      for (let i = 0; i < 70; i++) {
+        const y0 = rnd() * H, amp = 2 + rnd() * 5, ph = rnd() * 6.28, f = 0.01 + rnd() * 0.02;
+        g.strokeStyle = rgba(hexRgb(rnd() < 0.5 ? p.dark : p.light), 0.22); g.lineWidth = 1 + rnd() * 2;
+        g.beginPath(); for (let x = 0; x <= W; x += 6) { const y = y0 + Math.sin(x * f * 6.28 + ph) * amp; if (x) g.lineTo(x, y); else g.moveTo(x, y); } g.stroke();
+      }
+      for (let i = 0; i < 2600; i++) { g.fillStyle = rgba(hexRgb(p.speck[(rnd() * 2) | 0]), 0.2 + rnd() * 0.3); g.fillRect(rnd() * W, rnd() * H, 1 + rnd() * 1.5, 1 + rnd() * 1.5); }
+    }
+    if (p.strata) {
+      for (let i = 0; i < 40; i++) {
+        const y = rnd() * H, h = 3 + rnd() * 22;
+        g.fillStyle = rgba(hexRgb(rnd() < 0.5 ? p.dark : p.light), 0.2 + rnd() * 0.2); g.fillRect(0, y, W, h);
+      }
+    }
+    if (p.pebbles) {
+      for (let i = 0; i < 520; i++) {
+        const x = rnd() * W, y = rnd() * H, r = 1.5 + rnd() * 4.5;
+        wrapped(W, H, x, y, r + 2, (dx, dy) => {
+          g.fillStyle = rgba(hexRgb(rnd() < 0.5 ? p.dark : p.light), 0.55); g.beginPath(); g.ellipse(x + dx, y + dy, r, r * 0.75, rnd() * 3, 0, 7); g.fill();
+          g.fillStyle = 'rgba(0,0,0,0.25)'; g.beginPath(); g.ellipse(x + dx + 1, y + dy + 1.5, r, r * 0.7, 0, 0, 7); g.fill();
+        });
+      }
+    }
+    if (p.cracks) {
+      for (let i = 0; i < 22; i++) {
+        let x = rnd() * W, y = rnd() * H, a = rnd() * 6.28;
+        const path = [[x, y]];
+        for (let k = 0; k < 9; k++) { a += (rnd() - 0.5) * 1.3; x += Math.cos(a) * (12 + rnd() * 26); y += Math.sin(a) * (12 + rnd() * 26); path.push([x, y]); }
+        const draw = (col, w, al) => { g.strokeStyle = rgba(hexRgb(col), al); g.lineWidth = w; g.beginPath(); path.forEach(([px, py], k) => (k ? g.lineTo(px, py) : g.moveTo(px, py))); g.stroke(); };
+        if (p.glowCracks) { draw(p.glowCracks, 5, 0.25); draw('#ffb347', 1.6, 0.95); } else draw(p.dark, 1.4, 0.6);
+      }
+    }
+    if (p.sparkle) {
+      for (let i = 0; i < 520; i++) { g.fillStyle = `rgba(255,255,255,${0.35 + rnd() * 0.65})`; const sz = rnd() < 0.9 ? 1 : 2; g.fillRect(rnd() * W, rnd() * H, sz, sz); }
+    }
+    return c;
+  });
+  return toTexture(cv, { aniso: 8 });
+}
+
+// ------------------------------------------------------------------------------------------------------------------
+// WOOD planks (bridges, boardwalks): planks run ACROSS the road (u), tile = 4 m along v, 8 planks
+export function woodTexture({ base = '#b07a45', dark = '#7c4f2a', light = '#d9a066', seed = 21, planks = 8, across = true } = {}) {
+  const cv = cachedCanvas(`wood:${base}:${planks}:${across}`, () => {
+    const W = 512, H = 512;
+    const [c, g] = canvas(W, H);
+    const rnd = mulberry32(seed);
+    const ph = H / planks;
+    for (let i = 0; i < planks; i++) {
+      const t = rnd();
+      const col = mix3(hexRgb(dark), hexRgb(light), 0.35 + t * 0.55);
+      g.fillStyle = rgba(mix3(col, hexRgb(base), 0.4)); g.fillRect(0, i * ph, W, ph);
+      // grain
+      for (let k = 0; k < 26; k++) {
+        const y = i * ph + 2 + rnd() * (ph - 4);
+        g.strokeStyle = rgba(hexRgb(rnd() < 0.5 ? dark : light), 0.18 + rnd() * 0.2); g.lineWidth = 0.8 + rnd();
+        g.beginPath(); g.moveTo(0, y); g.bezierCurveTo(W * 0.3, y + (rnd() - 0.5) * 5, W * 0.7, y + (rnd() - 0.5) * 5, W, y + (rnd() - 0.5) * 3); g.stroke();
+      }
+      // knots
+      if (rnd() < 0.5) { const x = rnd() * W, y = i * ph + ph / 2; g.fillStyle = rgba(hexRgb(dark), 0.5); g.beginPath(); g.ellipse(x, y, 7 + rnd() * 5, 4 + rnd() * 2, 0, 0, 7); g.fill(); }
+      // dark gap + nails
+      g.fillStyle = 'rgba(25,14,6,0.8)'; g.fillRect(0, i * ph + ph - 3, W, 3);
+      g.fillStyle = 'rgba(30,22,16,0.9)'; for (const x of [18, W - 18]) { g.beginPath(); g.arc(x, i * ph + ph / 2, 2.4, 0, 7); g.fill(); }
+      g.fillStyle = 'rgba(255,255,255,0.12)'; g.fillRect(0, i * ph, W, 2);
+    }
+    if (!across) { const [r, rg] = canvas(H, W); rg.translate(H / 2, W / 2); rg.rotate(Math.PI / 2); rg.drawImage(c, -W / 2, -H / 2); return r; }
+    return c;
+  });
+  return toTexture(cv, { aniso: 8 });
+}
+
+// ------------------------------------------------------------------------------------------------------------------
+// misc small textures
+export function checkerTexture({ a = '#ffffff', b = '#161616', cells = 8, rows = 2 } = {}) {
+  const cv = cachedCanvas(`checker:${a}:${b}:${cells}:${rows}`, () => {
+    const s = 32, [c, g] = canvas(s * cells, s * rows);
+    for (let y = 0; y < rows; y++) for (let x = 0; x < cells; x++) { g.fillStyle = (x + y) % 2 ? b : a; g.fillRect(x * s, y * s, s, s); }
+    return c;
+  });
+  return toTexture(cv, { aniso: 8 });
+}
+
+/** Soft round glow sprite (additive halos, lamp glows, fireflies, snow flakes with `hard`). */
+export function glowTexture({ inner = 'rgba(255,255,255,1)', outer = 'rgba(255,255,255,0)', hard = 0.0, size = 128 } = {}) {
+  const cv = cachedCanvas(`glow:${inner}:${outer}:${hard}:${size}`, () => {
+    const [c, g] = canvas(size, size);
+    const grd = g.createRadialGradient(size / 2, size / 2, 0, size / 2, size / 2, size / 2);
+    grd.addColorStop(0, inner); grd.addColorStop(Math.min(0.95, hard), inner); grd.addColorStop(1, outer);
+    g.fillStyle = grd; g.fillRect(0, 0, size, size);
+    return c;
+  });
+  return toTexture(cv, { repeat: false, aniso: 1 });
+}
+
+/** Banner / signboard: text on a coloured plate with a checker or stripe trim.  Used by the start gantry & sponsor boards. */
+export function bannerTexture({ text = 'START', sub = '', bg = '#e8403a', fg = '#ffffff', trim = '#ffd23f', w = 1024, h = 256, checker = true } = {}) {
+  const cv = cachedCanvas(`banner:${text}:${sub}:${bg}:${fg}:${trim}:${checker}`, () => {
+    const [c, g] = canvas(w, h);
+    const grd = g.createLinearGradient(0, 0, 0, h); grd.addColorStop(0, shade(bg, 1.25)); grd.addColorStop(1, shade(bg, 0.78));
+    g.fillStyle = grd; g.fillRect(0, 0, w, h);
+    if (checker) { const s = h / 8; for (let x = 0; x < w / s; x++) for (let y = 0; y < 1; y++) { g.fillStyle = (x + y) % 2 ? '#111' : '#fff'; g.fillRect(x * s, 0, s, s / 2); g.fillStyle = (x + y) % 2 ? '#fff' : '#111'; g.fillRect(x * s, h - s / 2, s, s / 2); } }
+    g.fillStyle = trim; g.fillRect(0, h * 0.09, w, 6); g.fillRect(0, h * 0.91 - 6, w, 6);
+    g.textAlign = 'center'; g.textBaseline = 'middle';
+    g.font = `italic 900 ${h * (sub ? 0.46 : 0.58)}px "KR Display", "Lilita One", Impact, sans-serif`;
+    g.lineWidth = h * 0.05; g.strokeStyle = 'rgba(0,0,0,0.55)'; g.strokeText(text, w / 2, h * (sub ? 0.43 : 0.52));
+    g.fillStyle = fg; g.fillText(text, w / 2, h * (sub ? 0.43 : 0.52));
+    if (sub) { g.font = `800 ${h * 0.17}px "KR UI", Nunito, Arial, sans-serif`; g.fillStyle = trim; g.fillText(sub, w / 2, h * 0.78); }
+    return c;
+  });
+  return toTexture(cv, { repeat: false, aniso: 8 });
+}
+
+function shade(hex, k) { const [r, g, b] = hexRgb(hex); return `rgb(${Math.min(255, r * k) | 0},${Math.min(255, g * k) | 0},${Math.min(255, b * k) | 0})`; }
+function hashStr(s) { let h = 2166136261; for (let i = 0; i < s.length; i++) { h ^= s.charCodeAt(i); h = Math.imul(h, 16777619); } return (h >>> 0) % 100000; }
+
+/** Free every GPU texture in a list (call from World.dispose). The cached source canvases stay in the LRU. */
+export function disposeTextures(list) { for (const t of list) t?.dispose?.(); }
