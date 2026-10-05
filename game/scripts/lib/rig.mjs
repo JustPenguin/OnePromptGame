@@ -58,6 +58,8 @@ export const DEFS = {
     zones: [{ type: 'ice', s: 600, length: 300, width: 16 }, { type: 'ramp', s: 1400, length: 14, width: 10, height: 3.2 }, { type: 'boost', s: 1800, length: 12, width: 6 }] },
   /** Same as strip but the right-hand edge is open on the first straight (fall -> rescue). */
   edge: { ...baseDef, id: 't-edge', name: 'Edge', width: 16, shoulder: 6, points: stadiumPoints(2400, 400), openEdges: [{ s0: 300, s1: 1200, side: 'right' }] },
+  /** Short circuit with an open (wall-less) right edge on its first straight: rescue + finish tests. */
+  edgeShort: { ...baseDef, id: 't-edge-short', name: 'EdgeShort', width: 16, shoulder: 6, points: stadiumPoints(500, 90, 80, 10), openEdges: [{ s0: 120, s1: 460, side: 'right' }] },
   /** Walls at +-14 m like a normal course, but the shoulder is tarmac so wall tests are not confused by grass slowdown. */
   walls: { ...baseDef, id: 't-walls', name: 'Walls', width: 16, shoulder: 6, shoulderSurface: Surface.ROAD, points: stadiumPoints(2400, 400) },
   /** Whole arena is ice (road surface override through a giant ice zone). */

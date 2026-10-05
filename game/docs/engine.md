@@ -145,7 +145,7 @@ New (engine section): `bot(on, {drift, chain, ...})` drives the player with the 
 ```
 cd game
 node scripts/handling.mjs                      # Node-only handling report (~15 s): every number above, exit 1 on a miss
-node scripts/handling.mjs --only=start,walls,eventsAudit,chaos   # sections: longitudinal steering start drift offroad walls karts spinAndAir slipstream frameRate lapValue terrain abuse eventsAudit chaos perf
+node scripts/handling.mjs --only=start,walls,eventsAudit,chaos   # sections: longitudinal steering start drift offroad walls karts spinAndAir slipstream frameRate aiDrift lapValue terrain abuse eventsAudit rules chaos perf
 node scripts/handling.mjs --roster             # + stat-spread table for 8 driver/kart combos
 node scripts/handling.mjs --driver=bruno --body=crusher --class=master --only=drift,walls
 node scripts/check.mjs --track=all --laps=2    # headless AI races in Chromium (D's AI on this physics)

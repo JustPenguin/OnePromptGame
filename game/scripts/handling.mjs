@@ -636,6 +636,64 @@ function eventsAudit() {
   }
 }
 
+function rules() {
+  section('Race rules: reversing over the line, ties, respawn consistency');
+  {
+    // reverse back across the start/finish line after completing lap 1: no double count, lap number stays sensible
+    const rig = newRig(DEFS.walls, { laps: 2 });
+    const k = rig.addKart(kartOpts({ s: rig.track.length - 8 }));
+    const race = rig.startRace(); race.setPhase('racing'); k.locked = false;
+    const spot = rig.track.getRespawn(rig.track.length - 8, 0); k.placeAt(spot.position, spot.yaw, 25);            // 8 m before the end of lap 1
+    rig.track.project(k.position, k.query, -1); k.hint = k.query.index; k.race.s = k.query.s; k.race.distance = rig.track.length - 8; k.race.lapsDone = 0;
+    let laps = 0; rig.events.on(EV.LAP_COMPLETE, () => laps++);
+    const drive = (secs, thr, brk) => rig.run(secs, () => { k.input.throttle = thr; k.input.brake = brk; k.input.steer = 0; });
+    drive(2.0, 1, 0);                                   // across the line forwards
+    const lapAfterCross = laps, dMax = k.race.distance;
+    k.speed = 0; rig.run(0.2, () => {});               // stop just past the line
+    drive(1.6, 0, 1);                                   // reverse back over it
+    const dBack = k.race.distance;
+    drive(4, 1, 0);                                     // forwards again
+    check('crossing the line forwards completes lap 1 once', lapAfterCross, 1, 1, '');
+    check('reversing over the line and coming back does not count a second lap', laps, 1, 1, '');
+    check('distance went down while reversing (progress is signed)', dMax - dBack, 2, 100, 'm');
+    check('lap counter never exceeds the race length', k.race.lap, 1, 2, '');
+  }
+  {
+    // two karts side by side across the finish line: exactly one winner, times within a frame, order stable
+    const rig = newRig(DEFS.walls, { laps: 1 });
+    const a = rig.addKart(kartOpts({ s: rig.track.length - 40, lateral: -2.5, speed: 30, player: true }));
+    const b = rig.addKart({ driver: 'pip', body: 'classic', s: rig.track.length - 40, lateral: 2.5, speed: 30 });
+    const race = rig.startRace(); race.setPhase('racing'); a.locked = b.locked = false;
+    const t0 = rig.track.getRespawn(rig.track.length - 40, -2.5), t1 = rig.track.getRespawn(rig.track.length - 40, 2.5);
+    a.placeAt(t0.position, t0.yaw, 30); b.placeAt(t1.position, t1.yaw, 30);
+    for (const k of [a, b]) { rig.track.project(k.position, k.query, -1); k.hint = k.query.index; k.race.s = k.query.s; k.race.distance = rig.track.length - 40; k.race.lapsDone = 0; }
+    rig.run(3, () => { a.input.throttle = b.input.throttle = 1; });
+    const places = [a.race.place, b.race.place].sort();
+    check('a dead heat still gives places 1 and 2', places.join(',') === '1,2' ? 1 : 0, 1, 1, '');
+    check('dead-heat finish times differ by less than one frame', Math.abs(a.race.finishTime - b.race.finishTime), 0, 1 / 60 + 1e-6, 's');
+  }
+  {
+    // fall, rescue, then finish: the rescue only costs a plausible amount of distance and the race still completes
+    const rig = newRig(DEFS.edgeShort, { laps: 1 });
+    const k = rig.addKart(kartOpts({ s: rig.track.length - 8 }));
+    const race = rig.startRace(); race.setPhase('racing'); k.locked = false;
+    const bot = makeBot(rig.session, k, { drift: false });
+    let before = null, after = null, doneFrame = null, hands = 0;
+    rig.events.on(EV.RESPAWN, () => { before = k.race.distance; }); rig.events.on(EV.RESPAWN_DONE, () => { doneFrame = rig.session.time; });
+    for (let i = 0; i < 60 * 90 && !k.race.finished; i++) {
+      bot();
+      if (hands > 0) { hands--; k.input.steer = 0; k.input.throttle = 1; }        // hands off the wheel so it really leaves the road
+      if (i === 60 * 8) { hands = 60 * 4; const t = rig.track.getRespawn(k.query.s + 2, 7.2); k.placeAt(t.position, t.yaw - 0.6, 24); }   // shove it toward the open edge
+      rig.step(1 / 60);
+      if (doneFrame !== null && after === null && rig.session.time > doneFrame + 0.2) after = k.race.distance;
+    }
+    info('rescue: distance when it started / 0.2 s after it landed', `${before?.toFixed(1)} / ${after?.toFixed(1)}`);
+    check('the fall was rescued', before !== null ? 1 : 0, 1, 1, '');
+    if (before !== null && after !== null) check('the rescue set the kart back by a plausible amount (placement stays consistent)', before - after, -5, 60, 'm');
+    check('race still finishes after a rescue', k.race.finished ? 1 : 0, 1, 1, '');
+  }
+}
+
 function chaos() {
   section('Chaos soak (12 bots + seeded random item effects, spins, launches, teleports)');
   for (const [name, def] of [['coaster (hills, banking, ramp)', DEFS.coaster], ['sunny meadows', DEFS.meadows]]) {
@@ -748,7 +806,7 @@ function terrain() {
   }
 }
 
-const sections = { longitudinal, steering, start, drift, offroad, walls, karts, spinAndAir, slipstream, frameRate, aiDrift, lapValue, terrain, abuse, eventsAudit, chaos, perf };
+const sections = { longitudinal, steering, start, drift, offroad, walls, karts, spinAndAir, slipstream, frameRate, aiDrift, lapValue, terrain, abuse, eventsAudit, rules, chaos, perf };
 for (const [name, fn] of Object.entries(sections)) if (want(name)) { try { fn(); } catch (e) { failures++; console.log(`  FAIL ${name} threw: ${e.stack}`); } }
 if (args.roster || (only && only.includes('roster'))) rosterTable();
 console.log(`\n${failures === 0 ? 'HANDLING REPORT: all targets met' : `HANDLING REPORT: ${failures} target(s) missed`}`);
