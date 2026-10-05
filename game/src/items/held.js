@@ -102,10 +102,10 @@ vec3 hsv2rgb(vec3 c){ vec4 K = vec4(1.0, 2.0/3.0, 1.0/3.0, 3.0); vec3 p = abs(fr
 void main(){
   float f = pow(1.0 - abs(dot(normalize(vN), normalize(vV))), 2.2);
   float hue = fract(vP.y * 0.32 + vP.x * 0.22 - vP.z * 0.18 + uTime * 0.4);
-  vec3 col = hsv2rgb(vec3(hue, 0.5, 1.0));
+  vec3 col = hsv2rgb(vec3(hue, 0.78, 1.0));
   float facets = 0.5 + 0.5 * sin(vP.x * 9.0) * sin(vP.y * 9.0 + uTime * 2.0) * sin(vP.z * 9.0);
-  float a = (0.07 + 0.9 * f) * uAlpha * (0.75 + 0.25 * facets);
-  gl_FragColor = vec4(col * (0.9 + f * 1.6), a);
+  float a = (0.12 + 0.95 * f) * uAlpha * (0.72 + 0.28 * facets);
+  gl_FragColor = vec4(col * (1.0 + f * 1.9), a);
 }`;
 
 export class ShieldBubble {

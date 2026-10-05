@@ -389,7 +389,8 @@ export class CometEntity extends Entity {
     this.group = sys.res.make('comet'); this.group.scale.setScalar(1.15); sys.group.add(this.group);
     this.trail = new Ribbon(18); sys.group.add(this.trail.mesh);
     this.marker = new THREE.Mesh(sys.res.geo.disc, sys.res.mats.flatAdd.clone()); this.marker.material.color.set(0x66b3ff); this.marker.material.opacity = 0; this.marker.visible = false; this.marker.renderOrder = 2; sys.group.add(this.marker);
-    this.ring = sys.res.sprite(sys.res.tex.ring, 0x9fd0ff, 1, 0); this.ring.visible = false; sys.group.add(this.ring);
+    this.ring = new THREE.Mesh(sys.fx.planeGeo, new THREE.MeshBasicMaterial({ map: sys.res.tex.ring, color: 0x9fd0ff, transparent: true, opacity: 0, blending: THREE.AdditiveBlending, depthWrite: false, toneMapped: false, fog: false }));
+    this.ring.visible = false; this.ring.renderOrder = 3; sys.group.add(this.ring);
     this.position.copy(this.start);
     this.group.position.copy(this.position);
     this.locked = false;
@@ -428,7 +429,7 @@ export class CometEntity extends Entity {
       this.marker.scale.setScalar(COMET_BLAST * (0.35 + 0.65 * w));
       const pulse = 0.5 + 0.5 * Math.sin(this.age * (10 + 18 * w));
       this.marker.material.opacity = (0.08 + 0.2 * w) * (0.5 + 0.5 * pulse);
-      this.ring.position.set(tgt.position.x, tgt.position.y + 0.4, tgt.position.z); this.ring.scale.setScalar(COMET_BLAST * 2 * (1.2 - 0.7 * w)); this.ring.material.opacity = 0.3 + 0.5 * w;
+      this.ring.position.set(tgt.position.x, tgt.position.y + 0.3, tgt.position.z); this.ring.scale.setScalar(COMET_BLAST * (1.25 - 0.55 * w)); this.ring.material.opacity = 0.3 + 0.6 * w;
       sys.lock(tgt, 1, this);
     }
     if (u >= 1) this.impact();
@@ -451,6 +452,6 @@ export class CometEntity extends Entity {
     if (this.locked) this.sys.events.emit(EV.ITEM_LOCK, { kart: this.target, type: 'comet', active: false, entity: this });
     if (this.sys.cometActive === this) this.sys.cometActive = null;
     super.dispose(); this.trail.dispose();
-    this.marker.removeFromParent(); this.marker.material.dispose(); this.ring.removeFromParent();
+    this.marker.removeFromParent(); this.marker.material.dispose(); this.ring.removeFromParent(); this.ring.material.dispose();
   }
 }

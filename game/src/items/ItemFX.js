@@ -16,7 +16,7 @@ export class ItemFX {
     this.group.name = 'item-fx';
     sys.group.add(this.group);
     const tex = this.res.tex;
-    this._planeGeo = new THREE.PlaneGeometry(2, 2); this._planeGeo.rotateX(-Math.PI / 2);
+    this._planeGeo = this.planeGeo = new THREE.PlaneGeometry(2, 2); this._planeGeo.rotateX(-Math.PI / 2);
     this._mats = [];
     const add = (m) => { this._mats.push(m); return m; };
 

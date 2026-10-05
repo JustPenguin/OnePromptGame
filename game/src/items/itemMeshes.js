@@ -149,8 +149,8 @@ export function createItemResources(tex) {
 
   const sprites = [];
   /** Additive glow sprite using the shared glow texture. */
-  const sprite = (map = tex.glow, color = 0xffffff, scale = 2, opacity = 1) => {
-    const m = new THREE.SpriteMaterial({ map, color, transparent: true, opacity, blending: THREE.AdditiveBlending, depthWrite: false, toneMapped: false, fog: false });
+  const sprite = (map = tex.glow, color = 0xffffff, scale = 2, opacity = 1, depth = false) => {
+    const m = new THREE.SpriteMaterial({ map, color, transparent: true, opacity, blending: THREE.AdditiveBlending, depthWrite: false, depthTest: depth, toneMapped: false, fog: false });
     sprites.push(m);
     const s = new THREE.Sprite(m);
     s.scale.setScalar(scale);
