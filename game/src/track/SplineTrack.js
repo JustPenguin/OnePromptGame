@@ -194,7 +194,7 @@ export class SplineTrack {
     // optional open (no wall) stretches: def.openEdges = [{ s0, s1, side: 'left'|'right'|'both' }] (or marker based)
     this.openEdges = (def.openEdges ?? []).map((e) => {
       const [s0, s1] = this.resolveRange(e);
-      return { s0, s1, side: e.side ?? 'both' };
+      return { s0, s1: Math.min(s1, s0 + this.length), side: e.side ?? 'both' };   // never longer than one lap
     });
     const N = this.count, L = this.length;
     for (const e of this.openEdges) {

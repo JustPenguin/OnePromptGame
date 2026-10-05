@@ -164,8 +164,10 @@ export function buildOpenEdgeTrim(world, o = {}) {
         L.quad(P(a, side * ha, 0.16), P(b, side * hb, 0.16), P(b, side * rb, 0.16), P(a, side * ra, 0.16), lipTop);
         L.quad(P(a, side * ra, 0.16), P(b, side * rb, 0.16), P(b, side * rb, -depth * 0.55), P(a, side * ra, -depth * 0.55), lip);
         L.quad(P(a, side * ra, -depth * 0.55), P(b, side * rb, -depth * 0.55), P(b, side * (rb - 1.3), -depth), P(a, side * (ra - 1.3), -depth), girderC);
-        G.quad(P(a, side * (ra - 0.34), 0.18), P(b, side * (rb - 0.34), 0.18), P(b, side * (rb - 0.04), 0.18), P(a, side * (ra - 0.04), 0.18), glow);
-        G.quad(P(a, side * (ra + 0.02), 0.0), P(b, side * (rb + 0.02), 0.0), P(b, side * (rb + 0.02), 0.2), P(a, side * (ra + 0.02), 0.2), glow);
+        if (o.glowStrip !== false) {
+          G.quad(P(a, side * (ra - 0.34), 0.18), P(b, side * (rb - 0.34), 0.18), P(b, side * (rb - 0.04), 0.18), P(a, side * (ra - 0.04), 0.18), glow);
+          G.quad(P(a, side * (ra + 0.02), 0.0), P(b, side * (rb + 0.02), 0.0), P(b, side * (rb + 0.02), 0.2), P(a, side * (ra + 0.02), 0.2), glow);
+        }
       }
       L.quad(P(a, -(a.hw + reach - 1.3), -depth), P(b, -(b.hw + reach - 1.3), -depth), P(b, b.hw + reach - 1.3, -depth), P(a, a.hw + reach - 1.3, -depth), girderC.clone().multiplyScalar(0.5));
     }

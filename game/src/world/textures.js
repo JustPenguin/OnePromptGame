@@ -454,6 +454,51 @@ export function cityGroundTexture({ street = 28, walk = 3, seed = 4, asphalt = '
   return toTexture(cv, { aniso: 8 });
 }
 
+/**
+ * Road for roads that float in space: deep indigo with a faint hex grid, tiny stars, glowing lane lines and a soft centre shimmer.
+ * style = { base:'#14123a', grid:'#3a2c8a', dash:'#22d3ff', edge:'#e8f0ff', star:['#ffffff','#22d3ff','#ff3dcb'], seed }
+ */
+export function cosmicRoadTexture(style = {}) {
+  const s = { base: '#15123c', top: '#241a58', grid: '#4a3aa8', dash: '#22d3ff', edge: '#d8e8ff', star: ['#ffffff', '#22d3ff', '#ff3dcb', '#ffd23f'], seed: 5, ...style };
+  const cv = cachedCanvas('cosmic:' + JSON.stringify(s), () => {
+    const W = 1024, H = 1024, [c, g] = canvas(W, H);
+    const rnd = mulberry32(s.seed * 41 + 3);
+    const grd = g.createLinearGradient(0, 0, W, 0);
+    grd.addColorStop(0, s.base); grd.addColorStop(0.5, s.top); grd.addColorStop(1, s.base);
+    g.fillStyle = grd; g.fillRect(0, 0, W, H);
+    noiseLayer(g, W, H, { seed: s.seed, period: 4, oct: 4, dark: '#0c0a28', light: '#2e2470', alpha: 0.55, contrast: 1.4, res: 128 });
+    // hex grid (flat-topped, tileable on both axes)
+    g.strokeStyle = s.grid; g.globalAlpha = 0.22; g.lineWidth = 2;
+    const hw = 64, hh = hw * Math.sqrt(3) / 2 * 2;
+    for (let row = -1; row <= H / hh + 1; row++) for (let col = -1; col <= W / (hw * 1.5) + 1; col++) {
+      const cx = col * hw * 1.5, cy = row * hh + (col & 1 ? hh / 2 : 0);
+      g.beginPath(); for (let k = 0; k < 6; k++) { const a = (k / 6) * Math.PI * 2; const x = cx + Math.cos(a) * hw * 0.5, y = cy + Math.sin(a) * hw * 0.5; if (k) g.lineTo(x, y); else g.moveTo(x, y); } g.closePath(); g.stroke();
+    }
+    g.globalAlpha = 1;
+    // light-trails: long faint streaks along the driving direction
+    for (let i = 0; i < 90; i++) {
+      const x = rnd() * W, y = rnd() * H, len = 80 + rnd() * 320;
+      const gr = g.createLinearGradient(x, y, x, y + len); const col = s.star[(rnd() * s.star.length) | 0];
+      gr.addColorStop(0, 'rgba(255,255,255,0)'); gr.addColorStop(0.5, col + '55'); gr.addColorStop(1, 'rgba(255,255,255,0)');
+      g.fillStyle = gr; g.fillRect(x, y, 1.5 + rnd() * 1.5, len);
+    }
+    // stars
+    for (let i = 0; i < 1400; i++) { const col = s.star[(rnd() * s.star.length) | 0]; g.fillStyle = col; g.globalAlpha = 0.15 + rnd() * 0.7; const z = rnd() < 0.9 ? 1.2 : 2.4; g.fillRect(rnd() * W, rnd() * H, z, z); }
+    g.globalAlpha = 1;
+    // painted lines with a glow
+    const glowLine = (x, w, color, dashed) => {
+      g.save(); g.shadowColor = color; g.shadowBlur = 16; g.fillStyle = color;
+      if (dashed) g.fillRect(x - w / 2, H * 0.08, w, H * 0.34); else g.fillRect(x - w / 2, 0, w, H);
+      g.restore();
+    };
+    glowLine(W * 0.045, W * 0.017, s.edge, false); glowLine(W * 0.955, W * 0.017, s.edge, false);
+    glowLine(W * 0.5, W * 0.016, s.dash, true);
+    glowLine(W * 0.27, W * 0.007, s.grid, true); glowLine(W * 0.73, W * 0.007, s.grid, true);
+    return c;
+  });
+  return toTexture(cv, { aniso: 16 });
+}
+
 /** Chevron warning board (320x256): `dir` = +1 points LEFT (left-hand corner), -1 points RIGHT. Corners are dark border (posts sample them). */
 export function arrowTexture({ dir = 1, a = '#e5413a', b = '#ffffff', border = '#22262f' } = {}) {
   const cv = cachedCanvas(`arrow:${dir}:${a}:${b}`, () => {

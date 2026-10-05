@@ -205,3 +205,28 @@ export function compileLayout(spec) {
   }
   return { points, markers, length: L, warnings, vertices: V, startS: S0 };
 }
+
+/**
+ * Turtle -> polygon vertices.  Handy for spirals and other shapes that are easier to describe as "drive 200 m, then turn 45 deg on a 140 m radius ...".
+ *   const { vertices, end } = turtleVertices({ x: 0, z: 0, heading: 0 }, [
+ *     { straight: 200 },
+ *     { id: 'c0', turn: 45, r: 150, y: 2, bank: 8 },        // + = left, - = right; extra fields (y, w, sh, bank, keys...) are copied onto the vertex
+ *     { id: 'k', mark: true, y: 40 },                         // a pass-through key (r = 0) at the current pen position
+ *   ]);
+ * `end` = the pen position + heading after the last step (continue the path from there with plain vertices).
+ */
+export function turtleVertices(start, steps) {
+  let x = start.x, z = start.z, th = (start.heading ?? 0) * DEG;
+  const vertices = [];
+  for (const st of steps) {
+    if (st.straight !== undefined) { x += Math.sin(th) * st.straight; z += Math.cos(th) * st.straight; continue; }
+    const { turn, r, mark, ...rest } = st;
+    if (mark || turn === undefined) { vertices.push({ x: round(x), z: round(z), r: 0, ...rest }); continue; }
+    const a = turn * DEG, t = r * Math.tan(Math.abs(a) / 2);
+    const vx = x + Math.sin(th) * t, vz = z + Math.cos(th) * t;
+    vertices.push({ x: round(vx), z: round(vz), r, ...rest });
+    th += a;
+    x = vx + Math.sin(th) * t; z = vz + Math.cos(th) * t;
+  }
+  return { vertices, end: { x, z, heading: th / DEG } };
+}

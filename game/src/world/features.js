@@ -112,7 +112,7 @@ export function buildStartLine(world, cfg = {}) {
   }
   // gantry
   const smp = track.sampleAt(0);
-  const hw = smp.halfWidth, edge = hw + smp.shoulder + 1.4;
+  const hw = smp.halfWidth, edge = hw + smp.shoulder + 1.4 - (cfg.pillarInset ?? 0);
   const right = new THREE.Vector3(smp.right.x, 0, smp.right.z).normalize();
   const fwd = new THREE.Vector3(smp.tangent.x, 0, smp.tangent.z).normalize();
   const B = new GeoBuilder();

@@ -3,6 +3,7 @@
 // and renders correctly inside a CubeCamera / PMREM pass too (Agent C builds the environment map from `track.sky`).
 // OWNER: Agent B.
 import * as THREE from 'three';
+import { toColor } from './geo.js';
 
 export const SKY_VERTEX = /* glsl */ `
   varying vec3 vDir;
@@ -33,6 +34,9 @@ const SKY_FRAGMENT = /* glsl */ `
   uniform vec3 uAur1; uniform vec3 uAur2; uniform float uAurI;
   uniform vec3 uNeb1; uniform vec3 uNeb2; uniform float uNebI;
   uniform float uStarD; uniform float uStarS;
+  #ifdef PLANETS
+    uniform vec4 uPl[ NPLANETS ]; uniform vec4 uPlA[ NPLANETS ]; uniform vec4 uPlB[ NPLANETS ]; uniform vec4 uPlC[ NPLANETS ]; uniform vec4 uPlR[ NPLANETS ]; uniform vec4 uPlRc[ NPLANETS ];
+  #endif
   varying vec3 vDir;
   ${NOISE}
   void main() {
@@ -94,6 +98,49 @@ const SKY_FRAGMENT = /* glsl */ `
         }
       }
     #endif
+    #ifdef PLANETS
+      for ( int i = 0; i < NPLANETS; i ++ ) {
+        vec3 pd = uPl[ i ].xyz; float R = uPl[ i ].w;
+        if ( dot( d, pd ) > cos( min( R * 3.4, 1.3 ) ) ) {
+          vec3 t1 = normalize( cross( pd, vec3( 0.0, 1.0, 0.0 ) ) ); vec3 t2 = cross( t1, pd );
+          vec2 q = vec2( dot( d, t1 ), dot( d, t2 ) ) / sin( R );
+          float r = length( q );
+          float ringA = 0.0; bool front = false; vec3 ringC = vec3( 0.0 );
+          float rop = uPlRc[ i ].w;
+          if ( rop > 0.0 ) {
+            float cr = cos( uPlR[ i ].w ), sr = sin( uPlR[ i ].w );
+            vec2 rq = vec2( q.x * cr + q.y * sr, - q.x * sr + q.y * cr );
+            rq.y /= max( uPlR[ i ].z, 0.05 );
+            float rr = length( rq );
+            float inner = uPlR[ i ].x, outer = uPlR[ i ].y;
+            float m = smoothstep( inner - 0.02, inner + 0.02, rr ) * ( 1.0 - smoothstep( outer - 0.03, outer + 0.03, rr ) );
+            float bands = 0.55 + 0.45 * sin( rr * 38.0 + uPlB[ i ].w * 7.0 ) * sin( rr * 11.0 );
+            float gap = 1.0 - 0.8 * smoothstep( 0.03, 0.0, abs( rr - mix( inner, outer, 0.62 ) ) );
+            ringA = m * bands * gap * rop;
+            front = rq.y < 0.0;
+            ringC = uPlRc[ i ].rgb * ( 0.5 + 0.6 * bands );
+          }
+          vec3 c = col;
+          if ( ringA > 0.0 && ! front ) c = mix( c, ringC, ringA );
+          if ( r < 1.0 ) {
+            float z = sqrt( 1.0 - r * r );
+            vec3 n = normalize( t1 * q.x + t2 * q.y + pd * z );
+            float lam = max( dot( n, uSunDir ), 0.0 );
+            float sw = fbm( vec2( q.x * 2.0 + uPlB[ i ].w, q.y * 6.0 ) );
+            float band = 0.5 + 0.5 * sin( q.y * uPlA[ i ].w + sw * 3.0 );
+            vec3 base = mix( uPlA[ i ].rgb, uPlB[ i ].rgb, band );
+            base *= 0.8 + 0.4 * fbm( q * 5.0 + uPlB[ i ].w * 3.0 );
+            float rim = pow( 1.0 - z, 3.0 );
+            c = base * ( 0.08 + 1.05 * lam ) + uPlC[ i ].rgb * rim * uPlC[ i ].w * ( 0.25 + lam );
+          } else if ( r < 1.3 ) {
+            float h = 1.0 - ( r - 1.0 ) / 0.3;
+            c += uPlC[ i ].rgb * pow( h, 3.0 ) * 0.55 * uPlC[ i ].w;
+          }
+          if ( ringA > 0.0 && front ) c = mix( c, ringC, ringA );
+          col = c;
+        }
+      }
+    #endif
     #ifdef AURORA
       if ( h > 0.02 ) {
         vec2 ap = d.xz / ( h + 0.25 ) * 1.2;
@@ -132,6 +179,8 @@ export function createSky(cfg) {
   if (cfg.aurora) defines.AURORA = 1;
   if (cfg.nebula) defines.NEBULA = 1;
   if (sun?.moon) defines.MOON = 1;
+  const planets = cfg.planets ?? [];
+  if (planets.length) { defines.PLANETS = 1; defines.NPLANETS = planets.length; }
   const cl = cfg.clouds ?? {}, au = cfg.aurora ?? {}, ne = cfg.nebula ?? {}, st = cfg.stars ?? {};
   const uniforms = {
     uTop: { value: col(cfg.top, '#3d8bff') }, uMid: { value: col(cfg.mid ?? cfg.top, '#7dbbff') }, uHorizon: { value: col(cfg.horizon, '#cfe9ff') }, uGround: { value: col(cfg.ground ?? cfg.horizon, '#cfe9ff') },
@@ -144,6 +193,22 @@ export function createSky(cfg) {
     uNeb1: { value: col(ne.colors?.[0], '#6a2cff') }, uNeb2: { value: col(ne.colors?.[1], '#ff3dcb') }, uNebI: { value: ne.intensity ?? 0.5 },
     uStarD: { value: st.density ?? 0.04 }, uStarS: { value: st.scale ?? 70 },
   };
+  if (planets.length) {
+    const V4 = () => planets.map(() => new THREE.Vector4());
+    const pl = V4(), plA = V4(), plB = V4(), plC = V4(), plR = V4(), plRc = V4();
+    planets.forEach((p, i) => {
+      const az = ((p.azimuth ?? 0) * Math.PI) / 180, el = ((p.elevation ?? 20) * Math.PI) / 180;
+      const d = new THREE.Vector3(Math.sin(az) * Math.cos(el), Math.sin(el), Math.cos(az) * Math.cos(el)).normalize();
+      const a = toColor(p.colors?.[0] ?? '#8a6aff'), b = toColor(p.colors?.[1] ?? '#ffb36a'), atm = toColor(p.atmosphere ?? '#9ab8ff'), rc = toColor(p.ring?.color ?? '#e8d8b8');
+      pl[i].set(d.x, d.y, d.z, ((p.size ?? 8) * Math.PI) / 180);
+      plA[i].set(a.r, a.g, a.b, p.bands ?? 16);
+      plB[i].set(b.r, b.g, b.b, p.seed ?? i * 3.7 + 1);
+      plC[i].set(atm.r, atm.g, atm.b, p.atmo ?? 0.8);
+      plR[i].set(p.ring?.inner ?? 1.3, p.ring?.outer ?? 2.1, Math.sin(((p.ring?.tilt ?? 16) * Math.PI) / 180), ((p.ring?.rot ?? 0) * Math.PI) / 180);
+      plRc[i].set(rc.r, rc.g, rc.b, p.ring ? (p.ring.opacity ?? 0.85) : 0);
+    });
+    Object.assign(uniforms, { uPl: { value: pl }, uPlA: { value: plA }, uPlB: { value: plB }, uPlC: { value: plC }, uPlR: { value: plR }, uPlRc: { value: plRc } });
+  }
   const mat = new THREE.ShaderMaterial({
     uniforms, defines, vertexShader: SKY_VERTEX, fragmentShader: SKY_FRAGMENT,
     side: THREE.BackSide, depthWrite: false, depthTest: false, fog: false,

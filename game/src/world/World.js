@@ -10,7 +10,7 @@ import { createNoise } from './noise.js';
 import { RoadIndex, Terrain } from './terrain.js';
 import { PropLayer, scatter as scatterRules } from './props.js';
 import { makeRows, ribbon, skirt, loopVScale } from './ribbon.js';
-import { roadTexture, curbTexture, groundTexture, glowTexture, disposeTextures, texStats } from './textures.js';
+import { roadTexture, cosmicRoadTexture, curbTexture, groundTexture, glowTexture, disposeTextures, texStats } from './textures.js';
 import { buildBarriers } from './barriers.js';
 import { buildBoostPads, buildStartLine } from './features.js';
 import { buildRamps } from './ramps.js';
@@ -125,7 +125,7 @@ export class World {
     if (pads) this.group.add(pads);
     if (this.track.ramps.length) this.group.add(buildRamps(this, c.ramp ?? {}));
     { const sz = buildSurfaceZones(this, c.zones ?? {}); if (sz) this.group.add(sz); }
-    { const oe = buildOpenEdgeTrim(this, c.edgeTrim ?? {}); if (oe) this.group.add(oe); }
+    if (c.edgeTrim !== false) { const oe = buildOpenEdgeTrim(this, c.edgeTrim ?? {}); if (oe) this.group.add(oe); }
     if (c.signs !== false) { const signs = buildCornerSigns(this, c.signs ?? {}); if (signs) this.group.add(signs); }
     if (c.start !== false) this.group.add(buildStartLine(this, { sub: this.def.name?.toUpperCase(), ...c.start }));
     lap('features');
@@ -146,7 +146,7 @@ export class World {
 
   _buildRoadSurface() {
     const tr = this.track, rc = this.cfg.road;
-    const roadTex = this.tex(roadTexture(rc.texture ?? {}));
+    const roadTex = this.tex(rc.textureKind === 'cosmic' ? cosmicRoadTexture(rc.texture ?? {}) : roadTexture(rc.texture ?? {}));
     const roadMat = new THREE.MeshStandardMaterial({ map: roadTex, roughness: rc.roughness ?? 0.88, metalness: rc.metalness ?? 0 });
     if (rc.emissive) { roadMat.emissive = toColor(rc.emissive); roadMat.emissiveMap = roadTex; roadMat.emissiveIntensity = rc.emissiveIntensity ?? 0.2; }
     if (rc.wet) wetRoad(roadMat, this.timeUniform, rc.wet);
@@ -164,6 +164,7 @@ export class World {
     }
     const fa = { color: '#4a4f5e', depth: 0.9, ...(rc.fascia ?? {}) };
     const faMat = fa.depth > 0 ? new THREE.MeshLambertMaterial({ color: toColor(fa.color), side: THREE.DoubleSide }) : null;
+    if (faMat && fa.emissive) faMat.emissive = toColor(fa.emissive);
     const cw = cu.width > 0 ? cu.width : 0;
     const add = (geo, mat, name, shadow = true) => { const m = new THREE.Mesh(geo, mat); m.name = name; m.receiveShadow = shadow; m.matrixAutoUpdate = false; this.group.add(m); return m; };
 

@@ -7,6 +7,7 @@ import { harborHeights } from './harbor-heights.js';
 import { neonNights } from './neon-nights.js';
 import { magmaMile } from './magma-mile.js';
 import { spookyHollow } from './spooky-hollow.js';
+import { starlightSpiral } from './starlight-spiral.js';
 
 const RECIPES = {
   'sunny-meadows': sunnyMeadows,
@@ -16,6 +17,7 @@ const RECIPES = {
   'neon-nights': neonNights,
   'magma-mile': magmaMile,
   'spooky-hollow': spookyHollow,
+  'starlight-spiral': starlightSpiral,
 };
 
 /** Fallback for a track without a recipe: a plain daylit meadow so a brand-new track def is playable immediately. */
