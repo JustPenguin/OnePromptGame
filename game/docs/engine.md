@@ -104,7 +104,7 @@ R=45 m hairpins; the baseline Sunny Meadows has few real corners so the margin t
 * Respawn: slower yaw follow while the drone carries the kart, gentle catch-up afterwards. Slow tabs are safe (all exponential damping, session clamps dt to 50 ms).
 
 ## 3. Input (`core/Input.js`)
-* Bindings unchanged (`DEFAULT_BINDINGS`, `setBindings`, `captureNextKey`). `pressed(action)` edges are cleared by `endFrame()`; **`respawn` never produces an edge** (it is hold-to-use: the session reads `isDown('respawn')`).
+* Bindings unchanged (`DEFAULT_BINDINGS`, `setBindings`, `captureNextKey`). `pressed(action)` edges are cleared by `endFrame()`, which also samples the gamepad (so Start / Back edges are visible at the top of the next frame and while paused; in the baseline they were generated inside `read()` and cleared before `App.tick` could see them); **`respawn` never produces an edge** (it is hold-to-use: the session reads `isDown('respawn')`).
 * Keyboard steering is a linear ramp: 5.6 units/s (4.2 at top speed) to build, 10/s to release, 17/s when reversing direction (counter-steer is instant). ~0.18 s to full lock.
 * Gamepad: left stick x with `settings.gamepadDeadzone`, rescaled and curved (^1.25); d-pad steers (ramped); A/RT gas, B/LT brake, X/LB item, Y/R3 look back, RB drift, Back/D-up camera, Start pause, L3/D-down hold = respawn.
 * `rumble(strong, weak, ms)` (honours `settings.vibration`, never stacks a weaker effect on a stronger one); `attachSession(session)` rumbles the player's pad on wall hits, bumps, landings, boosts, drift levels, hits, spins, respawn;
