@@ -15,6 +15,10 @@ function gateSel(sel) {
 }
 
 export function gateHover(css) {
+  return gate(css.replace(/\/\*[\s\S]*?\*\//g, ''));   // comments would hide an @media/@keyframes head from the scanner below
+}
+
+function gate(css) {
   let out = '', i = 0;
   while (i < css.length) {
     const open = css.indexOf('{', i);
@@ -25,7 +29,7 @@ export function gateHover(css) {
       let depth = 1, j = open + 1;
       while (j < css.length && depth) { if (css[j] === '{') depth++; else if (css[j] === '}') depth--; j++; }
       const body = css.slice(open + 1, j - 1);
-      out += /^@media/.test(head.trim()) ? `${head}{${gateHover(body)}}` : `${head}{${body}}`;
+      out += /^@media/.test(head.trim()) ? `${head}{${gate(body)}}` : `${head}{${body}}`;
       i = j;
       continue;
     }

@@ -43,6 +43,11 @@ const num = (v) => (Number.isFinite(v) ? v : 0);
 
 function addStats(save, collected, player, session) {
   const st = save.data.stats;
+  // Agent A's engine exposes session.stats (drift/boost/air seconds, top speed, distance...) - prefer it where present, else our own counters
+  const eng = session?.stats && typeof session.stats === 'object' ? session.stats : null;
+  const pick = (k, mine) => (eng && Number.isFinite(eng[k]) ? eng[k] : num(mine));
+  const merged = { ...collected, driftSeconds: pick('driftSeconds', collected?.driftSeconds), topSpeed: pick('topSpeed', collected?.topSpeed) };
+  collected = merged;
   for (const k of ['driftSeconds', 'boosts', 'itemsHit', 'itemsUsed', 'hitsTaken', 'overtakes', 'coins', 'playSeconds']) st[k] = num(st[k]) + num(collected?.[k]);
   const dist = Math.max(0, Math.min(num(player?.race.distance), (session.race?.laps ?? 1) * (session.track?.length ?? 0)));
   st.distance = num(st.distance) + dist;

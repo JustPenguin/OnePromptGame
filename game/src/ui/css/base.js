@@ -227,5 +227,26 @@ textarea.txt{resize:none;font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,
 @keyframes ghostp{50%{opacity:.55}}
 .backbtn{position:absolute;left:max(1.2rem,var(--sal));top:max(1.2rem,var(--sat));z-index:6;}
 .noflash [class*="flash"]{animation:none!important;}
+[data-rm] .toast,[data-rm] .modal,[data-rm] .modal-scrim{animation-duration:.01s!important;} [data-rm] .btn,[data-rm] .mbtn,[data-rm] .chip-d,[data-rm] .kcard,[data-rm] .ccard,[data-rm] .tcard,[data-rm] .cupcard,[data-rm] .row,[data-rm] .icon-btn{transition-duration:.01s!important;} [data-rm] .press,[data-rm] .ghost-pulse,[data-rm] .logo,[data-rm] .lw .t,[data-rm] .bar i::after,[data-rm] .keybtn.listening{animation:none!important;}
+
 [data-large] #ui-root{--ui-large:1;}
+.icon-btn{min-width:2.8rem;}
+
+`;
+
+/** Appended AFTER every screen's CSS so its compact-layout overrides cannot shrink touch targets. */
+export const coarseCss = /* css */ `
+/* touch: every tap target >= 44 px (art direction), even in the compact layouts */
+@media (any-pointer:coarse){
+  .btn.sm,.l-compact .btn.sm{min-height:2.8rem;}
+  .btn,.l-compact .btn{min-height:2.8rem;}
+  .icon-btn{width:3rem;height:3rem;}
+  .keybtn,.l-compact .keybtn{height:2.8rem;}
+  .seg button,.l-compact .seg button{min-height:2.4rem;}
+  .stepper button,.l-compact .stepper button{width:2.8rem;height:2.8rem;}
+  .slider{height:2.8rem;}
+  .row,.l-compact .row,.krow,.l-compact .krow{min-height:3rem;}
+  .tab,.l-compact .tab{min-height:2.8rem;}
+  .mbtn,.l-compact .mbtn,.l-portrait .mbtn{min-height:2.9rem;}
+}
 `;

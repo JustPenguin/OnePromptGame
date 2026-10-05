@@ -9,7 +9,7 @@
 //   ui.showHud(session) / ui.hideHud() / ui.update(dt, session)         HUD lives in ./hud/
 import { h, clear, afterLayout, wait } from './dom.js';
 import { clamp } from '../core/math.js';
-import { baseCss } from './css/base.js';
+import { baseCss, coarseCss } from './css/base.js';
 import { gateHover } from './css/gate.js';
 import { headerCss } from './components.js';
 import { Nav } from './nav.js';
@@ -35,7 +35,7 @@ export class UI {
 
     const style = document.createElement('style');
     style.id = 'kr-ui-css';
-    style.textContent = gateHover([baseCss, headerCss, ...SCREEN_CSS].join('\n')) + '\n' + hudCss + '\n' + coachCss;
+    style.textContent = gateHover([baseCss, headerCss, ...SCREEN_CSS, coarseCss].join('\n')) + '\n' + hudCss + '\n' + coachCss;
     document.head.appendChild(style);
 
     this.layers = {};

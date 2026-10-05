@@ -181,7 +181,8 @@ const RAW = /* css */ `
 .banner.photo > div{background:linear-gradient(90deg,transparent,rgba(255,255,255,.92) 12%,rgba(220,235,255,.96) 50%,rgba(255,255,255,.92) 88%,transparent);color:#0a1030;text-shadow:none;} .banner.photo{top:34%;}
 .banner.photo.show{animation:banner-stay .5s cubic-bezier(.2,1,.3,1) both;}
 .hud-pause{pointer-events:auto;opacity:.45;width:2.7em;border:0;border-radius:.8em;background:linear-gradient(180deg,var(--glass1),var(--glass2));color:#fff;font-size:1em;display:grid;place-items:center;cursor:pointer;box-shadow:inset 0 0 0 .08em rgba(255,255,255,.2),0 .22em 0 rgba(0,0,0,.3);transition:opacity .2s,transform .15s var(--ease-spring);}
-[data-device="mouse"] .hud-pause,[data-device="touch"] .hud-pause{opacity:.95;} .hud-pause:hover{opacity:1;transform:scale(1.08);}
+[data-device="mouse"] .hud-pause,[data-device="touch"] .hud-pause{opacity:.95;}
+.hud.touch .hud-pause{width:3.3em;min-height:3.3em;} .hud-pause:hover{opacity:1;transform:scale(1.08);}
 .touchc{position:absolute;inset:0;pointer-events:none;display:none;z-index:5;}
 .hud.touch .touchc{display:block;}
 .tzone{position:absolute;left:0;bottom:0;width:52%;height:62%;pointer-events:auto;touch-action:none;}
@@ -195,7 +196,7 @@ const RAW = /* css */ `
 .tbtn.t-item{background:radial-gradient(circle at 35% 28%,rgba(34,211,255,.7),rgba(15,180,228,.35));} .tbtn.t-brake{background:radial-gradient(circle at 35% 28%,rgba(255,61,106,.7),rgba(223,34,80,.35));}
 .tbtn.t-back{background:radial-gradient(circle at 35% 28%,rgba(160,170,220,.55),rgba(90,100,160,.25));}
 
-.l-compact .hud.touch .hz.mr{top:calc(max(var(--pad),var(--sat)) + 4.6em);} .l-compact .hud.touch .mini{width:5.4em;height:5.4em;}
+.l-compact .hud.touch .hz.mr{top:calc(max(var(--pad),var(--sat)) + 7.3em);} .l-compact .hud.touch .mini{width:5.4em;height:5.4em;} .l-portrait .hud.touch .hz.mr{top:calc(max(var(--pad),var(--sat)) + 8.2em);}
 
 /* ------------------------------------------------------------ states */
 .hud[data-phase="intro"] .hz.tl,.hud[data-phase="intro"] .hz.tr,.hud[data-phase="intro"] .hz.bl,.hud[data-phase="intro"] .hz.br,.hud[data-phase="intro"] .hz.mr,.hud[data-phase="intro"] .hz.ml{opacity:0;transform:translateY(.6em);}
@@ -203,6 +204,17 @@ const RAW = /* css */ `
 .hz{transition:opacity .5s,transform .5s var(--ease-out);}
 .hz.ml{transition:opacity .5s;}
 .hud.nomap .hz.mr{display:none;} .hud.noboard .hz.ml{display:none;}
+
+/* ------------------------------------------------------------ reduced motion: keep every message, drop the throw / scale / spin */
+@keyframes fade-hold{0%{opacity:0}12%{opacity:1}82%{opacity:1}100%{opacity:0}}
+@keyframes fade-in{from{opacity:0}to{opacity:1}}
+[data-rm] .cd{transform:none;} [data-rm] .cd.show,[data-rm] .cd.go{animation:fade-hold .95s ease both;}
+[data-rm] .burst.show{animation:none;opacity:0;}
+[data-rm] .banner{transform:none;} [data-rm] .banner.show{animation:fade-hold 2.4s ease both;} [data-rm] .banner.fin.stay.show,[data-rm] .banner.photo.show{animation:fade-in .4s ease both;}
+[data-rm] .intro{transform:skewX(-10deg);} [data-rm] .intro.show{animation:fade-hold 3.4s ease both;}
+[data-rm] .pos.up,[data-rm] .pos.down,[data-rm] .item.got .item-frame,[data-rm] .lapbox.pulse,[data-rm] .coins.pulse,[data-rm] .item.roulette .item-frame canvas{animation:none;}
+[data-rm] .ev,[data-rm] .laps .lr,[data-rm] .driftlbl.show,[data-rm] .coach{animation:fade-in .3s ease both;} [data-rm] .dmeter i.lit{animation:none;}
+[data-rm] .respawn-ring{transition:opacity .15s;}
 
 /* ------------------------------------------------------------ layouts */
 .l-wide .hz.mr{top:calc(max(var(--pad),var(--sat)) + 9.4em);}

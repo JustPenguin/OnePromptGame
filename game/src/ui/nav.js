@@ -15,6 +15,22 @@ const MOVE_KEYS = {
 };
 const isTyping = (t) => !!t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable);
 const rectOf = (el) => el.getBoundingClientRect();
+const SCROLLERS = '.scroll, .track-scroll, .cup-cards, .class-cards, .set-body, .rec-body, .help-body, [data-scroll]';
+
+/**
+ * Scroll `el` into view INSIDE its nearest designated scroll area only.  (el.scrollIntoView would also scroll the
+ * overflow:hidden .screen container, pushing the header - e.g. the Back button - out of view.)
+ */
+function reveal(el) {
+  const sc = el.closest(SCROLLERS);
+  if (!sc || sc === el) return;
+  const r = el.getBoundingClientRect(), c = sc.getBoundingClientRect();
+  const pad = 12;
+  if (r.top < c.top + pad) sc.scrollTop -= c.top + pad - r.top;
+  else if (r.bottom > c.bottom - pad) sc.scrollTop += r.bottom - (c.bottom - pad);
+  if (r.left < c.left + pad) sc.scrollLeft -= c.left + pad - r.left;
+  else if (r.right > c.right - pad) sc.scrollLeft += r.right - (c.right - pad);
+}
 
 export class Nav {
   /** @param {import('./UI.js').UI} ui */
@@ -29,7 +45,8 @@ export class Nav {
     this._onKey = (e) => this._keydown(e);
     window.addEventListener('keydown', this._onKey, true);
     // Space activates a focused <button> on keyup in some browsers even when keydown was handled: swallow it while a menu is open
-    this._onKeyUp = (e) => { if (this.scope && e.code === 'Space' && !isTyping(e.target) && !this.capturing) { e.preventDefault(); e.stopImmediatePropagation(); } };
+    // (default only: the game's Input must still see every keyup, or a key released during a pause would stay 'held')
+    this._onKeyUp = (e) => { if (this.scope && e.code === 'Space' && !isTyping(e.target) && !this.capturing) e.preventDefault(); };
     window.addEventListener('keyup', this._onKeyUp, true);
     window.addEventListener('pointermove', (e) => this._pointerMove(e), { passive: true });
     window.addEventListener('pointerdown', (e) => this._pointerDown(e), { passive: true, capture: true });
@@ -44,6 +61,7 @@ export class Nav {
   push(root, opts = {}) {
     const prevTop = this.scope;
     if (prevTop && this.focused) prevTop.last = this.focused;
+    this._swallowPad = true;
     const scope = { root, onBack: opts.onBack, onTab: opts.onTab, onAction: opts.onAction, onStart: opts.onStart, onKey: opts.onKey, wrap: opts.wrap !== false, last: null, backKeys: opts.backKeys ?? null };
     this.scopes.push(scope);
     if (opts.autofocus !== false) requestAnimationFrame(() => { if (this.scope === scope) this.autofocus(scope); });
@@ -86,7 +104,7 @@ export class Nav {
     el.classList.add('is-focus');
     if (this.scope) this.scope.last = el;
     try { el.focus({ preventScroll: true }); } catch { /* ignore */ }
-    if (scroll) { try { el.scrollIntoView({ block: 'nearest', inline: 'nearest' }); } catch { /* ignore */ } }
+    if (scroll) reveal(el);
     if (!silent) this.ui.sfx('hover');
     el.dispatchEvent(new CustomEvent('navfocus', { bubbles: true, detail: { from } }));
   }
@@ -225,6 +243,7 @@ export class Nav {
     } catch { return; }
     if (!pad) { this._padPrev = []; return; }
     const btn = (i) => !!pad.buttons[i]?.pressed;
+    if (this._swallowPad) { this._swallowPad = false; this._padPrev = pad.buttons.map((b) => !!b?.pressed); this._rep.dir = null; return; }   // a new screen/modal just opened: held buttons belong to the previous one
     const prev = this._padPrev;
     const edge = (i) => btn(i) && !prev[i];
     const ax = pad.axes[0] ?? 0, ay = pad.axes[1] ?? 0;

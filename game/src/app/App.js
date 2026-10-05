@@ -251,11 +251,19 @@ export class App {
       const s = this.session;
       this.menuScene.active = !s?.loaded;
       if (s?.loaded) {
-        if (!this.paused && !this._hold && this.input.pressed('pause') && s.race.phase !== 'results') this.setPaused(true);
+        const live = !this.paused && !this._hold;
+        // Edges are checked BEFORE and AFTER the update: keyboard edges arrive between frames, but gamepad edges are produced inside
+        // Input.read() (during s.update) and endFrame() clears them at the end of this very tick.
+        const wantPause = () => this.input.pressed('pause') && s.race.phase !== 'results';
+        if (live && wantPause()) this.setPaused(true);
         if (!this.paused && !this._hold) {
-          if (this.input.pressed('camera')) { const m = s.cameraRig.cycleMode(); if (m) { this.settings.cameraMode = m; this.save.commit(); } }
-          if (this.input.pressed('respawn') && s.player && s.race.phase === 'racing') s.physics.respawnKart(s.player, 'manual');
+          const rig = s.cameraRig, modeBefore = rig?.mode;
           s.update(dt);
+          // camera cycle: skip when the engine already cycled it during update (Agent A may own the key), else do it here
+          if (this.input.pressed('camera') && rig && rig.mode === modeBefore) { const m = rig.cycleMode?.(); if (m) { this.settings.cameraMode = m; this.save.commit(); } }
+          // manual respawn: only the legacy instant version when the engine has no hold-to-respawn (session.respawnHold)
+          if (this.input.pressed('respawn') && typeof s.respawnHold !== 'number' && s.player && s.race.phase === 'racing') s.physics.respawnKart(s.player, 'manual');
+          if (!this.paused && wantPause()) this.setPaused(true);
         }
         s.render();
         this.ui.update(dt, s);

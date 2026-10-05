@@ -66,12 +66,12 @@ export const selectCss = /* css */ `
 .l-portrait .si-tag{min-height:0;} .l-portrait .si-note{display:none;}
 .l-portrait .chips{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));width:100%;} .l-portrait .chip-d{min-width:0;padding:.4rem .2rem .35rem;} .l-portrait .chip-d .portrait{width:2.9rem;height:2.9rem;} .l-portrait .chip-d .cn{font-size:.78rem;}
 .l-portrait .sel-foot{flex-direction:column;align-items:stretch;} .l-portrait .sel-foot > .btn{align-self:center;}
-.l-portrait .kart-cards{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));width:100%;} .l-portrait .kcard{width:auto;}
+.l-portrait .kart-cards{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:.6rem;width:100%;} .l-portrait .kcard{width:auto;padding:.5rem .7rem .55rem;} .l-portrait .kcard svg.ks{height:2.4rem;} .l-portrait .kcard .cn{font-size:1rem;margin-top:.15rem;} .l-portrait .kcard .cs{display:none;}
 .l-portrait .class-cards{flex-direction:column;flex-wrap:nowrap;gap:.8rem;justify-content:flex-start;align-items:stretch;overflow:auto;padding:.3rem .2rem 1rem;} .l-portrait .ccard{width:100%;min-height:7.6rem;display:grid;grid-template-columns:4.6rem minmax(0,1fr);grid-template-rows:auto auto auto;column-gap:.9rem;row-gap:.25rem;align-items:center;padding:.8rem 1rem .8rem 0;} .l-portrait .ccard::before{width:4.6rem;height:100%;inset:0 auto 0 0;} .l-portrait .ccard .flames{grid-row:1/4;grid-column:1;justify-content:center;flex-direction:column-reverse;height:auto;align-items:center;font-size:1.3rem;gap:.1rem;} .l-portrait .ccard .cn{grid-column:2;margin:0;font-size:1.5rem;} .l-portrait .ccard .cd{grid-column:2;font-size:.82rem;} .l-portrait .ccard .cm{grid-column:2;} .l-portrait .ccard .lkov{padding:.5rem;}
 .l-compact .sel-main{gap:1rem;} .l-compact .sel-info{width:15rem;padding:.5rem .7rem;gap:.3rem;margin-top:0;} .l-compact .si-name{font-size:1.5rem;} .l-compact .si-top{gap:.6rem;} .l-compact .si-top .portrait{width:2.6rem;height:2.6rem;} .l-compact .si-sub{margin-top:.15rem;} .l-compact .si-sub .chip{padding:.05rem .5rem;font-size:.68rem;} .l-compact .si-tag{display:none;} .l-compact .si-note{display:none;} .l-compact .stat{grid-template-columns:3.7rem 1fr 2.4rem;font-size:.62rem;gap:.35rem;} .l-compact .stats{gap:.18rem!important;} .l-compact .stat .seg5{height:.55rem;} .l-compact .stat .val{font-size:.8rem;}
 .l-compact .chips{gap:.35rem;flex-wrap:nowrap;} .l-compact .chip-d{min-width:3.4rem;padding:.25rem .2rem .2rem;border-radius:.7rem;} .l-compact .chip-d .portrait{width:2.2rem;height:2.2rem;} .l-compact .chip-d .cn{font-size:.6rem;} .l-compact .chip-d .lk{top:.8rem;font-size:1rem;}
 .l-compact .kart-cards{gap:.45rem;flex-wrap:nowrap;} .l-compact .kcard{width:8rem;padding:.35rem .5rem .4rem;} .l-compact .kcard svg.ks{height:1.7rem;} .l-compact .kcard .cn{font-size:.8rem;margin-top:.1rem;} .l-compact .kcard .cs{display:none;}
-.l-compact .sel-foot{margin-top:.2rem;} .l-compact .sel-foot > .btn{display:none;}
+.l-compact .sel-foot{margin-top:.2rem;align-items:flex-end;} .l-compact .sel-foot > .btn{font-size:1.05rem;padding:.35rem 1.3rem;}
 .l-compact .ccard{width:11rem;min-height:12.5rem;padding:.6rem .8rem;} .l-compact .ccard .cn{font-size:1.4rem;margin-top:.4rem;} .l-compact .ccard .cd{font-size:.74rem;} .l-compact .ccard::before{height:3.2rem;} .l-compact .ccard .flames{font-size:1.4rem;height:1.6rem;} .l-compact .class-cards{gap:.9rem;}
 `;
 
@@ -139,7 +139,10 @@ export class DriverScreen extends Screen {
       const b = h('button', { type: 'button', class: `chip-d pop${locked ? ' locked' : ''}${d.id === sel.driverId ? ' cur' : ''}`, style: { '--i': i }, 'data-nav': '', 'data-sfx': 'select', 'data-id': d.id, 'aria-label': `${d.name}, ${d.species}${locked ? ', locked' : ''}`, ...(d.id === sel.driverId ? { 'data-default': '' } : {}) },
         portrait(d.id, 60), h('span', { class: 'cn' }, d.name), locked ? icon('lock', { cls: 'lk' }) : null);
       b.addEventListener('navfocus', () => this.preview(d.id));
-      b.addEventListener('click', () => { if (this.ui.nav.device === 'touch' && this.cur !== d.id) { this.preview(d.id); this.ui.nav.setFocus(b, { silent: true }); return; } this.confirm(d.id, b); });
+      // touch: the first tap previews, a second tap on the same card (or the Choose button) confirms.  A tap focuses the card BEFORE
+      // click fires (and focus previews), so what was selected is captured at pointerdown.
+      b.addEventListener('pointerdown', () => { this._downCur = this.cur; }, true);
+      b.addEventListener('click', () => { if (this.ui.nav.device === 'touch' && this._downCur !== d.id) { this.preview(d.id); return; } this.confirm(d.id, b); });
       return b;
     });
     this.go = button({ label: 'Choose', icon: 'right', variant: 'green', onClick: () => this.confirm(this.cur), sfx: 'confirm' });
@@ -196,7 +199,8 @@ export class KartScreen extends Screen {
       const el = h('button', { type: 'button', class: `kcard pop${locked ? ' locked' : ''}${b.id === sel.bodyId ? ' cur' : ''}`, style: { '--i': i }, 'data-nav': '', 'data-sfx': 'select', 'data-id': b.id, 'aria-label': `${b.name}${locked ? ', locked' : ''}`, ...(b.id === sel.bodyId ? { 'data-default': '' } : {}) },
         kartSilhouette(b.id), h('div', { class: 'cn' }, b.name), h('div', { class: 'cs' }, b.tagline), locked ? icon('lock', { cls: 'lk' }) : null);
       el.addEventListener('navfocus', () => this.preview(b.id));
-      el.addEventListener('click', () => { if (this.ui.nav.device === 'touch' && this.cur !== b.id) { this.preview(b.id); this.ui.nav.setFocus(el, { silent: true }); return; } this.confirm(b.id, el); });
+      el.addEventListener('pointerdown', () => { this._downCur = this.cur; }, true);
+      el.addEventListener('click', () => { if (this.ui.nav.device === 'touch' && this._downCur !== b.id) { this.preview(b.id); return; } this.confirm(b.id, el); });
       return el;
     });
     this.go = button({ label: 'Choose', icon: 'right', variant: 'green', onClick: () => this.confirm(this.cur), sfx: 'confirm' });
