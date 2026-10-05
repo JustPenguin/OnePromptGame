@@ -1,0 +1,21 @@
+{
+  "name": "kart-rush-gp",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Kart Rush GP - an original arcade kart racer built with Three.js (frontend only, localStorage persistence)",
+  "scripts": {
+    "build": "node scripts/build.mjs",
+    "watch": "node scripts/build.mjs --watch",
+    "serve": "node scripts/serve.mjs",
+    "check": "node scripts/check.mjs"
+  },
+  "dependencies": {
+    "three": "^0.186.1"
+  },
+  "devDependencies": {
+    "@fontsource/lilita-one": "^5.3.0",
+    "@fontsource/nunito": "^5.3.0",
+    "esbuild": "^0.28.2"
+  }
+}

@@ -1,0 +1,22 @@
+{
+  "browser": {
+    "browserName": "chromium",
+    "launchOptions": {
+      "executablePath": "/opt/pw-browsers/chromium",
+      "headless": true,
+      "args": [
+        "--use-angle=swiftshader",
+        "--enable-unsafe-swiftshader",
+        "--ignore-gpu-blocklist",
+        "--use-gl=angle",
+        "--enable-webgl",
+        "--autoplay-policy=no-user-gesture-required",
+        "--disable-background-timer-throttling",
+        "--disable-renderer-backgrounding"
+      ]
+    },
+    "contextOptions": {
+      "viewport": { "width": 960, "height": 540 }
+    }
+  }
+}

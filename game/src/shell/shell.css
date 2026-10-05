@@ -1,0 +1,44 @@
+/* Layout concept: one full-bleed WebGL canvas, a DOM UI layer on top (menus + HUD), nothing ever scrolls.
+   Single committed dark look (neon-arcade night sky) so the page sets every colour itself and does not
+   depend on the host theme. UI agents: build on these tokens, add your own under src/ui/. */
+:root {
+  color-scheme: dark;
+  --kr-bg: #0a0f24;          /* deep night navy: page + panels */
+  --kr-bg-2: #141b3d;        /* raised panel */
+  --kr-ink: #f4f7ff;         /* primary text */
+  --kr-ink-dim: #9aa6d6;     /* secondary text */
+  --kr-accent: #ff7a1a;      /* hot orange: primary action, speed */
+  --kr-accent-2: #22d3ff;    /* electric cyan: boost, info */
+  --kr-good: #7be04a;        /* lime: success, 1st place */
+  --kr-warn: #ffd23f;        /* sunny yellow: highlights, gold */
+  --kr-bad: #ff3d6a;         /* hot pink-red: danger, hits */
+  --font-display: 'KR Display', 'Lilita One', 'Arial Rounded MT Bold', 'Trebuchet MS', system-ui, sans-serif;
+  --font-ui: 'KR UI', 'Nunito', 'Segoe UI', system-ui, -apple-system, sans-serif;
+}
+html, body {
+  height: 100%;
+  margin: 0;
+  background: var(--kr-bg);
+  color: var(--kr-ink);
+  font-family: var(--font-ui);
+  font-weight: 700;
+  overflow: hidden;
+  overscroll-behavior: none;
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-tap-highlight-color: transparent;
+}
+#app { position: relative; width: 100%; height: 100%; overflow: hidden; background: var(--kr-bg); }
+#game-canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; outline: none; touch-action: none; }
+#ui-root { position: absolute; inset: 0; pointer-events: none; overflow: hidden; }
+#ui-root > * { pointer-events: auto; }
+#ui-root .ui-passive { pointer-events: none; }
+#boot { position: absolute; inset: 0; z-index: 50; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 18px;
+  background: radial-gradient(120% 100% at 50% 0%, #1b2a6b 0%, var(--kr-bg) 62%); transition: opacity .5s ease; }
+#boot.done { opacity: 0; pointer-events: none; }
+.boot-logo { font-family: var(--font-display); font-size: clamp(34px, 8vw, 84px); letter-spacing: .04em; transform: skewX(-8deg); text-shadow: 0 4px 0 #b34700, 0 10px 30px rgba(255,122,26,.45); }
+.boot-logo b { color: var(--kr-accent); }
+.boot-bar { width: min(340px, 70vw); height: 10px; border-radius: 99px; background: rgba(255,255,255,.12); overflow: hidden; }
+.boot-bar i { display: block; height: 100%; width: 8%; border-radius: 99px; background: linear-gradient(90deg, var(--kr-accent), var(--kr-warn)); transition: width .25s ease; }
+.boot-msg { font-size: 14px; color: var(--kr-ink-dim); letter-spacing: .08em; text-transform: uppercase; }
+@media (prefers-reduced-motion: reduce) { #boot { transition: none; } }
