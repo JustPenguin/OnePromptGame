@@ -62,16 +62,17 @@ export const selectCss = /* css */ `
 .ccard.locked{filter:saturate(.4) brightness(.8);} .ccard.locked .lkov{position:absolute;inset:0;z-index:2;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:.5rem;background:#0a0f2a;padding:1rem;text-align:center;}
 .ccard .lkov .ico{font-size:2.6rem;color:#ff9fb4;} .ccard .lkov b{font-size:1.4rem;} .ccard .lkov span{font-size:.92rem;color:#ffe0e8;}
 .ccard.cur::after{content:'';position:absolute;top:.7rem;right:.7rem;width:1.5rem;height:1.5rem;border-radius:50%;background:var(--kr-good) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%2310300a' stroke-width='4' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M5 12.6l4.7 4.7L19 7.4'/%3E%3C/svg%3E") center/70% no-repeat;}
-.l-portrait .sel-main{flex-direction:column;} .l-portrait .sel-info{width:100%;max-width:none;padding:.8rem 1rem;gap:.45rem;margin-top:0;order:2;} .l-portrait .sel-fill{order:1;} .l-portrait .si-name{font-size:1.8rem;} .l-portrait .si-top .portrait{width:3.4rem;height:3.4rem;}
+.l-portrait .sel-main{display:contents;} .l-portrait .sel-fill{order:1;flex:1;min-height:7rem;} .l-portrait .sel-info{order:2;width:100%;max-width:none;padding:.7rem .9rem;gap:.4rem;margin-top:0;} .l-portrait .sel-foot{order:3;} .l-portrait .si-name{font-size:1.7rem;} .l-portrait .si-top .portrait{width:3.2rem;height:3.2rem;} .l-portrait .si-tag{font-size:.82rem;} .l-portrait .si-note{display:none;} .l-portrait .stats{gap:.3rem!important;} .l-portrait .h1{font-size:2.1rem;}
 .l-portrait .si-tag{min-height:0;} .l-portrait .si-note{display:none;}
 .l-portrait .chips{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));width:100%;} .l-portrait .chip-d{min-width:0;padding:.4rem .2rem .35rem;} .l-portrait .chip-d .portrait{width:2.9rem;height:2.9rem;} .l-portrait .chip-d .cn{font-size:.78rem;}
 .l-portrait .sel-foot{flex-direction:column;align-items:stretch;} .l-portrait .sel-foot > .btn{align-self:center;}
 .l-portrait .kart-cards{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));width:100%;} .l-portrait .kcard{width:auto;}
-.l-portrait .class-cards{flex-direction:column;flex-wrap:nowrap;gap:.7rem;justify-content:flex-start;overflow:auto;} .l-portrait .ccard{width:100%;min-height:0;flex-direction:row;flex-wrap:wrap;align-items:center;padding:.8rem 1rem;} .l-portrait .ccard::before{width:5rem;height:100%;inset:0 auto 0 0;} .l-portrait .ccard .cn{margin:0;font-size:1.4rem;} .l-portrait .ccard .cd{flex:1 1 60%;font-size:.8rem;} .l-portrait .ccard .flames{font-size:1.5rem;height:auto;width:3.4rem;}
-.l-compact .sel-info{width:15.5rem;padding:.6rem .8rem;gap:.35rem;margin-top:0;} .l-compact .si-name{font-size:1.7rem;} .l-compact .si-top .portrait{width:3rem;height:3rem;} .l-compact .si-tag{display:none;} .l-compact .si-note{display:none;} .l-compact .stat{grid-template-columns:3.8rem 1fr 1.4rem;font-size:.66rem;gap:.4rem;} .l-compact .stats{gap:.2rem!important;}
-.l-compact .chip-d{min-width:3.6rem;padding:.3rem .25rem .25rem;} .l-compact .chip-d .portrait{width:2.5rem;height:2.5rem;} .l-compact .chip-d .cn{font-size:.65rem;} .l-compact .chips{gap:.4rem;flex-wrap:nowrap;} .l-compact .kcard{width:8.6rem;padding:.4rem .5rem;} .l-compact .kcard svg.ks{height:2rem;} .l-compact .kcard .cs{display:none;}
-.l-compact .ccard{width:11rem;min-height:14rem;padding:.7rem .8rem;} .l-compact .ccard .cn{font-size:1.4rem;margin-top:.5rem;} .l-compact .ccard .cd{font-size:.74rem;} .l-compact .ccard::before{height:3.4rem;} .l-compact .ccard .flames{font-size:1.5rem;height:1.8rem;}
-.l-compact .sel-foot > .btn{display:none;}
+.l-portrait .class-cards{flex-direction:column;flex-wrap:nowrap;gap:.8rem;justify-content:flex-start;align-items:stretch;overflow:auto;padding:.3rem .2rem 1rem;} .l-portrait .ccard{width:100%;min-height:7.6rem;display:grid;grid-template-columns:4.6rem minmax(0,1fr);grid-template-rows:auto auto auto;column-gap:.9rem;row-gap:.25rem;align-items:center;padding:.8rem 1rem .8rem 0;} .l-portrait .ccard::before{width:4.6rem;height:100%;inset:0 auto 0 0;} .l-portrait .ccard .flames{grid-row:1/4;grid-column:1;justify-content:center;flex-direction:column-reverse;height:auto;align-items:center;font-size:1.3rem;gap:.1rem;} .l-portrait .ccard .cn{grid-column:2;margin:0;font-size:1.5rem;} .l-portrait .ccard .cd{grid-column:2;font-size:.82rem;} .l-portrait .ccard .cm{grid-column:2;} .l-portrait .ccard .lkov{padding:.5rem;}
+.l-compact .sel-main{gap:1rem;} .l-compact .sel-info{width:15rem;padding:.5rem .7rem;gap:.3rem;margin-top:0;} .l-compact .si-name{font-size:1.5rem;} .l-compact .si-top{gap:.6rem;} .l-compact .si-top .portrait{width:2.6rem;height:2.6rem;} .l-compact .si-sub{margin-top:.15rem;} .l-compact .si-sub .chip{padding:.05rem .5rem;font-size:.68rem;} .l-compact .si-tag{display:none;} .l-compact .si-note{display:none;} .l-compact .stat{grid-template-columns:3.7rem 1fr 2.4rem;font-size:.62rem;gap:.35rem;} .l-compact .stats{gap:.18rem!important;} .l-compact .stat .seg5{height:.55rem;} .l-compact .stat .val{font-size:.8rem;}
+.l-compact .chips{gap:.35rem;flex-wrap:nowrap;} .l-compact .chip-d{min-width:3.4rem;padding:.25rem .2rem .2rem;border-radius:.7rem;} .l-compact .chip-d .portrait{width:2.2rem;height:2.2rem;} .l-compact .chip-d .cn{font-size:.6rem;} .l-compact .chip-d .lk{top:.8rem;font-size:1rem;}
+.l-compact .kart-cards{gap:.45rem;flex-wrap:nowrap;} .l-compact .kcard{width:8rem;padding:.35rem .5rem .4rem;} .l-compact .kcard svg.ks{height:1.7rem;} .l-compact .kcard .cn{font-size:.8rem;margin-top:.1rem;} .l-compact .kcard .cs{display:none;}
+.l-compact .sel-foot{margin-top:.2rem;} .l-compact .sel-foot > .btn{display:none;}
+.l-compact .ccard{width:11rem;min-height:12.5rem;padding:.6rem .8rem;} .l-compact .ccard .cn{font-size:1.4rem;margin-top:.4rem;} .l-compact .ccard .cd{font-size:.74rem;} .l-compact .ccard::before{height:3.2rem;} .l-compact .ccard .flames{font-size:1.4rem;height:1.6rem;} .l-compact .class-cards{gap:.9rem;}
 `;
 
 // ------------------------------------------------------------------------------------------------ helpers
@@ -126,7 +127,7 @@ function cardHeader(screen, id, title) {
 
 // ------------------------------------------------------------------------------------------------ Driver
 export class DriverScreen extends Screen {
-  get stage() { return { preset: 'select', kart: true, theme: null, comp: (l) => (l.mode === 'portrait' ? { x: 0, y: -0.16 } : l.mode === 'compact' ? { x: 0.2, y: 0.04 } : { x: 0.17, y: 0.02 }) }; }
+  get stage() { return { preset: 'select', kart: true, theme: null, comp: (l) => (l.mode === 'portrait' ? { x: 0, y: -0.2 } : l.mode === 'compact' ? { x: 0.2, y: 0.04 } : { x: 0.17, y: 0.02 }) }; }
   hints() { return [{ k: 'move' }, { k: 'confirm', label: 'Choose' }, { k: 'back' }]; }
 
   build() {
@@ -138,7 +139,7 @@ export class DriverScreen extends Screen {
       const b = h('button', { type: 'button', class: `chip-d pop${locked ? ' locked' : ''}${d.id === sel.driverId ? ' cur' : ''}`, style: { '--i': i }, 'data-nav': '', 'data-sfx': 'select', 'data-id': d.id, 'aria-label': `${d.name}, ${d.species}${locked ? ', locked' : ''}`, ...(d.id === sel.driverId ? { 'data-default': '' } : {}) },
         portrait(d.id, 60), h('span', { class: 'cn' }, d.name), locked ? icon('lock', { cls: 'lk' }) : null);
       b.addEventListener('navfocus', () => this.preview(d.id));
-      b.addEventListener('click', () => this.confirm(d.id, b));
+      b.addEventListener('click', () => { if (this.ui.nav.device === 'touch' && this.cur !== d.id) { this.preview(d.id); this.ui.nav.setFocus(b, { silent: true }); return; } this.confirm(d.id, b); });
       return b;
     });
     this.go = button({ label: 'Choose', icon: 'right', variant: 'green', onClick: () => this.confirm(this.cur), sfx: 'confirm' });
@@ -182,7 +183,7 @@ export class DriverScreen extends Screen {
 
 // ------------------------------------------------------------------------------------------------ Kart
 export class KartScreen extends Screen {
-  get stage() { return { preset: 'select', kart: true, theme: null, comp: (l) => (l.mode === 'portrait' ? { x: 0, y: -0.16 } : l.mode === 'compact' ? { x: 0.2, y: 0.04 } : { x: 0.17, y: 0.02 }) }; }
+  get stage() { return { preset: 'select', kart: true, theme: null, comp: (l) => (l.mode === 'portrait' ? { x: 0, y: -0.2 } : l.mode === 'compact' ? { x: 0.2, y: 0.04 } : { x: 0.17, y: 0.02 }) }; }
   hints() { return [{ k: 'move' }, { k: 'confirm', label: 'Choose' }, { k: 'back' }]; }
 
   build() {
@@ -195,7 +196,7 @@ export class KartScreen extends Screen {
       const el = h('button', { type: 'button', class: `kcard pop${locked ? ' locked' : ''}${b.id === sel.bodyId ? ' cur' : ''}`, style: { '--i': i }, 'data-nav': '', 'data-sfx': 'select', 'data-id': b.id, 'aria-label': `${b.name}${locked ? ', locked' : ''}`, ...(b.id === sel.bodyId ? { 'data-default': '' } : {}) },
         kartSilhouette(b.id), h('div', { class: 'cn' }, b.name), h('div', { class: 'cs' }, b.tagline), locked ? icon('lock', { cls: 'lk' }) : null);
       el.addEventListener('navfocus', () => this.preview(b.id));
-      el.addEventListener('click', () => this.confirm(b.id, el));
+      el.addEventListener('click', () => { if (this.ui.nav.device === 'touch' && this.cur !== b.id) { this.preview(b.id); this.ui.nav.setFocus(el, { silent: true }); return; } this.confirm(b.id, el); });
       return el;
     });
     this.go = button({ label: 'Choose', icon: 'right', variant: 'green', onClick: () => this.confirm(this.cur), sfx: 'confirm' });

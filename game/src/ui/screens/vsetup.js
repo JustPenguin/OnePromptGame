@@ -22,11 +22,11 @@ export const vsetupCss = /* css */ `
 .tpick button:hover{background:rgba(255,255,255,.28);transform:scale(1.1);}
 .tpick .tv{font-family:var(--font-display);font-size:1.05rem;letter-spacing:.02em;text-transform:uppercase;text-align:center;min-width:9rem;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
 .vs-panel .row{grid-template-columns:minmax(0,.7fr) minmax(0,1.5fr);}
-.vs-go{margin-top:.5rem;align-self:flex-start;}
+.vs-foot{display:flex;justify-content:flex-start;padding-top:.5rem;z-index:3;} .vs-go{flex:none;}
 .vs-lock{display:none;align-items:center;gap:.6rem;padding:.55rem .8rem;border-radius:.9rem;background:rgba(255,61,106,.14);box-shadow:inset 0 0 0 .1rem rgba(255,61,106,.5);font-size:.88rem;color:#ffe0e8;}
 .vs-lock.on{display:flex;} .vs-lock .ico{color:#ff9fb4;font-size:1.3rem;flex:none;}
-.l-portrait .vs-main{flex-direction:column;overflow:auto;} .l-portrait .vs-panel{width:100%;} .l-portrait .vs-preview{max-width:none;margin:0;} .l-portrait .vs-preview .tcard.big .tart{height:8rem;}
-.l-compact .vs-panel{width:24rem;padding:.5rem;gap:.3rem;} .l-compact .row{min-height:2.4rem;padding:.25rem .7rem;} .l-compact .row .desc{display:none;} .l-compact .vs-preview{max-width:15rem;} .l-compact .vs-preview .tcard.big .tart{height:6rem;} .l-compact .vs-desc{display:none;}
+.l-portrait .vs-main{flex-direction:column;overflow:auto;} .l-portrait .vs-panel{width:100%;} .l-portrait .vs-preview{max-width:none;margin:0;} .l-portrait .vs-preview .tcard.big .tart{height:8rem;} .l-portrait .vs-foot{justify-content:center;}
+.l-compact .vs-main{gap:1rem;} .l-compact .vs-panel{width:25rem;padding:.4rem;gap:.2rem;} .l-compact .row{min-height:2.25rem;padding:.15rem .7rem;gap:.5rem;} .l-compact .row .desc{display:none;} .l-compact .row .lbl{font-size:.9rem;} .l-compact .seg button{min-height:1.7rem;padding:.25rem .7rem;font-size:.8rem;} .l-compact .stepper button{width:1.8rem;height:1.8rem;} .l-compact .stepper .sv{font-size:1.1rem;} .l-compact .toggle{width:3rem;height:1.7rem;} .l-compact .toggle::after{width:1.3rem;height:1.3rem;top:.2rem;left:.2rem;} .l-compact .toggle[aria-checked="true"]::after{transform:translateX(1.3rem);} .l-compact .vs-preview{max-width:14rem;gap:.35rem;} .l-compact .vs-preview .tcard.big .tart{height:5rem;} .l-compact .vs-preview .tcard.big .tbody{padding:.4rem .6rem;} .l-compact .vs-preview .tcard.big .tn{font-size:1.1rem;} .l-compact .vs-meta{display:none;} .l-compact .vs-desc{display:none;} .l-compact .tpick .tv{font-size:.9rem;min-width:7rem;} .l-compact .vs-foot{position:absolute;right:max(1rem,var(--sar));bottom:max(.5rem,var(--sab));padding:0;}
 `;
 
 export class VersusSetupScreen extends Screen {
@@ -67,7 +67,8 @@ export class VersusSetupScreen extends Screen {
     const el = h('div', { class: 'screen' },
       h('div', { class: 'scrim-all' }),
       screenHeader({ kicker: MODE_NAMES[f.mode], title: 'Race setup', steps: f.stepLabels(), step: f.stepIndex('vsetup'), back: () => this.onBack() }),
-      h('div', { class: 'vs-main' }, h('div', { class: 'vs-panel panel slide-l' }, rows, this.lockBox, this.go), this.previewHost));
+      h('div', { class: 'vs-main' }, h('div', { class: 'vs-panel panel slide-l' }, rows, this.lockBox), this.previewHost),
+      h('div', { class: 'vs-foot' }, this.go));
     this.refresh();
     return el;
   }

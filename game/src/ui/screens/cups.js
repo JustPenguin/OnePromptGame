@@ -12,7 +12,7 @@ import { SPEED_CLASSES } from '../../data/roster.js';
 import { formatTime } from '../../core/math.js';
 
 export const cupsCss = /* css */ `
-.cup-cards{flex:1;display:flex;gap:1.6rem;align-items:center;justify-content:center;flex-wrap:wrap;z-index:2;overflow:auto;padding:.8rem .4rem 2.4rem;}
+.cup-cards{flex:1;display:flex;gap:1.6rem;align-items:safe center;justify-content:safe center;flex-wrap:wrap;z-index:2;overflow:auto;padding:.8rem .4rem 1.4rem;min-height:0;}
 .cupcard{position:relative;width:21rem;border:0;padding:0;border-radius:1.5rem;overflow:hidden;cursor:pointer;color:#fff;text-align:left;background:linear-gradient(180deg,rgba(32,44,104,.96),rgba(14,20,52,.96));box-shadow:inset 0 0 0 .12rem rgba(255,255,255,.16),0 .5rem 0 rgba(0,0,0,.34),0 1.2rem 2.4rem rgba(0,0,0,.4);transition:transform .25s var(--ease-spring),box-shadow .2s;--tc:#ffd23f;}
 .cup-head{position:relative;display:flex;align-items:center;gap:.9rem;padding:1rem 1.2rem;background:var(--tg);overflow:hidden;}
 .cup-head::after{content:'';position:absolute;inset:0;background:linear-gradient(180deg,rgba(255,255,255,.15),rgba(0,0,0,.45));}
@@ -44,7 +44,7 @@ export const cupsCss = /* css */ `
 .tt-bar{position:relative;display:flex;gap:1rem;align-items:center;justify-content:space-between;z-index:4;padding-top:.5rem;}
 .tt-info{display:flex;gap:.6rem;align-items:center;flex-wrap:wrap;padding:.5rem 1rem;border-radius:1rem;background:rgba(8,12,34,.78);box-shadow:inset 0 0 0 .1rem var(--line);font-size:.9rem;}
 .l-portrait .cup-cards{align-items:flex-start;} .l-portrait .cupcard{width:100%;} .l-portrait .tt-bar{flex-direction:column;align-items:stretch;}
-.l-compact .cup-cards{flex-wrap:nowrap;justify-content:flex-start;padding-bottom:1rem;} .l-compact .cupcard{width:17rem;flex:none;} .l-compact .cup-head{padding:.6rem .9rem;} .l-compact .cup-head .ci{width:2.6rem;height:2.6rem;font-size:1.5rem;} .l-compact .cup-list{padding:.5rem .9rem .3rem;} .l-compact .cup-tro{padding:.4rem .9rem .6rem;}
+.l-compact .cup-cards{flex-wrap:nowrap;justify-content:flex-start;align-items:flex-start;padding:.3rem .3rem .8rem;gap:.9rem;} .l-compact .cupcard{width:15.5rem;flex:none;} .l-compact .cup-head{padding:.5rem .8rem;} .l-compact .cup-head .ci{width:2.4rem;height:2.4rem;font-size:1.4rem;} .l-compact .cup-head .cn{font-size:1.25rem;} .l-compact .cup-list{padding:.4rem .8rem .3rem;gap:.15rem;} .l-compact .cup-list .ct{font-size:.8rem;} .l-compact .cup-list .ct b{width:1.2rem;height:1.2rem;font-size:.7rem;} .l-compact .cup-tro{padding:.35rem .8rem .5rem;} .l-compact .tro .ico{font-size:1.3rem;}
 `;
 
 function trophyBadges(save, cupId) {

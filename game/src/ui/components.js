@@ -62,7 +62,7 @@ export function portrait(driverId, size = 96, cls = '') {
   const c = document.createElement('canvas');
   c.width = c.height = px;
   c.className = 'portrait ' + cls;
-  c.style.width = c.style.height = size + 'px';
+  c.style.setProperty('--ps', size + 'px');   // default size; screen CSS can override width/height per layout
   try {
     const src = getDriverPortrait(driverId, Math.max(96, px));
     c.getContext('2d').drawImage(src, 0, 0, px, px);
@@ -204,5 +204,5 @@ export const headerCss = /* css */ `
 .crumb.done{color:#c9d4f5;} .crumb.done b{background:var(--kr-good);color:#10300a;}
 .l-compact .crumb span,.l-portrait .crumb span{display:none;} .l-compact .crumb,.l-portrait .crumb{padding:.25rem;}
 .l-compact .crumb.on span,.l-portrait .crumb.on span{display:inline;padding-right:.4rem;}
-.portrait{border-radius:50%;background:rgba(255,255,255,.1);display:block;}
+.portrait{width:var(--ps,2rem);height:var(--ps,2rem);border-radius:50%;background:rgba(255,255,255,.1);display:block;flex:none;}
 `;

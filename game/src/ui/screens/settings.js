@@ -30,13 +30,13 @@ export const settingsCss = /* css */ `
 @keyframes listen{50%{background:rgba(255,122,26,.5)}}
 .keybtn .none{opacity:.4;font-weight:700;}
 .btn-row{display:flex;gap:1.1rem;flex-wrap:wrap;padding:.4rem .2rem;}
-.set-foot{display:flex;justify-content:space-between;align-items:center;gap:1rem;min-height:1.6rem;}
+.set-foot{display:flex;justify-content:space-between;align-items:center;gap:1rem;min-height:0;} .set-foot:empty{display:none;}
 .modal textarea.txt{height:7.5rem;margin:.5rem 0;}
 .modal .st{font-size:.9rem;margin-top:.4rem;min-height:1.3rem;} .modal .st.bad{color:#ff9fb4;} .modal .st.good{color:#b5f67d;}
 .sumgrid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:.4rem;margin-top:.5rem;} .sumgrid div{padding:.4rem .6rem;border-radius:.6rem;background:rgba(255,255,255,.07);font-size:.78rem;color:var(--kr-ink-dim);} .sumgrid b{display:block;font-family:var(--font-display);font-weight:400;font-size:1.15rem;color:#fff;}
 .l-portrait .krow{grid-template-columns:minmax(0,1fr) 5.4rem 5.4rem;} .l-portrait .row{grid-template-columns:1fr;gap:.3rem;} .l-portrait .row .ctl{justify-content:flex-start;}
 .l-portrait .tab{padding:.45rem .7rem;font-size:.85rem;} .l-portrait .tab .ico{display:none;}
-.l-compact .set-wrap{width:min(46rem,96vw);} .l-compact .set-head .h1{font-size:1.6rem;} .l-compact .row{min-height:2.5rem;padding:.25rem .8rem;} .l-compact .row .desc{display:none;} .l-compact .krow{min-height:2.5rem;} .l-compact .keybtn{height:2rem;} .l-compact .tab{padding:.35rem .8rem;font-size:.85rem;}
+.l-compact .set-wrap{width:min(46rem,96vw);gap:.35rem;} .l-compact .set-head{gap:.8rem;} .l-compact .set-head .h1{font-size:1.5rem;} .l-compact .row{min-height:2.5rem;padding:.25rem .8rem;} .l-compact .row .desc{display:none;} .l-compact .krow{min-height:2.5rem;} .l-compact .keybtn{height:2rem;} .l-compact .tab{padding:.35rem .8rem;font-size:.85rem;}
 `;
 
 const TABS = [

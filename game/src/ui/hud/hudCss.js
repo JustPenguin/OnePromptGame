@@ -1,6 +1,6 @@
 // HUD stylesheet. OWNER: Agent E.  Everything is in `em` relative to .hud's font-size
 // (16px * --ui-scale * --hud-scale, so settings.hudScale resizes the whole HUD).  Zones: tl tr bl br ml mr tc bc c.
-export const hudCss = /* css */ `
+const RAW = /* css */ `
 .hud{position:absolute;inset:0;pointer-events:none;font-family:var(--font-display);font-weight:400;font-size:calc(16px * var(--ui-scale) * var(--hud-scale));color:#fff;
   -webkit-user-select:none;user-select:none;text-shadow:0 .07em 0 rgba(0,0,0,.55);--pad:1.3em;--glass1:rgba(26,36,92,.74);--glass2:rgba(8,12,34,.78);transition:opacity .35s,filter .35s;}
 .hud *{box-sizing:border-box;}
@@ -215,3 +215,35 @@ export const hudCss = /* css */ `
 .l-compact .hz.bc{bottom:max(.5em,var(--sab));}
 .l-compact .cd{font-size:7em;} .l-compact .banner{top:14%;} .l-compact .banner > div{font-size:2.4em;} .l-compact .intro{top:22%;} .l-compact .intro .it{font-size:2.2em;} .l-compact .hz.tc{top:calc(max(var(--pad),var(--sat)) + 7.6em);width:18em;} .l-compact .ev{font-size:1em;}
 `;
+
+/**
+ * Scope every rule under `.hud` so HUD class names (.drift, .cd, .item, .timer ...) can never leak into the menus.
+ * Layout-prefixed selectors keep their prefix (".l-compact .pos" -> ".l-compact .hud .pos"); @keyframes are left alone.
+ */
+function scopeSel(sel) {
+  const s = sel.trim();
+  if (!s) return s;
+  const m = /^((?:\.l-(?:wide|portrait|compact)|\.noflash|\.hc|\[data-device="\w+"\])\s+)(.*)$/.exec(s);
+  const lead = m ? m[1] : '';
+  const rest = m ? m[2] : s;
+  if (/^\.hud(?![\w-])/.test(rest)) return lead + rest;
+  return `${lead}.hud ${rest}`;
+}
+
+function scopeCss(css) {
+  let out = '', i = 0;
+  while (i < css.length) {
+    if (css.startsWith('/*', i)) { const e = css.indexOf('*/', i); out += css.slice(i, e + 2); i = e + 2; continue; }
+    const open = css.indexOf('{', i);
+    if (open < 0) { out += css.slice(i); break; }
+    const sel = css.slice(i, open).trim();
+    let depth = 1, j = open + 1;
+    while (j < css.length && depth) { if (css[j] === '{') depth++; else if (css[j] === '}') depth--; j++; }
+    const body = css.slice(open + 1, j - 1);
+    out += sel.startsWith('@') ? `${sel}{${body}}` : `${sel.split(',').map(scopeSel).join(',')}{${body}}`;
+    i = j;
+  }
+  return out;
+}
+
+export const hudCss = scopeCss(RAW.replace(/\/\*[\s\S]*?\*\//g, ""));

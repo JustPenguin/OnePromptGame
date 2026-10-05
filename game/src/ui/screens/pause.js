@@ -16,6 +16,8 @@ export const pauseCss = /* css */ `
 .pause-card .btn{justify-content:flex-start;}
 .pause-card .btn .in{width:100%;}
 .pause-card .btn .ico{margin-right:.2rem;}
+.pbtns{display:flex;flex-direction:column;gap:.95rem;}
+.l-compact .pause-card{width:min(31rem,94vw);padding:.7rem 1rem .9rem;gap:.5rem;} .l-compact .pause-card .h1{font-size:1.9rem;} .l-compact .pause-card .kicker,.l-compact .pause-info{display:none;} .l-compact .pause-card .pbtns{display:grid;grid-template-columns:1fr 1fr;gap:.6rem;} .l-compact .pause-card .btn{justify-content:center;}
 `;
 
 export class PauseScreen extends Screen {
@@ -41,7 +43,7 @@ export class PauseScreen extends Screen {
     ];
     items.forEach((b, i) => { b.classList.add('pop'); b.style.setProperty('--i', i); });
     return h('div', { class: 'screen' }, h('div', { class: 'scrim-all' }),
-      h('div', { class: 'pause-card panel' }, h('div', { class: 'kicker' }, 'Race paused'), h('h1', { class: 'h1' }, 'Paused'), info, items));
+      h('div', { class: 'pause-card panel' }, h('div', { class: 'kicker' }, 'Race paused'), h('h1', { class: 'h1' }, 'Paused'), info, h('div', { class: 'pbtns' }, items)));
   }
 
   resume() { this.app.setPaused(false); }

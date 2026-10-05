@@ -33,7 +33,11 @@ body{font-size:1rem;}
 
 /* ---------------------------------------------------------------- screens + transitions */
 .screen{position:absolute;inset:0;display:flex;flex-direction:column;padding:max(1.2rem,var(--sat)) max(1.6rem,var(--sar)) calc(max(1rem,var(--sab)) + var(--hint-room,2.3rem)) max(1.6rem,var(--sal));overflow:hidden;}
-.l-portrait{--hint-room:.6rem;} .l-compact{--hint-room:1.9rem;}
+.l-portrait{--hint-room:.4rem;} .l-compact{--hint-room:.3rem;}
+.l-compact .screen{padding:.55rem max(1rem,var(--sar)) calc(max(.4rem,var(--sab)) + var(--hint-room)) max(1rem,var(--sal));}
+.l-compact .h1{font-size:1.9rem;} .l-compact .kicker{font-size:.7rem;} .l-compact .scr-head{margin-bottom:.35rem;gap:.8rem;}
+.l-compact .btn{min-height:2.4rem;font-size:1.05rem;padding:.4rem 1.3rem;} .l-compact .btn.lg{min-height:2.8rem;font-size:1.2rem;} .l-compact .btn.sm{min-height:2.1rem;}
+.l-compact .hintbar{bottom:.15rem;} .l-compact .hintbar .h{font-size:.7rem;} .l-compact .key{min-width:1.4rem;height:1.4rem;font-size:.68rem;}
 .screen.in-fwd{animation:scr-in-fwd .5s var(--ease-out) both;}
 .screen.in-back{animation:scr-in-back .5s var(--ease-out) both;}
 .screen.in-fade{animation:scr-fade .45s ease both;}
