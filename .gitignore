@@ -124,3 +124,6 @@ CLAUDE.local.md
 # Game QA artifacts (screenshots, scratch scripts)
 game/.qa/
 .qa/
+
+# Claude Code sub-agent git worktrees (live working copies, never commit)
+.claude/worktrees/
