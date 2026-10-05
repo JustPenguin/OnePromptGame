@@ -3,11 +3,13 @@
 import { sunnyMeadows } from './sunny-meadows.js';
 import { cactusCanyon } from './cactus-canyon.js';
 import { frostbitePeak } from './frostbite-peak.js';
+import { harborHeights } from './harbor-heights.js';
 
 const RECIPES = {
   'sunny-meadows': sunnyMeadows,
   'cactus-canyon': cactusCanyon,
   'frostbite-peak': frostbitePeak,
+  'harbor-heights': harborHeights,
 };
 
 /** Fallback for a track without a recipe: a plain daylit meadow so a brand-new track def is playable immediately. */

@@ -203,6 +203,7 @@ const GROUND = {
   moss: { base: '#3d5a3a', dark: '#26402b', light: '#5f8650', blade: ['#1f3a22', '#7aa35f', '#35552f'], bladeAlpha: 0.45, blades: 4200, dots: ['#8fd2a0', '#c8f0d0'], dotCount: 24 },
   ash: { base: '#3a3636', dark: '#241f20', light: '#585050', pebbles: true, cracks: true },
   lava: { base: '#2a2224', dark: '#150f11', light: '#453a3c', cracks: true, glowCracks: '#ff6a1a' },
+  neutral: { base: '#e6e6e6', dark: '#c8c8c8', light: '#f8f8f8', blade: ['#bcbcbc', '#ffffff', '#d4d4d4'], bladeAlpha: 0.4, blades: 4200 },
   ice: { base: '#b6dcf5', dark: '#7fb7e6', light: '#eaf8ff', cracks: true, sparkle: true },
 };
 

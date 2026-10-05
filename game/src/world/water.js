@@ -172,7 +172,7 @@ export function addWater(world, spec) {
     };
   } else {
     box = spec.box;
-    depthAt = (px, pz) => Math.max(0, level - world.groundAt(px, pz));
+    depthAt = spec.depthFn ?? ((px, pz) => Math.max(0, level - world.groundAt(px, pz)));
     carve = null; // sea / lava lakes are defined by the terrain itself (natural() dips below `level`)
   }
   if (spec.carve !== false && carve && world.terrain) world.terrain.addCarver(carve);

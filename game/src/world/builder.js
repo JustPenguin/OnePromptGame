@@ -42,6 +42,30 @@ export class GeoBuilder {
     this.idx.push(i, i + 1, i + 2, i, i + 2, i + 3);
   }
 
+  /** Tapered tube (frustum) from p0 to p1 with radii r0 -> r1, `segs` flat-shaded facets; colour c0 at p0 blending to c1 at p1. Optional end caps. */
+  tube(p0, p1, r0, r1, segs, c0, c1 = c0, caps = true) {
+    const axis = new THREE.Vector3().subVectors(p1, p0);
+    if (axis.lengthSq() < 1e-8) return;
+    axis.normalize();
+    const u = (Math.abs(axis.y) < 0.99 ? new THREE.Vector3(0, 1, 0) : new THREE.Vector3(1, 0, 0)).cross(axis).normalize();
+    const v = new THREE.Vector3().crossVectors(axis, u);
+    const ring = (p, r, a) => new THREE.Vector3().copy(p).addScaledVector(u, Math.cos(a) * r).addScaledVector(v, Math.sin(a) * r);
+    const colA = c0.isColor ? c0 : new THREE.Color().setRGB(c0[0], c0[1], c0[2]), colB = c1.isColor ? c1 : new THREE.Color().setRGB(c1[0], c1[1], c1[2]);
+    for (let i = 0; i < segs; i++) {
+      const a0 = (i / segs) * Math.PI * 2, a1 = ((i + 1) / segs) * Math.PI * 2;
+      this.quadC(ring(p0, r0, a0), ring(p0, r0, a1), ring(p1, r1, a1), ring(p1, r1, a0), [colA, colA, colB, colB]);
+    }
+    if (caps) {
+      for (const [p, r, c, flip] of [[p1, r1, colB, false], [p0, r0, colA, true]]) {
+        if (r <= 1e-4) continue;
+        for (let i = 0; i < segs; i++) {
+          const a0 = (i / segs) * Math.PI * 2, a1 = ((i + 1) / segs) * Math.PI * 2;
+          if (flip) this.tri(p, ring(p, r, a1), ring(p, r, a0), c); else this.tri(p, ring(p, r, a0), ring(p, r, a1), c);
+        }
+      }
+    }
+  }
+
   /** Quad with a per-vertex wave weight (cloth: pass [0,1,1,0] etc.) - used with build({ wave:true }) + windMaterial({ flag }). Double-sided friendly: emits both windings. */
   quadW(a, b, c, d, col, waves) {
     const save = this._wave;
