@@ -80,12 +80,16 @@ R=45 m hairpins; the baseline Sunny Meadows has few real corners so the margin t
 * **Safety net**: a non-finite position/speed is recovered by an automatic rescue (`recoverNonFinite`). 60 s of abuse with 12 karts (full lock, drift spam, teleports) produces no NaN.
 
 ### New / extended public API
-* `Kart`: `phys`, `grace`, `hitGrace`, `blockReason`, `draft {t, active, bonus, target}`, `air`, `scraping`, `pitch` (now written: squat/dive, **not** in `orientation`), `race.dnf`.
+* `Kart`: `phys`, `grace`, `hitGrace`, `blockReason`, `draft {t, active, bonus, target}`, `air`, `scraping`, `pitch` (now written: squat/dive, **not** in `orientation`), `race.dnf`,
+  `slipAngle` (chassis vs travel direction, rad) and `skid` (0..1 tyre slide: drives smoke / skid marks / squeal), getter `driftProgress` (0..1 toward the next mini-turbo level, for the HUD charge meter).
   `isInvulnerable()` also includes `grace`. `spinOut/launch/shrinkFor` document their false return (see above). `placeAt()` also clears drift/draft/wall state.
   `kart.orientation` includes the airborne nose pitch (up on the way up, down on the way down).
 * `KartPhysics.steerForYawRate(kart, yawRate)` -> stick -1..1 that yields that yaw rate right now (speed, surface and drift aware; `+yawRate` = turn left). **AI should steer through this.**
+  `maxYawRate(kart, speed?, drift?)` and `maxCornerSpeed(kart, curvature, {drift})` give the real limits for brake-point planning (verified: full lock at `maxCornerSpeed(1/R)` traces radius R within 1 %;
+  e.g. R = 20 m -> 97 km/h, R = 14 m -> 76 km/h for Pip + Classic at `pro`). `track.maxSpeedAt()` assumes 24 m/s^2 lateral, the karts manage 29-41 m/s^2.
 * `tuning.js` exports `T`, `DRIFT_LEVEL_TIME`, `DRIFT_BOOST`, `derivePhys`, `steerAuthority`, `driftMul`, `driftAlongFor` (`KartPhysics.js` re-exports the first three as before).
-* Events: `EV.DRAFT` (new, race-flow section), `EV.WALL_SCRAPE` is now actually emitted, `EV.BUMP` payload gained `ram`, `EV.BOOST` sources gained `'trick'`.
+* Events: `EV.DRAFT` and `EV.PHOTO_FINISH` (new, race-flow section), `EV.WALL_SCRAPE` is now actually emitted, `EV.BUMP` payload gained `ram`, `EV.BOOST` sources gained `'trick'`.
+* `EventBus` is now copy-on-write: emitting allocates nothing, handlers may (un)subscribe during an emit. Same API.
 
 ## 2. Camera (`ChaseCamera`)
 * Modes `chase` / `far` / `close` (`CAMERA_MODES`), cycled by the camera key (`cameraRig.cycleMode()`), also follows `settings.cameraMode` live. `setMode(m)`, `snapToTarget()`, `cycleTarget(dir)`.
@@ -120,6 +124,10 @@ R=45 m hairpins; the baseline Sunny Meadows has few real corners so the margin t
   `session.ghostRecorder` records the run at 30 Hz of race time; when the player has finished `session.ghostResult` (a getter) is `{ time, bestLap, lapTimes, driverId, bodyId, trackId, laps, data }` - persist `data` (JSON-safe, ~25 KB for 3 laps)
   and pass it back as `config.ghost` (a ghostResult object also works) to race against it: `session.ghostPlayer` (translucent kart through `attachKartVisual` + `visual.setGhost?.(true)`, falls back to cloned translucent materials; hidden 4 s after its run ends).
   Format and size budget are documented at the top of `src/race/ghost.js`; replay error vs the original run was <= 5 cm.
+* **Photo finish**: on the last lap, within ~15 m of the line with an unfinished rival within 3.5 m of the player, `session.timeScale` eases to 0.35 (everything in `update()` runs on scaled time, the camera narrows its FOV)
+  and returns about 0.6 s after the player crosses. `EV.PHOTO_FINISH {active, rival}` for HUD / audio (e.g. a "PHOTO FINISH" flash, a pitch drop). Disabled under the debug `freeze` (tests stay deterministic),
+  with `config.photoFinish === false` and with `settings.reducedMotion`.
+* `session.ghostDelta` (getter): live time-trial delta against the ghost in seconds (+ = you are ahead), `null` when there is no ghost / before GO / after the ghost's run. `session.ghostPlayer.s` is the ghost's track position.
 * `session.stats` (player only, while racing): `driftSeconds, airSeconds, boostSeconds, offroadSeconds, draftSeconds, distance, topSpeed, maxDriftLevel, driftBoosts, hops, jumps, wallHits, bumps, spinOuts, respawns` for the career stats.
 * `session.respawnHold` 0..1 for a HUD ring.
 
@@ -146,4 +154,4 @@ and `page.screenshot` (see `docs/TESTING.md`). `scripts/lib/rig.mjs` builds real
 * `steerForYawRate` assumes the wanted yaw rate is reachable; at the limit it saturates at full lock (AI should brake for corners it cannot take; `track.maxSpeedAt` assumes 24 m/s^2 lateral, the karts manage 29-41).
 * Slope (uphill/downhill) does not change speed; banking is visual + height only (no extra grip).
 * Camera clearance only knows the road surface and the corridor walls; scenery that overhangs the road (tunnels, trees) is not avoided.
-* Stretch not done: replay camera at results, photo-finish slow motion.
+* Stretch not done: replay camera at results.

@@ -182,6 +182,31 @@ export class KartPhysics {
     return clamp(-yawRate / (omega * (k.speed < -0.3 ? -1 : 1)), -1, 1);
   }
 
+  /** Largest yaw rate (rad/s) the kart can turn at right now (or at `speed`), plain steering at full lock; drift = steering fully into a drift. */
+  maxYawRate(k, speed = Math.abs(k.speed), drift = false) {
+    const sp = SURFACE_PROPS[k.query.surface] ?? SURFACE_PROPS[Surface.ROAD];
+    const w = k.phys.turn * steerAuthority(speed, k.stats.topSpeed, k.phys) * (1 - T.surfaceSteer * (1 - sp.grip));
+    return drift ? w * k.stats.driftTurn * T.driftTurnMax : w;
+  }
+
+  /**
+   * Fastest speed (m/s) at which the kart can follow a corner of the given curvature (1/radius, 1/m) with full-lock plain steering
+   * (or a full-inside drift). Returns the top speed when the corner is gentle enough, and a crawl speed for impossible ones.
+   * Handy for brake-point planning: AI should enter corners at or below this.
+   */
+  maxCornerSpeed(k, curvature, { drift = false } = {}) {
+    const kappa = Math.abs(curvature);
+    const top = k.stats.topSpeed;
+    if (kappa < 1e-5) return top;
+    let lo = 2, hi = top * 1.2;
+    if (hi * kappa <= this.maxYawRate(k, hi, drift)) return hi;
+    for (let i = 0; i < 14; i++) {
+      const mid = (lo + hi) * 0.5;
+      if (mid * kappa <= this.maxYawRate(k, mid, drift)) lo = mid; else hi = mid;
+    }
+    return lo;
+  }
+
   // ------------------------------------------------------------------ drift: hop -> committed slide -> 3 mini-turbo levels -> release
   updateDrift(k, inp, h, top, steerIn) {
     const d = k.drift, ev = this.events, st = k.stats;

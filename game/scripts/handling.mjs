@@ -109,6 +109,14 @@ function steering() {
   // low speed pivot
   const lo = steadyTurn(3, -1, { seconds: 5, settle: 2 });
   info('turn radius @ 3 m/s (parking-lot)', lo.radius, 'm');
+  // planning helper: maxCornerSpeed(kart, curvature) must agree with what full lock actually achieves
+  for (const R of [14, 20, 25]) {
+    const rig = newRig(); const k = rig.addKart(kartOpts({ s: 10 }));
+    const v = rig.physics.maxCornerSpeed(k, 1 / R);
+    const t = steadyTurn(Math.min(v, k.stats.topSpeed), -1);
+    info(`maxCornerSpeed for R=${R} m -> ${(v * 3.6).toFixed(0)} km/h; full-lock radius at that speed`, `${t.radius.toFixed(1)} m`);
+    check(`maxCornerSpeed(R=${R}) matches the achieved radius`, t.radius / R, 0.9, 1.03, 'x');
+  }
 }
 
 function drift() {

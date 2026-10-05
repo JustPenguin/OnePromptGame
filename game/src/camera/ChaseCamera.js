@@ -159,6 +159,7 @@ export class ChaseCamera {
     // FOV: speed + boost kick + a touch in drifts
     let fov = cfg.fov;
     if (s.settings?.fovBoost !== false && !reduced) fov += Math.pow(clamp(ratio, 0, 1.4), 1.5) * cfg.speedFov + this.boostKick * 9 + (d.dir !== 0 ? 1.5 : 0) + (k.draft.bonus / 0.06) * 2;
+    fov -= (1 - clamp(this.session.timeScale ?? 1, 0.35, 1)) * 7;          // photo finish: a longer lens compresses the dead heat
     this.fov = damp(this.fov, fov, 5, dt);
     this.fovKick = this.boostKick * 9;
     cam.position.copy(this.pos);

@@ -71,6 +71,9 @@ export class RaceSession {
     this.ghostRecorder = null;
     this.ghostPlayer = null;
     this.respawnHold = 0;
+    this.timeScale = 1;             // < 1 during the photo-finish slow motion (everything in update() runs on scaled time)
+    this._photo = false;
+    this._photoHold = 0;
     this._respawnLatch = false;
     this._ghostResult = null;
     this._unsubs = [];
@@ -188,6 +191,8 @@ export class RaceSession {
   update(dt) {
     if (this.disposed || !this.loaded) return;
     dt = Math.min(Math.max(dt, 0), 1 / 20);
+    this.updatePhotoFinish(dt);
+    dt *= this.timeScale;
     this.time += dt;
     const p = this.player, input = this.app.input, race = this.race;
     if (input) input.speedRatio = p ? clamp(p.speed / p.stats.topSpeed, 0, 1) : 0;
@@ -208,6 +213,31 @@ export class RaceSession {
     this.updateStats(dt);
     input?.rumbleTick?.(dt, p);
     this.app.audio?.update?.(dt, this);
+  }
+
+  /**
+   * Photo finish: on the last lap, when the player is within ~15 m of the line and an unfinished rival is within 3.5 m of them,
+   * time eases down to 35 % until a moment after the player crosses. Off under the debug freeze (tests stay deterministic),
+   * with config.photoFinish === false, and with settings.reducedMotion.
+   */
+  updatePhotoFinish(rawDt) {
+    const p = this.player, race = this.race;
+    let target = 1, rival = null;
+    if (p && !this.app.freeze && this.config.photoFinish !== false && !this.settings?.reducedMotion && race.phase === 'racing' && !p.respawn.active) {
+      const toGo = race.totalDistance - p.race.distance;
+      if (toGo > -0.1 && toGo < 15) {
+        for (const k of this.karts) {
+          if (k === p || k.race.finished) continue;
+          if (Math.abs(k.race.distance - p.race.distance) < (this._photo ? 6 : 3.5)) { rival = k; break; }
+        }
+        if (rival) target = 0.35;
+      }
+    }
+    if (race.phase === 'finishing' && this._photo && this._photoHold > 0) { target = 0.35; this._photoHold -= rawDt; }
+    if (rival && !this._photo) { this._photo = true; this._photoHold = 0.6; this.events.emit(EV.PHOTO_FINISH, { active: true, rival }); }
+    if (this._photo && target >= 1) { this._photo = false; this.events.emit(EV.PHOTO_FINISH, { active: false, rival: null }); }
+    this.timeScale += (target - this.timeScale) * (1 - Math.exp(-(target < this.timeScale ? 12 : 5) * rawDt));
+    if (Math.abs(this.timeScale - 1) < 0.002) this.timeScale = 1;
   }
 
   /** Any key / tap / button during the fly-over skips it (after a beat, so the key that started the race doesn't). */
