@@ -19,7 +19,7 @@ export class TouchControls {
     this.input = app.input;
     this.steerId = null;
     this.steer = 0;
-    this.state = { gas: false, brake: false, drift: false, item: false };
+    this.state = { gas: false, brake: false, drift: false, item: false, respawn: false };
     this.release = {};
     this.shown = false;
     this.zone = h('div', { class: 'tzone' });
@@ -86,6 +86,9 @@ export class TouchControls {
 
   set(id, v) { this.state[id] = v; this.sync(); }
 
+  /** Hold-to-respawn (button lives in the HUD's top-right cluster; Agent A's Input reads input.touch.respawn). */
+  setRespawn(on) { this.state.respawn = !!on; this.sync(); }
+
   /** Push the current state into input.touch. */
   sync() {
     const t = this.input.touch;
@@ -93,8 +96,8 @@ export class TouchControls {
     t.steer = this.steer;
     t.throttle = s.gas ? 1 : 0;
     t.brake = s.brake ? 1 : 0;
-    t.drift = !!s.drift; t.item = !!s.item; t.lookBack = false;
-    t.active = this.shown && (this.steerId !== null || s.gas || s.brake || s.drift || s.item);
+    t.drift = !!s.drift; t.item = !!s.item; t.lookBack = false; t.respawn = !!s.respawn;
+    t.active = this.shown && (this.steerId !== null || s.gas || s.brake || s.drift || s.item || s.respawn);
   }
 
   applySettings() {
@@ -124,6 +127,6 @@ export class TouchControls {
     this.shown = false;
     Object.values(this.release).forEach(clearTimeout);
     const t = this.input.touch;
-    t.active = false; t.steer = 0; t.throttle = 0; t.brake = 0; t.drift = false; t.item = false; t.lookBack = false;
+    t.active = false; t.steer = 0; t.throttle = 0; t.brake = 0; t.drift = false; t.item = false; t.lookBack = false; t.respawn = false;
   }
 }

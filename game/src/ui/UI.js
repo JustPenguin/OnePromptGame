@@ -10,6 +10,7 @@
 import { h, clear, afterLayout, wait } from './dom.js';
 import { clamp } from '../core/math.js';
 import { baseCss } from './css/base.js';
+import { gateHover } from './css/gate.js';
 import { headerCss } from './components.js';
 import { Nav } from './nav.js';
 import { renderHints } from './hints.js';
@@ -29,11 +30,12 @@ export class UI {
     this.current = null;
     this.stack = [];
     this.device = 'mouse';
+    this.root.dataset.device = 'mouse';
     this.layout = { w: 1280, h: 720, mode: 'wide', scale: 1 };
 
     const style = document.createElement('style');
     style.id = 'kr-ui-css';
-    style.textContent = [baseCss, headerCss, ...SCREEN_CSS, hudCss, coachCss].join('\n');
+    style.textContent = gateHover([baseCss, headerCss, ...SCREEN_CSS].join('\n')) + '\n' + hudCss + '\n' + coachCss;
     document.head.appendChild(style);
 
     this.layers = {};

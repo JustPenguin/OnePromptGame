@@ -232,15 +232,36 @@ export class DriftMeter {
     setClass(this.el, 'on', on);
     if (!on) { this.prevLevel = 0; for (const s of this.segs) { s.style.setProperty('--f', '0'); s.classList.remove('lit'); } return; }
     const T = this.times;
+    // Agent A may expose kart.driftProgress (0..1 toward the NEXT level); otherwise derive it from the charge and the level times
+    const prog = Number.isFinite(kart.driftProgress) ? kart.driftProgress : null;
     for (let i = 0; i < 3; i++) {
       const lo = i === 0 ? 0 : T[i - 1], hi = T[i];
-      const f = d.level > i ? 1 : clamp((d.charge - lo) / (hi - lo), 0, 1);
+      const f = d.level > i ? 1 : d.level === i ? (prog ?? clamp((d.charge - lo) / (hi - lo), 0, 1)) : 0;
       this.segs[i].style.setProperty('--f', f.toFixed(3));
       const lit = d.level > i;
       if (lit && !this.segs[i].classList.contains('lit')) { this.segs[i].classList.add('lit'); }
       else if (!lit) this.segs[i].classList.remove('lit');
     }
     this.prevLevel = d.level;
+  }
+}
+
+// ------------------------------------------------------------------------------------------------ hold-to-respawn ring
+export class RespawnRing {
+  constructor() {
+    const r = 26, c = 2 * Math.PI * r;
+    this.c = c;
+    this.arc = svg('circle', { cx: 32, cy: 32, r, fill: 'none', 'stroke-width': 7, 'stroke-linecap': 'round', 'stroke-dasharray': `0 ${c}`, transform: 'rotate(-90 32 32)', class: 'rr-arc' });
+    this.el = h('div', { class: 'respawn-ring', 'aria-hidden': 'true' },
+      svg('svg', { viewBox: '0 0 64 64', class: 'rr-svg' }, svg('circle', { cx: 32, cy: 32, r, fill: 'none', 'stroke-width': 7, class: 'rr-bg' }), this.arc),
+      icon('restart'), h('span', {}, 'Respawning'));
+    this.v = -1;
+  }
+  update(v) {
+    const on = v > 0.03;
+    setClass(this.el, 'on', on);
+    if (!on) { this.v = -1; return; }
+    if (Math.abs(v - this.v) > 0.004) { this.v = v; this.arc.setAttribute('stroke-dasharray', `${(this.c * Math.min(1, v)).toFixed(1)} ${this.c.toFixed(1)}`); }
   }
 }
 

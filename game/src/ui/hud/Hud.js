@@ -10,11 +10,12 @@ import { clamp, damp, formatTime, ordinal } from '../../core/math.js';
 import { keycap, padGlyph } from '../components.js';
 import { ITEM_DEFS } from '../../items/itemDefs.js';
 import { getTrackDef, cupOfTrack } from '../../modes/catalog.js';
-import { Speedo, Minimap, ItemSlot, Leaderboard, DriftMeter, setText, setClass } from './widgets.js';
+import { Speedo, Minimap, ItemSlot, Leaderboard, DriftMeter, RespawnRing, setText, setClass } from './widgets.js';
 import { Countdown, Banners, IntroCard, EventFeed, replay } from './banners.js';
 import { Effects, StatusChips } from './overlays.js';
 import { TouchControls } from './TouchControls.js';
 import { Coach } from './coach.js';
+import { ghostGapSeconds, formatGap } from '../../modes/ghostGap.js';
 
 const MS = { kmh: 3.6, mph: 2.23694 };
 const UNIT = { kmh: 'km/h', mph: 'mph' };
@@ -68,9 +69,14 @@ export class Hud {
     this.lapList = h('div', { class: 'laps' });
     this.ghostD = h('span', { class: 'gd' }, '--');
     this.ghostBox = h('div', { class: 'ghostbox glass', style: { display: 'none' } }, icon('ghost'), h('span', { class: 'gl' }, 'GHOST'), this.ghostD);
+    this.respawnRing = new RespawnRing();
+    this.respawnBtn = h('button', { class: 'hud-pause hud-respawn', type: 'button', 'aria-label': 'Hold to respawn' }, icon('restart'));
     this.skip = h('div', { class: 'skip hint', style: { pointerEvents: 'auto', cursor: 'pointer' } });
     this.pauseBtn = h('button', { class: 'hud-pause', type: 'button', 'aria-label': 'Pause' }, icon('pause'));
     this.pauseBtn.addEventListener('click', () => this.app.setPaused(true));
+    const holdRespawn = (on) => (e) => { e.preventDefault?.(); this.touch.setRespawn(on); };
+    this.respawnBtn.addEventListener('pointerdown', (e) => { try { this.respawnBtn.setPointerCapture(e.pointerId); } catch { /* ignore */ } holdRespawn(true)(e); });
+    for (const t of ['pointerup', 'pointercancel', 'lostpointercapture']) this.respawnBtn.addEventListener(t, holdRespawn(false));
     this.fps = h('div', { class: 'fps', style: { display: 'none' } });
     this.touch = new TouchControls(this.app);
     this.coach = new Coach(this);
@@ -80,14 +86,14 @@ export class Hud {
       h('div', { class: 'hz tl' }, this.item.el, this.coins, this.status.el),
       h('div', { class: 'hz ml' }, this.board.el),
       h('div', { class: 'hz bl' }, this.posEl),
-      h('div', { class: 'hz tr' }, h('div', { class: 'trrow' }, this.lapbox, this.pauseBtn), this.timerEl, this.lapList, this.ghostBox),
+      h('div', { class: 'hz tr' }, h('div', { class: 'trrow' }, this.lapbox, this.respawnBtn, this.pauseBtn), this.timerEl, this.lapList, this.ghostBox),
       h('div', { class: 'hz mr' }, this.mini.el),
       h('div', { class: 'hz br' }, this.speedo.el),
       h('div', { class: 'hz bc' }, h('div', { style: { position: 'relative' } }, this.drift.label, this.drift.el)),
       this.coach.el,
       h('div', { class: 'hz tc' }, this.feed.el),
       this.countdown.el, this.banners.el, this.introCard.el, this.skip,
-      this.touch.root, this.fps);
+      this.respawnRing.el, this.touch.root, this.fps);
 
     this.mini.setTrack(session);
     this._bindEvents();
@@ -136,6 +142,8 @@ export class Hud {
       this.placeAcc = { from: this.placeAcc?.from ?? from, last: this.t };
     });
     on(EV.WRONG_WAY, ({ kart, active }) => { if (kart === me) this.banners.wrongWay(active); });
+    if (EV.DRAFT) on(EV.DRAFT, ({ kart, active }) => { if (kart === me) this.status.setDraft(active); });
+    if (EV.PHOTO_FINISH) on(EV.PHOTO_FINISH, ({ active, rival }) => this.banners.photoFinish(active, rival?.name));
     on(EV.ITEM_HIT, ({ victim, attacker, type }) => {
       const nm = ITEM_DEFS[type]?.name;
       if (victim === me && attacker !== me) this.feed.push(attacker ? `Hit by ${attacker.name}!` : (nm ? `Hit by ${nm}!` : 'Ouch!'), { ico: 'bolt', kind: 'bad' });
@@ -308,21 +316,25 @@ export class Hud {
     if (st.showMinimap !== false) this.mini.update(dt, session);
     if (st.showLeaderboard !== false) this.board.update(dt, session);
 
-    // time trial ghost
-    const gp = session.ghostPlayer;
+    // time trial ghost: + = I am behind (red), - = I am ahead (green)  (see modes/ghostGap.js)
     const showGhost = session.config.mode === 'timetrial' && !!session.config.ghost;
     const gd = showGhost ? '' : 'none';
     if (this.ghostBox.style.display !== gd) this.ghostBox.style.display = gd;
     if (showGhost) {
-      const gk = gp?.kart ?? gp?.ghost;
-      if (gk?.race && Number.isFinite(gk.race.distance)) {
-        const ahead = gk.race.distance - me.race.distance;                    // metres the ghost is ahead
-        const sec = -ahead / Math.max(10, Math.abs(me.speed));               // negative = we are ahead
-        this._gd = this._gd === undefined || snap ? sec : damp(this._gd, sec, 6, dt);
-        setText(this.ghostD, `${this._gd > 0 ? '+' : '-'}${Math.abs(this._gd).toFixed(2)}`);
+      const gap = ghostGapSeconds(session, me);
+      if (gap === null) { setText(this.ghostD, 'racing'); this.ghostD.className = 'gd'; }
+      else {
+        this._gd = this._gd === undefined || snap ? gap : damp(this._gd, gap, 6, dt);
+        setText(this.ghostD, formatGap(this._gd));
         this.ghostD.className = `gd ${this._gd > 0.05 ? 'dn' : this._gd < -0.05 ? 'up' : ''}`;
-      } else setText(this.ghostD, 'racing');
+      }
     }
+
+    // optional engine hooks (Agent A): hold-to-respawn progress, rocket-start window
+    const hold = Number.isFinite(session.respawnHold) ? session.respawnHold : 0;
+    this.respawnRing.update(hold);
+    const rw = !!race.rocketWindowOpen;
+    this.countdown.setWindow(rw && race.phase === 'countdown');
 
     this.coach.update(dt, session);
 

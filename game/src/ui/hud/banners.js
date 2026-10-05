@@ -28,6 +28,8 @@ export class Countdown {
     } else if (count === 1 || go) this.hint.classList.remove('on');
   }
   hideHint() { this.hint.classList.remove('on'); }
+  /** Agent A's race.rocketWindowOpen: the 0.45 s before GO where pressing the gas gives the rocket start. */
+  setWindow(on) { if (this._w !== on) { this._w = on; this.num.classList.toggle('rwin', on); this.hint.classList.toggle('hot', on); } }
 }
 
 export class Banners {
@@ -35,7 +37,8 @@ export class Banners {
     this.finalBanner = h('div', { class: 'banner final' }, h('div', {}, 'Final lap!'));
     this.finBanner = h('div', { class: 'banner fin stay' }, h('div', {}, h('span', { class: 'fp' }), h('small', {})));
     this.wrong = h('div', { class: 'wrongway', role: 'alert' }, icon('down'), 'Wrong way', icon('down'));
-    this.el = h('div', { class: 'hz c' }, this.finalBanner, this.finBanner, this.wrong);
+    this.photo = h('div', { class: 'banner photo' }, h('div', {}, 'Photo finish!', h('small', {})));
+    this.el = h('div', { class: 'hz c' }, this.finalBanner, this.finBanner, this.photo, this.wrong);
   }
   final() { replay(this.finalBanner, 'show'); }
   finish(place, time, name = 'Finish!') {
@@ -45,6 +48,11 @@ export class Banners {
   }
   clearFinish() { this.finBanner.classList.remove('show'); this.finBanner.style.opacity = '0'; }
   wrongWay(on) { this.wrong.classList.toggle('on', !!on); }
+  /** Agent A's EV.PHOTO_FINISH: a banner while the finish slow-motion plays. */
+  photoFinish(active, rival) {
+    if (active) { this.photo.querySelector('small').textContent = rival ? `vs ${rival}` : ''; this.photo.style.opacity = '1'; replay(this.photo, 'show'); }
+    else { this.photo.classList.remove('show'); this.photo.style.opacity = '0'; }
+  }
 }
 
 export class IntroCard {

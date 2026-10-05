@@ -114,7 +114,13 @@ export class StatusChips {
     mk('invincible', 'shield', 'Shield ', '#22d3ff');
     mk('rocket', 'rocket', 'Rocket ', '#ff7a1a');
     mk('shrink', 'bolt', 'Shrunk ', '#a878ff');
+    mk('draft', 'flame', 'Slipstream', '#7be04a');
+    this.chips.draft.t.style.display = 'none';
+    this.draft = false;
   }
+
+  /** Agent A's EV.DRAFT: a chip while the player is slipstreaming. */
+  setDraft(on) { this.draft = !!on; }
   update(kart) {
     const set = (id, t) => {
       const c = this.chips[id];
@@ -124,5 +130,7 @@ export class StatusChips {
       if (on) setText(c.t, `${Math.ceil(t)}s`);
     };
     set('invincible', kart.invincible); set('rocket', kart.rocket); set('shrink', kart.shrink);
+    const d = this.draft ? '' : 'none';
+    if (this.chips.draft.el.style.display !== d) this.chips.draft.el.style.display = d;
   }
 }
