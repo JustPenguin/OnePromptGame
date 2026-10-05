@@ -18,8 +18,8 @@
 //  steerLag      first-order lag on the steering command (higher = snappier hands)
 export const CLASS_TUNING = {
   rookie: { pace: [0.74, 0.83], paceSpread: 0.55, skill: 0.28, cornerScale: 0.88, limit: 0.80, lineWeight: 0.55, driftProb: 0.3,  driftHold: [0.45, 1.2], mistakeRate: 0.040, perceive: 0.55, boxSkill: 0.45, padSkill: 0.45, coinSkill: 0.3,  itemDelay: [1.2, 4.5], aggression: 0.55, steerLag: 6.5, brakeDecel: 22 },
-  pro:    { pace: [0.83, 0.895], paceSpread: 0.5,  skill: 0.62, cornerScale: 1.0,  limit: 0.90, lineWeight: 0.88, driftProb: 0.82, driftHold: null,         mistakeRate: 0.010, perceive: 0.86, boxSkill: 0.8,  padSkill: 0.85, coinSkill: 0.55, itemDelay: [0.6, 2.6], aggression: 1.0,  steerLag: 9,   brakeDecel: 27 },
-  master: { pace: [0.905, 0.955], paceSpread: 0.45, skill: 0.92, cornerScale: 1.12, limit: 0.96, lineWeight: 1.0,  driftProb: 1.0,  driftHold: null,         mistakeRate: 0.002, perceive: 0.97, boxSkill: 1.0,  padSkill: 1.0,  coinSkill: 0.8,  itemDelay: [0.25, 1.4], aggression: 1.3, steerLag: 12,  brakeDecel: 31 },
+  pro:    { pace: [0.818, 0.882], paceSpread: 0.5,  skill: 0.62, cornerScale: 1.0,  limit: 0.90, lineWeight: 0.88, driftProb: 0.82, driftHold: null,         mistakeRate: 0.010, perceive: 0.86, boxSkill: 0.8,  padSkill: 0.85, coinSkill: 0.55, itemDelay: [0.6, 2.6], aggression: 1.0,  steerLag: 9,   brakeDecel: 27 },
+  master: { pace: [0.887, 0.936], paceSpread: 0.45, skill: 0.92, cornerScale: 1.12, limit: 0.96, lineWeight: 1.0,  driftProb: 1.0,  driftHold: null,         mistakeRate: 0.002, perceive: 0.97, boxSkill: 1.0,  padSkill: 1.0,  coinSkill: 0.8,  itemDelay: [0.25, 1.4], aggression: 1.3, steerLag: 12,  brakeDecel: 31 },
 };
 export const DEFAULT_TUNING = 'pro';
 

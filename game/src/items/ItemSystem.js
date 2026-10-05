@@ -155,11 +155,7 @@ export class ItemSystem {
   explosion(pos, radius, type, color = 0xff7a1a, scale = 1) {
     this.fx.blast(pos, radius, color, 0.5);
     this.fx.shatter(pos, Math.min(26, Math.round(8 + radius)), [color, 0xffffff, 0xffd23f]);
-    const vfx = this.session.vfx;
-    if (vfx?.spawn) {
-      vfx.spawn('explosion', pos, { scale: (radius / 5) * scale, color: `#${new THREE.Color(color).getHexString()}` });
-      vfx.spawn('shockwave', pos, { radius });
-    }
+    // the big fireball / shockwave is the VFX system's job: it reacts to ITEM_EXPLODE (calling vfx.spawn here as well would double it)
     this.events.emit(EV.ITEM_EXPLODE, { type, point: pos.clone(), radius });
   }
 
@@ -205,8 +201,7 @@ export class ItemSystem {
     if (!ok) { this.events.emit(EV.ITEM_BLOCKED, { victim, type }); this.fx.blast(point, 2.2, 0xb06bff, 0.3); return 'blocked'; }
     st.grace = (effect.kind === 'launch' ? 1.7 : effect.dur ?? 1.3) + 0.9;
     if (victim.coins > 0) { victim.coins -= 1; this.events.emit(EV.COIN, { kart: victim, total: victim.coins, lost: true }); }
-    this.events.emit(EV.ITEM_HIT, { victim, attacker, type, point: point.clone ? point.clone() : point });
-    this.session.vfx?.spawn?.('hitStars', victim.position, { kart: victim });
+    this.events.emit(EV.ITEM_HIT, { victim, attacker, type, point: point.clone ? point.clone() : point });   // VFX draws the hit stars
     return 'hit';
   }
 
@@ -214,12 +209,10 @@ export class ItemSystem {
   onBoxPickup(kart, box) {
     this.fx.shatter(box.def.position, 16);
     this.fx.ring(box.def.position, 0x9fe8ff, 0.5, 4.5, 0.45);
-    this.session.vfx?.spawn?.('pickup', box.def.position, { color: '#22d3ff', kart });
-    this.startRoulette(kart, box);
+    this.startRoulette(kart, box);          // (ITEM_BOX is emitted there: the VFX system adds its pickup burst)
   }
   onCoin(kart, coin) {
-    kart.addCoins(1);
-    this.session.vfx?.spawn?.('sparkle', coin.pos, { color: '#ffd23f', kart });
+    kart.addCoins(1);                       // EV.COIN: audio + the VFX system's sparkle
   }
 
   startRoulette(kart, box) {
@@ -449,11 +442,9 @@ const USE = {
       eye.set(v.position.x + (this.rand() - 0.5) * 5, v.position.y + 55, v.position.z + (this.rand() - 0.5) * 5);
       this.fx.bolt(eye, v.position, 0xfff2a0, 0.34);
       this.fx.ring(v.position, 0xfff2a0, 0.6, 5.5, 0.5);
-      this.session.vfx?.spawn?.('hitStars', v.position, { kart: v });
     }
     this.fx.ring(k.position, 0xffe23a, 1, 9, 0.6);
     this.events.emit(EV.ITEM_SHOCK, { kart: k, victims });
-    this.events.emit(EV.ITEM_EXPLODE, { type: 'shock', point: k.position.clone(), radius: 1e4 });
   },
   shield(k) {
     const st = this.kartState(k);

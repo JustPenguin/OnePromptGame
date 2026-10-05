@@ -175,8 +175,7 @@ export class OrbEntity extends Entity {
   pop(hit = false) {
     this.sys.fx.blast(this.position, hit ? 3.2 : 2.2, 0x3dffa0, 0.35);
     this.sys.fx.shatter(this.position, hit ? 8 : 4, [0x3dffa0, 0xd6fff0]);
-    this.sys.events.emit(EV.ITEM_EXPLODE, { type: 'orb', point: this.position.clone(), radius: 1.6, hit });
-    this.dead = true;
+    this.dead = true;                    // (a small pop: no ITEM_EXPLODE, the VFX system would turn it into a fireball)
   }
   dispose() { super.dispose(); this.trail.dispose(); }
 }
