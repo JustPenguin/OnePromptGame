@@ -74,7 +74,8 @@ export class Kart {
     this.invincible = 0;          // seconds (shield / star)
     this.shrink = 0;              // seconds
     this.rocket = 0;              // seconds of rocket-rider auto-drive
-    this.stun = 0;                // seconds of "can't steer" (burnout)
+    this.stun = 0;                // seconds of "can't steer"
+    this.burnout = 0;             // seconds of wheelspin after a too-early start: launch acceleration is cut (still steerable)
     this.ink = 0;                 // seconds the screen is splattered by an ink item (written by ItemSystem, read by HUD)
     this.respawn = { active: false, t: 0, dur: T.respawnTime, from: new THREE.Vector3(), to: new THREE.Vector3(), yaw: 0, reason: '' };
     this.fallTimer = 0;

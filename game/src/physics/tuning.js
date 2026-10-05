@@ -15,12 +15,14 @@ export const T = {
   // ---- longitudinal
   accelScale: 1.14,          // roster accel -> launch acceleration at standstill (a = launch * (1 - v/cap))
   boostTau: 0.36,            // while boosting the kart surges toward the boosted cap with this time constant ...
-  boostAccelMax: 36,         // ... but never harder than this (m/s^2): a start boost from a standstill must not teleport the kart
+  boostAccelMax: 30,         // ... but never harder than this (m/s^2): a start boost from a standstill must not teleport the kart
   boostFade: 0.35,           // the last seconds of a boost taper the extra speed out (no cliff when it ends)
   brake: 34,                 // m/s^2 at full brake
   reverseCap: 0.3,           // reverse top speed as a fraction of top speed
   coastBase: 3.0, coastPerMs: 0.06,   // engine-braking decel: base + per m/s
   overcapRate: 1.7, overcapConst: 4, // how fast speed above the cap is shed (1/s, m/s^2)
+  startBoost: { strength: 0.3, duration: 0.7 }, aiStartBoost: { strength: 0.24, duration: 0.55 },   // rocket start (player) / lucky starts (AI)
+  burnoutTraction: 0.3, burnoutTime: 1.2,   // too-early start: wheelspin cuts launch acceleration to this fraction for this long
   coinSpeed: 0.012,          // +1.2 % top speed per coin
 
   // ---- steering

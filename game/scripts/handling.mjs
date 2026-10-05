@@ -255,6 +255,37 @@ function walls() {
   }
 }
 
+function start() {
+  section('Start: rocket start window, burnout, late start (distance 3 s after GO)');
+  const run = (pressAt) => {
+    const rig = newRig(DEFS.strip);
+    rig.addKart(kartOpts({ s: 100 }));
+    const k = rig.session.karts[0];
+    const race = rig.startRace();
+    let boost = 0, burn = 0; rig.events.on(EV.START_BOOST, () => boost++); rig.events.on(EV.START_BURNOUT, () => burn++);
+    let t = 0, s0 = null, goAt = null;
+    while (t < 8) {
+      k.input.throttle = pressAt !== null && t >= pressAt ? 1 : 0;
+      rig.step(1 / 60); t += 1 / 60;
+      if (race.phase === 'racing' && goAt === null) { goAt = t; s0 = k.race.distance; }
+      if (goAt !== null && t - goAt >= 3) break;
+    }
+    return { dist: k.race.distance - s0, boost, burn, kmh: k.speed * 3.6 };
+  };
+  const perfect = run(2.65), okEarly = run(2.2), burnout = run(0.2), late = run(3.3), never = run(null);
+  info('press 0.35 s before GO (rocket start)', `${perfect.dist.toFixed(1)} m, boost ${perfect.boost}, burnout ${perfect.burn}`);
+  info('press 0.8 s before GO (too early to boost, no burnout)', `${okEarly.dist.toFixed(1)} m, boost ${okEarly.boost}, burnout ${okEarly.burn}`);
+  info('hold from 2.8 s before GO (burnout)', `${burnout.dist.toFixed(1)} m, boost ${burnout.boost}, burnout ${burnout.burn}`);
+  info('press 0.3 s after GO', `${late.dist.toFixed(1)} m`);
+  check('rocket start fires its boost', perfect.boost, 1, 1, '');
+  check('rocket start gains distance over a late start', perfect.dist - late.dist, 14, 32, 'm');
+  check('rocket start gains distance over a well-timed normal start', perfect.dist - okEarly.dist, 8, 24, 'm');
+  check('0.8 s early: neither boost nor burnout', okEarly.boost + okEarly.burn, 0, 0, '');
+  check('burnout fires', burnout.burn, 1, 1, '');
+  check('burnout costs distance versus a late start (but is still moving)', late.dist - burnout.dist, 3, 40, 'm');
+  check('burnout is steerable wheelspin, not a stall (speed 3 s after GO)', burnout.kmh, 40, 200, 'km/h');
+}
+
 function karts() {
   section('Kart vs kart');
   // head-on-ish rear end: fast kart catches a slower one
@@ -630,7 +661,7 @@ function terrain() {
   }
 }
 
-const sections = { longitudinal, steering, drift, offroad, walls, karts, spinAndAir, slipstream, frameRate, lapValue, terrain, abuse, chaos, perf };
+const sections = { longitudinal, steering, start, drift, offroad, walls, karts, spinAndAir, slipstream, frameRate, lapValue, terrain, abuse, chaos, perf };
 for (const [name, fn] of Object.entries(sections)) if (want(name)) { try { fn(); } catch (e) { failures++; console.log(`  FAIL ${name} threw: ${e.stack}`); } }
 if (args.roster || (only && only.includes('roster'))) rosterTable();
 console.log(`\n${failures === 0 ? 'HANDLING REPORT: all targets met' : `HANDLING REPORT: ${failures} target(s) missed`}`);

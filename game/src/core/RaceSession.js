@@ -101,7 +101,7 @@ export class RaceSession {
     this.physics = new KartPhysics(this);
     this.race = new RaceManager(this);
     // no item boxes when items are off (time trial): the item system builds its boxes from track.itemBoxes (this session's own copy)
-    if (!cfg.items) this.track.itemBoxes = [];
+    if (!cfg.items) { try { this.track.itemBoxes = []; } catch { try { this.track.itemBoxes.length = 0; } catch { /* read-only: the item system must honour config.items itself */ } } }
     this.items = new ItemSystem(this);
     this.ai = new AIManager(this);
     this.vfx = new VFX(this);

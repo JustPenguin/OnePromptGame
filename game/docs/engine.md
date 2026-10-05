@@ -64,7 +64,7 @@ R=45 m hairpins; the baseline Sunny Meadows has few real corners so the margin t
 ### Other behaviours
 * **Steering**: yaw rate = `phys.turn * authority(speed)`; authority ramps in below 6.5 m/s (no pivoting), tapers 30 % toward top speed; low-grip surfaces reduce it
   (`1 - 0.7 * (1 - surface grip)`: ice 0.45x, grass 0.83x). Cornering scrub: 13 %/s of speed at full lock at top speed (drifting: 4.5 %/s) + slip scrub.
-* **Longitudinal**: `a = launch * (1 - v/cap)` (exponential approach: strong launch, long taper). Boosts surge toward the boosted cap at <= 36 m/s^2 (a start boost must not teleport the kart),
+* **Longitudinal**: `a = launch * (1 - v/cap)` (exponential approach: strong launch, long taper). Boosts surge toward the boosted cap at <= 30 m/s^2 (a start boost must not teleport the kart),
   and the last 0.35 s of a boost taper out (no cliff). Over-cap speed is shed at 1.7/s + 4 m/s^2.
 * **Walls**: first contact after a gap is an *impact* (normal part bounces 18 %, tangential part loses 2.5 % + 45 % sin^2(angle)); continued contact is *sliding* (wall acts as a guide,
   22 %/s drag, nose swings parallel). Fires EV.WALL_HIT (impact > 3.5 m/s, 0.18 s cooldown) and, newly, **EV.WALL_SCRAPE** `{kart, active}` (starts after 50 ms of contact, ends 120 ms after).
@@ -116,8 +116,8 @@ R=45 m hairpins; the baseline Sunny Meadows has few real corners so the margin t
 * Phases `intro -> countdown -> racing -> finishing -> results`; `race.countdownLeft`, `race.rocketWindowOpen`, `race.leader`, `race.isRacing` are new getters.
 * **Progress** = signed distance from `deltaS`, so reversing, respawns and teleports can't double-count; laps/finish times are **interpolated inside the frame** they were crossed in (exact, frame-rate independent).
 * **Positions**: insertion pass with a 0.4 m hysteresis (side-by-side karts don't chatter); finished karts rank by exact finish time. EV.PLACE_CHANGE / EV.OVERTAKE as before.
-* **Rocket start**: throttle pressed no earlier than 0.45 s before GO gives +45 % for 1 s (EV.START_BOOST); throttle held from more than 1.0 s before GO = burnout (0.7 s stun, EV.START_BURNOUT); in between nothing happens.
-  AI karts get a modest +32 % / 0.7 s start boost 45 % of the time.
+* **Rocket start**: throttle pressed no earlier than 0.45 s before GO gives +30 % for 0.7 s (`T.startBoost`; about 0.45 s / 15 m better than a well-timed normal start; EV.START_BOOST); throttle held from more than 1.0 s before GO = burnout (wheelspin: launch acceleration x0.3 for 1.2 s, `kart.burnout`, still steerable; EV.START_BURNOUT); in between nothing happens.
+  AI karts get a modest +24 % / 0.55 s start boost 45 % of the time (`T.aiStartBoost`).
 * **Wrong way** uses the velocity vector (so drifting/spinning chassis angles don't trip it), 1.0 s to trigger, quick to clear.
 * **Finish flow**: player finishes -> autopilot cruise, `finishing` for up to 18 s, results when everyone is done (or DNF-scored by distance), solo/time trial ends immediately. `standings()` entries gained `lapTimes, distance, progress`.
 * **Time trial** (`config.mode === 'timetrial'`): 1 racer, no AI, no item boxes (the session empties `track.itemBoxes` before the ItemSystem is built when `config.items` is false), the player starts with `giveItem(player,'boost',3)`.

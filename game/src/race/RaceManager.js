@@ -9,6 +9,7 @@
 // step) and identical at 30, 60 or 144 fps - which also makes time-trial records and ghost comparisons fair.
 import { EV } from '../core/events.js';
 import { clamp } from '../core/math.js';
+import { T } from '../physics/tuning.js';
 
 /** Rocket start: throttle pressed no earlier than this many seconds before GO gives the launch boost. */
 export const ROCKET_WINDOW = 0.45;
@@ -123,11 +124,11 @@ export class RaceManager {
       const since = k.ext.throttleSince;
       if (k.isAI) {
         // a few rivals nail the start; kept modest so they don't launch into the back of the pack-leader
-        if (this.session.random() < 0.45) k.applyBoost(0.32, 0.7, 'start');
+        if (this.session.random() < 0.45) k.applyBoost(T.aiStartBoost.strength, T.aiStartBoost.duration, 'start');
       } else if (since !== undefined) {
         const early = since - this.countdownLength; // negative = seconds before GO
-        if (early >= -this.rocketWindow) { k.applyBoost(0.45, 1.0, 'start'); this.events.emit(EV.START_BOOST, { kart: k }); }
-        else if (early < -BURNOUT_BEFORE) { k.stun = 0.7; this.events.emit(EV.START_BURNOUT, { kart: k }); }
+        if (early >= -this.rocketWindow) { k.applyBoost(T.startBoost.strength, T.startBoost.duration, 'start'); this.events.emit(EV.START_BOOST, { kart: k }); }
+        else if (early < -BURNOUT_BEFORE) { k.burnout = T.burnoutTime; this.events.emit(EV.START_BURNOUT, { kart: k }); }
       }
       k.ext.throttleSince = undefined;
     }

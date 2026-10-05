@@ -106,7 +106,7 @@ export class KartPhysics {
     const thr = inp.throttle, brk = inp.brake;
     if (thr > 0.01 && k.speed < cap) {
       const f = clamp(k.speed / cap, 0, 1);
-      let a = P.launch * (1 - f);
+      let a = P.launch * (1 - f) * (k.burnout > 0 ? T.burnoutTraction : 1);
       if (boosting) a = Math.max(a, Math.min((cap - k.speed) / T.boostTau, T.boostAccelMax));
       if (k.draft.t > 0) a += T.draftAccel * k.draft.t;
       k.speed = Math.min(cap, k.speed + a * thr * h);
@@ -147,6 +147,7 @@ export class KartPhysics {
     if (k.shrink > 0) { k.shrink -= h; if (k.shrink <= 0) { k.shrink = 0; ev.emit(EV.SHRINK, { kart: k, active: false }); } }
     if (k.rocket > 0) { k.rocket -= h; if (k.rocket <= 0) { k.rocket = 0; ev.emit(EV.ROCKET, { kart: k, active: false }); } }
     if (k.stun > 0) k.stun = Math.max(0, k.stun - h);
+    if (k.burnout > 0) k.burnout = Math.max(0, k.burnout - h);
     if (k.grace > 0) k.grace = Math.max(0, k.grace - h);
     if (k.hitGrace > 0) k.hitGrace = Math.max(0, k.hitGrace - h);
     if (k._bumpCool > 0) k._bumpCool -= h;
