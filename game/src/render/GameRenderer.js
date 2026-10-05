@@ -22,7 +22,7 @@ const damp = (a, b, k, dt) => a + (b - a) * (1 - Math.exp(-k * dt));
 const _v2 = new THREE.Vector2();
 
 const DEFAULT_PROFILE = Object.freeze({
-  exposure: 1, bloomStrength: 0.55, bloomThreshold: 1.0, bloomRadius: 0.6, bloomKnee: 0.5,
+  exposure: 1, bloomStrength: 0.4, bloomThreshold: 1.05, bloomRadius: 0.55, bloomKnee: 0.4,
   vignette: 0.38, saturation: 1.08, contrast: 1.06, chroma: 0.0016, grain: 0.004, envIntensity: 0.45,
   tonemap: 0.2,   // 0 = Khronos Neutral (hue-preserving, saturated) .. 1 = ACES filmic (contrasty, desaturates highlights)
 });
@@ -196,8 +196,8 @@ export class GameRenderer {
     fx.exposure = p.exposure ?? 1;
     fx.tone = p.tonemap ?? 0.2;
     fx.bloomOn = !!q.bloom;
-    fx.bloom = (p.bloomStrength ?? 0.55) * (q.bloom ? 1 : 0);
-    fx.threshold = p.bloomThreshold ?? 1.0; fx.knee = p.bloomKnee ?? 0.5; fx.radius = p.bloomRadius ?? 0.6;
+    fx.bloom = (p.bloomStrength ?? 0.4) * (q.bloom ? 1 : 0);
+    fx.threshold = p.bloomThreshold ?? 1.05; fx.knee = p.bloomKnee ?? 0.4; fx.radius = p.bloomRadius ?? 0.55;
     fx.vignette = p.vignette ?? 0.38; fx.sat = p.saturation ?? 1.08; fx.contrast = p.contrast ?? 1.06; fx.grain = p.grain ?? 0.004;
     fx.time = performance.now() * 0.001;
     // speed feel from the followed kart

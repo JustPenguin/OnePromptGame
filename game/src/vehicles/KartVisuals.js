@@ -11,7 +11,7 @@ import * as THREE from 'three';
 import { getDriver } from '../data/roster.js';
 import { EV } from '../core/events.js';
 import { clamp, damp, lerp } from '../core/math.js';
-import { Rig, PartBuilder } from './build.js';
+import { Rig, PartBuilder, setDetail } from './build.js';
 import { BODIES, bodyPalette, addCoreBones } from './bodies.js';
 import { buildDriver } from './drivers.js';
 import { createKartMaterial } from './kartMaterial.js';
@@ -29,6 +29,23 @@ const _axis = new THREE.Vector3();
 const assetCache = new Map();
 const ASSET_LIMIT = 40;
 
+/** Build rig + parts + welded geometry at a given detail factor (1 = full; LODs rebuild the same rig with fewer segments). */
+function buildAssets(driver, bodyDef, detail) {
+  setDetail(detail);
+  try {
+    const rig = new Rig();
+    addCoreBones(rig, bodyDef.spec);
+    const B = new PartBuilder(rig);
+    const pal = bodyPalette(driver.colors);
+    const body = bodyDef.build(B, rig, pal);
+    const drv = buildDriver(driver.id, { B, rig, pal, body, colors: driver.colors });
+    return { rig, body, drv, geometry: B.build() };
+  } finally { setDetail(1); }
+}
+
+/** Detail factors for LOD0..2 (triangles drop to roughly 100% / 45% / 22%). */
+export const LOD_DETAIL = [1, 0.5, 0.3];
+
 /** Build (or fetch) the shared, immutable assets for a driver+body pairing: merged skinned geometry, rig layout, specs. */
 export function getKartAssets(driverId, bodyId) {
   const driver = getDriver(driverId);
@@ -36,25 +53,48 @@ export function getKartAssets(driverId, bodyId) {
   const key = `${driver.id}:${bodyDef.spec.id}`;
   let a = assetCache.get(key);
   if (a) { assetCache.delete(key); assetCache.set(key, a); return a; }
-  const rig = new Rig();
-  addCoreBones(rig, bodyDef.spec);
-  const B = new PartBuilder(rig);
-  const pal = bodyPalette(driver.colors);
-  const body = bodyDef.build(B, rig, pal);
-  const drv = buildDriver(driver.id, { B, rig, pal, body, colors: driver.colors });
-  const geometry = B.build();
+  const built = buildAssets(driver, bodyDef, 1);
   const faceGeo = faceGeometry(driver.id);
-  a = { key, driver, bodyId: bodyDef.spec.id, rig, body, drv, geometry, faceGeo };
+  a = { key, driver, bodyDef, bodyId: bodyDef.spec.id, rig: built.rig, body: built.body, drv: built.drv, geometry: built.geometry, faceGeo, lods: [built.geometry, null, null] };
   assetCache.set(key, a);
   while (assetCache.size > ASSET_LIMIT) {
     const [oldKey, old] = assetCache.entries().next().value;
     assetCache.delete(oldKey);
-    old.geometry.dispose(); old.faceGeo.dispose();
+    old.disposed = true;
+    for (const g of old.lods) g?.dispose();
+    old.faceGeo.dispose();
   }
   return a;
 }
+// Background LOD builder: one lower-detail geometry per timer tick so loading and rendering never hitch.
+const lodQueue = [];
+let lodTimer = 0;
+function pumpLods() {
+  lodTimer = 0;
+  const item = lodQueue.shift();
+  if (!item) return;
+  if (!item[0].disposed) getKartLod(item[0], item[1]);
+  if (lodQueue.length) lodTimer = setTimeout(pumpLods, 20);
+}
+function queueLods(assets) {
+  if (assets.lodsQueued) return;
+  assets.lodsQueued = true;
+  lodQueue.push([assets, 1], [assets, 2]);
+  if (!lodTimer) lodTimer = setTimeout(pumpLods, 60);
+}
+
+/** Geometry for LOD level `lod` (built lazily, same bone indices as LOD0). */
+export function getKartLod(assets, lod) {
+  let g = assets.lods[lod];
+  if (!g) {
+    const built = buildAssets(assets.driver, assets.bodyDef, LOD_DETAIL[lod]);
+    if (built.rig.defs.length !== assets.rig.defs.length) console.warn('[vehicles] LOD rig mismatch', assets.key, lod);
+    g = assets.lods[lod] = built.geometry;
+  }
+  return g;
+}
 export function disposeKartAssets() {
-  for (const a of assetCache.values()) { a.geometry.dispose(); a.faceGeo.dispose(); }
+  for (const a of assetCache.values()) { for (const g of a.lods) g?.dispose(); a.faceGeo.dispose(); }
   assetCache.clear();
 }
 
@@ -142,6 +182,8 @@ export class KartVisual {
     this.mat = this._pickMaterial();
     this.mesh = new THREE.SkinnedMesh(A.geometry, this.mat);
     this.mesh.name = 'kart';
+    this.lod = 0;
+    this.forceLod0 = !opts.kart || !!opts.kart.isPlayer;
     this.mesh.frustumCulled = false;
     this.mesh.castShadow = true;
     this.mesh.receiveShadow = true;
@@ -284,8 +326,28 @@ export class KartVisual {
     if (dt <= 0) dt = 1e-4;
     dt = Math.min(dt, 0.1);
     this.time += dt;
+    this._updateLod(k);
     this._solve(dt, k);
   }
+
+  /** Swap the mesh geometry by camera distance (AI karts only; hysteresis avoids flicker at the thresholds). */
+  _updateLod(k) {
+    const s = this.session;
+    if (this.forceLod0 || !s?.camera || s.cameraTarget === k) return;
+    const d = s.camera.position.distanceTo(k.position);
+    let lod = this.lod;
+    if (lod === 0) { if (d > 26) lod = 1; }
+    else if (lod === 1) { if (d < 20) lod = 0; else if (d > 62) lod = 2; }
+    else if (d < 50) lod = 1;
+    if (lod !== this.lod) {
+      this.lod = lod;
+      this.mesh.geometry = lod === 0 ? this.assets.geometry : getKartLod(this.assets, lod);
+      this.face.visible = lod < 2;
+    }
+  }
+
+  /** Schedule the lower LODs to be built in the background (AI karts only). */
+  prepareLods() { if (!this.forceLod0) queueLods(this.assets); }
 
   _setBone(i, x, y, z) {
     if (i < 0) return;
@@ -523,6 +585,7 @@ export function attachKartVisual(kart, session) {
   const v = new KartVisual(kart.driverId, kart.bodyId, { kart, session, envMap: env, quality: qid });
   v.deferred = !!session?.app?.renderer?.supportsVisualFlush;
   v.mat.userData.u.uTime.value = 0;
+  v.prepareLods();
   kart.visual = v;
   kart.root.add(v.root);
   session.scene.add(kart.root);

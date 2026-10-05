@@ -21,17 +21,26 @@ export function setDetail(d) { DETAIL = d; }
 export function getDetail() { return DETAIL; }
 const sg = (n, min = 3) => Math.max(min, Math.round(n * DETAIL));
 
+// Simple primitives are memoised per parameter set: kart builders create the same lug / spoke / bolt over and over.
+// Callers must treat them as read-only (PartBuilder.add only reads them); use .clone() before mutating.
+const memo = new Map();
+const mk = (key, make) => {
+  const k = key + '@' + DETAIL;
+  let g = memo.get(k);
+  if (!g) { if (memo.size > 600) memo.clear(); g = make(); memo.set(k, g); }
+  return g;
+};
 /** Bevelled box. `r` = corner radius, `seg` = rounding segments (1 = 108 tris, 2 = 300 tris). */
-export const rbox = (w, h, d, r = Math.min(w, h, d) * 0.3, seg = 1) => new RoundedBoxGeometry(w, h, d, Math.max(1, Math.round(seg * (DETAIL > 0.7 ? 1 : 0.5))), Math.min(r, Math.min(w, h, d) * 0.5 - 1e-4));
-export const box = (w, h, d) => new THREE.BoxGeometry(w, h, d);
-export const sph = (r = 0.5, ws = 16, hs = 10) => new THREE.SphereGeometry(r, sg(ws, 6), sg(hs, 4));
-export const cyl = (rt, rb, h, seg = 16) => new THREE.CylinderGeometry(rt, rb, h, sg(seg, 5), 1);
-export const cylOpen = (rt, rb, h, seg = 16) => new THREE.CylinderGeometry(rt, rb, h, sg(seg, 5), 1, true);
-export const cone = (r, h, seg = 14) => new THREE.ConeGeometry(r, h, sg(seg, 5), 1);
-export const capsule = (r, len, cs = 3, rs = 10) => new THREE.CapsuleGeometry(r, len, Math.max(2, sg(cs, 2)), sg(rs, 6));
-export const torus = (R, r, rs = 8, ts = 22, arc = Math.PI * 2) => new THREE.TorusGeometry(R, r, sg(rs, 4), sg(ts, 8), arc);
-export const disc = (r, seg = 20) => new THREE.CircleGeometry(r, sg(seg, 5));
-export const plane = (w, h) => new THREE.PlaneGeometry(w, h);
+export const rbox = (w, h, d, r = Math.min(w, h, d) * 0.3, seg = 1) => mk(`rb${w},${h},${d},${r},${seg}`, () => new RoundedBoxGeometry(w, h, d, Math.max(1, Math.round(seg * (DETAIL > 0.7 ? 1 : 0.5))), Math.min(r, Math.min(w, h, d) * 0.5 - 1e-4)));
+export const box = (w, h, d) => mk(`bx${w},${h},${d}`, () => new THREE.BoxGeometry(w, h, d));
+export const sph = (r = 0.5, ws = 16, hs = 10) => mk(`sp${r},${ws},${hs}`, () => new THREE.SphereGeometry(r, sg(ws, 6), sg(hs, 4)));
+export const cyl = (rt, rb, h, seg = 16) => mk(`cy${rt},${rb},${h},${seg}`, () => new THREE.CylinderGeometry(rt, rb, h, sg(seg, 5), 1));
+export const cylOpen = (rt, rb, h, seg = 16) => mk(`co${rt},${rb},${h},${seg}`, () => new THREE.CylinderGeometry(rt, rb, h, sg(seg, 5), 1, true));
+export const cone = (r, h, seg = 14) => mk(`cn${r},${h},${seg}`, () => new THREE.ConeGeometry(r, h, sg(seg, 5), 1));
+export const capsule = (r, len, cs = 3, rs = 10) => mk(`cp${r},${len},${cs},${rs}`, () => new THREE.CapsuleGeometry(r, len, Math.max(2, sg(cs, 2)), sg(rs, 6)));
+export const torus = (R, r, rs = 8, ts = 22, arc = Math.PI * 2) => mk(`to${R},${r},${rs},${ts},${arc}`, () => new THREE.TorusGeometry(R, r, sg(rs, 4), sg(ts, 8), arc));
+export const disc = (r, seg = 20) => mk(`di${r},${seg}`, () => new THREE.CircleGeometry(r, sg(seg, 5)));
+export const plane = (w, h) => mk(`pl${w},${h}`, () => new THREE.PlaneGeometry(w, h));
 
 /** Surface of revolution about +Y.  profile = [[radius, y], ...] ordered bottom -> top. */
 export function lathe(profile, seg = 24) {
@@ -179,14 +188,38 @@ export const ATLAS = {
   z: [-1.45, 1.45], y: [0.0, 1.1], x: [-1.0, 1.0],
 };
 
+// Parts that only exist at higher detail levels: tag -> minimum detail factor (LOD0 = 1, LOD1 = 0.5, LOD2 = 0.3).
+const LOD_MIN = {
+  spokes: 0.7, rivet: 0.7, whisker: 0.7, clamp: 0.7, band: 0.7, diffuser: 0.7, lights: 0.7, hub: 0.45, rim: 0.45, goggles: 0.45, lamp: 0.45,
+  spring: 0.45, steer: 0.45, column: 0.45, filter: 0.45, pod: 0.45, lugs: 0.45, glow: 0.45, ant: 0.3, crest: 0.45, horn: 0.3,
+};
+
 export class PartBuilder {
   /** @param {Rig} rig  @param {{ao?: [number, number, number]}} [opts] ao = [y0, y1, minFactor]: darken vertices below y1 */
   constructor(rig, opts = {}) {
     this.rig = rig;
     this.ao = opts.ao ?? [0.02, 0.55, 0.62];
-    this.P = []; this.N = []; this.C = []; this.R = []; this.B = []; this.D = []; // D = decal flag per vertex
-    this.tris = 0;
-    this.log = []; // [tag, triangles] per add(): lets tools rank the heaviest parts
+    this.cap = 8192;
+    this.P = new Float32Array(this.cap * 3); this.N = new Float32Array(this.cap * 3); this.C = new Float32Array(this.cap * 3); this.R = new Float32Array(this.cap * 4);
+    this.B = new Uint8Array(this.cap);
+    this.I = new Uint32Array(this.cap * 6);
+    this.n = 0; this.ni = 0; this.tris = 0;
+    this.decalSpans = [];                // [startVertex, endVertex) of parts that receive livery decals (non-indexed triples)
+    this.log = [];                       // [tag, triangles] per add(): lets tools rank the heaviest parts
+  }
+
+  _grow(nv, ni) {
+    if (this.n + nv > this.cap) {
+      let cap = this.cap; while (this.n + nv > cap) cap *= 2;
+      const f = (a, k) => { const o = new Float32Array(cap * k); o.set(a.subarray(0, this.n * k)); return o; };
+      this.P = f(this.P, 3); this.N = f(this.N, 3); this.C = f(this.C, 3); this.R = f(this.R, 4);
+      const b = new Uint8Array(cap); b.set(this.B.subarray(0, this.n)); this.B = b;
+      this.cap = cap;
+    }
+    if (this.ni + ni > this.I.length) {
+      let len = this.I.length; while (this.ni + ni > len) len *= 2;
+      const o = new Uint32Array(len); o.set(this.I.subarray(0, this.ni)); this.I = o;
+    }
   }
 
   /**
@@ -195,10 +228,13 @@ export class PartBuilder {
    *   c colour (default white)  cf (x,y,z,nx,ny,nz) => colour override per vertex (model space)
    *   rough (0.5) metal (0) emit (0) cc clearcoat mask (0)   ao 0..1 multiplier of the baked bottom-darkening (default 1)
    *   bone name   mirror true -> also add the X-mirrored copy (bound to `bm` or `bone`)   decal true -> receives livery decals
+   *   tag  label for profiling; some tags are skipped on low-detail (LOD) builds
    */
   add(geo, o = {}) {
-    const g = geo.index ? geo.toNonIndexed() : geo;
-    const pa = g.attributes.position, na = g.attributes.normal;
+    const minD = o.tag !== undefined ? LOD_MIN[o.tag] : undefined;
+    if (minD !== undefined && DETAIL < minD) { geo.dispose(); return this; }
+    const decal = !!o.decal;
+    const g = decal && geo.index ? geo.toNonIndexed() : geo;
     if (o.m) _m.copy(o.m);
     else {
       const r = o.r ?? [0, 0, 0];
@@ -208,153 +244,119 @@ export class PartBuilder {
       _m.compose(_p.set(p[0], p[1], p[2]), _q, _s.set(s[0], s[1], s[2]));
     }
     _nm.getNormalMatrix(_m);
+    const me = _m.elements, ne = _nm.elements;
     const flip = _m.determinant() < 0;
     const boneA = this.rig.idx(o.bone ?? 'chassis');
     const boneB = o.mirror ? this.rig.idx(o.bm ?? o.bone ?? 'chassis') : 0;
     const base = toColor(o.c).clone();
     const rough = o.rough ?? 0.5, metal = o.metal ?? 0, emit = o.emit ?? 0, cc = o.cc ?? 0;
     const aoK = o.ao ?? 1;
-    const decal = o.decal ? 1 : 0;
     const cf = o.cf;
-    const n = pa.count;
-    const tmpP = [new THREE.Vector3(), new THREE.Vector3(), new THREE.Vector3()];
-    const tmpN = [new THREE.Vector3(), new THREE.Vector3(), new THREE.Vector3()];
-    const cols = [new THREE.Color(), new THREE.Color(), new THREE.Color()];
-    for (let i = 0; i < n; i += 3) {
-      for (let k = 0; k < 3; k++) {
-        tmpP[k].fromBufferAttribute(pa, i + k).applyMatrix4(_m);
-        tmpN[k].fromBufferAttribute(na, i + k).applyMatrix3(_nm).normalize();
-        if (cf) {
-          const cc2 = cf(tmpP[k].x, tmpP[k].y, tmpP[k].z, tmpN[k].x, tmpN[k].y, tmpN[k].z);
-          cols[k].copy(toColor(cc2));
-        } else cols[k].copy(base);
+    const [ay0, ay1, amn] = this.ao;
+    const pa = g.attributes.position.array, na = g.attributes.normal.array;
+    const nv = g.attributes.position.count;
+    const idx = g.index ? g.index.array : null;
+    const triCount = idx ? idx.length / 3 : nv / 3;
+    const copies = o.mirror ? 2 : 1;
+    this._grow(nv * copies, triCount * 3 * copies);
+    for (let c = 0; c < copies; c++) {
+      const mir = c === 1;
+      const bone = mir ? boneB : boneA;
+      const v0 = this.n;
+      for (let i = 0; i < nv; i++) {
+        const px = pa[i * 3], py = pa[i * 3 + 1], pz = pa[i * 3 + 2];
+        let x = me[0] * px + me[4] * py + me[8] * pz + me[12];
+        const y = me[1] * px + me[5] * py + me[9] * pz + me[13];
+        const z = me[2] * px + me[6] * py + me[10] * pz + me[14];
+        const qx = na[i * 3], qy = na[i * 3 + 1], qz = na[i * 3 + 2];
+        let nx = ne[0] * qx + ne[3] * qy + ne[6] * qz, ny = ne[1] * qx + ne[4] * qy + ne[7] * qz, nz = ne[2] * qx + ne[5] * qy + ne[8] * qz;
+        const nl = Math.hypot(nx, ny, nz) || 1;
+        nx /= nl; ny /= nl; nz /= nl;
+        let cr = base.r, cg = base.g, cb = base.b;
+        // (colour functions see the un-mirrored position so mirrored copies match their originals)
+        if (cf) { const k = toColor(cf(x, y, z, nx, ny, nz)); cr = k.r; cg = k.g; cb = k.b; }
+        if (mir) { x = -x; nx = -nx; }
+        // baked ambient occlusion: darker toward the ground and on downward faces (skipped for emissive parts)
+        let ao = 1;
+        if (aoK > 0 && emit <= 0) {
+          ao = 1 - (1 - (amn + (1 - amn) * smooth(ay0, ay1, y))) * aoK;
+          ao *= 1 - 0.18 * Math.max(0, -ny) * aoK;
+        }
+        const j = v0 + i;
+        const j3 = j * 3, j4 = j * 4;
+        this.P[j3] = x; this.P[j3 + 1] = y; this.P[j3 + 2] = z;
+        this.N[j3] = nx; this.N[j3 + 1] = ny; this.N[j3 + 2] = nz;
+        this.C[j3] = cr * ao; this.C[j3 + 1] = cg * ao; this.C[j3 + 2] = cb * ao;
+        this.R[j4] = rough; this.R[j4 + 1] = metal; this.R[j4 + 2] = emit; this.R[j4 + 3] = cc;
+        this.B[j] = bone;
       }
-      this._emit(tmpP, tmpN, cols, flip, boneA, rough, metal, emit, cc, aoK, decal, false);
-      if (o.mirror) this._emit(tmpP, tmpN, cols, flip, boneB, rough, metal, emit, cc, aoK, decal, true);
+      const rev = flip !== mir;
+      const I = this.I;
+      let k = this.ni;
+      for (let t = 0; t < triCount; t++) {
+        const a = idx ? idx[t * 3] : t * 3, b = idx ? idx[t * 3 + 1] : t * 3 + 1, cc2 = idx ? idx[t * 3 + 2] : t * 3 + 2;
+        I[k++] = v0 + a;
+        I[k++] = v0 + (rev ? cc2 : b);
+        I[k++] = v0 + (rev ? b : cc2);
+      }
+      this.ni = k;
+      this.n += nv;
+      if (decal) this.decalSpans.push([v0, v0 + nv]);
     }
-    this.log.push([o.tag ?? o.bone ?? 'chassis', (n / 3) * (o.mirror ? 2 : 1)]);
+    this.tris += triCount * copies;
+    this.log.push([o.tag ?? o.bone ?? 'chassis', triCount * copies]);
     if (g !== geo) g.dispose();
     geo.dispose();
     return this;
   }
 
-  _emit(P, N, C, flip, bone, rough, metal, emit, cc, aoK, decal, mirror) {
-    const order = (flip !== mirror) ? [0, 2, 1] : [0, 1, 2];
-    for (let q = 0; q < 3; q++) {
-      const k = order[q];
-      const x = mirror ? -P[k].x : P[k].x;
-      const nx = mirror ? -N[k].x : N[k].x;
-      this.P.push(x, P[k].y, P[k].z);
-      this.N.push(nx, N[k].y, N[k].z);
-      // baked ambient occlusion: darker toward the ground and on downward faces (skipped for emissive parts)
-      let ao = 1;
-      if (aoK > 0 && emit <= 0) {
-        const [y0, y1, mn] = this.ao;
-        ao = 1 - (1 - (mn + (1 - mn) * smooth(y0, y1, P[k].y))) * aoK;
-        ao *= 1 - 0.18 * Math.max(0, -N[k].y) * aoK;
-      }
-      this.C.push(C[k].r * ao, C[k].g * ao, C[k].b * ao);
-      this.R.push(rough, metal, emit, cc);
-      this.B.push(bone);
-      this.D.push(decal);
-    }
-    this.tris++;
-  }
-
-  /** Finish: one welded, indexed BufferGeometry ready for a SkinnedMesh. */
+  /** Finish: one indexed BufferGeometry ready for a SkinnedMesh. */
   build() {
-    const n = this.P.length / 3;
-    const P = this.P, N = this.N, C = this.C, R = this.R, Bn = this.B;
-    // planar decal UVs, chosen per triangle by the dominant face-normal axis
+    const n = this.n;
+    const P = this.P;
+    // planar decal UVs, chosen per triangle by the dominant face-normal axis (decal parts are stored as vertex triples)
     const uv = new Float32Array(n * 2);
+    for (let i = 0; i < n; i++) { uv[i * 2] = ATLAS.none.u; uv[i * 2 + 1] = ATLAS.none.v; }
     const [zMin, zMax] = ATLAS.z, [yMin, yMax] = ATLAS.y, [xMin, xMax] = ATLAS.x;
-    for (let t = 0; t < n; t += 3) {
-      let tile = null;
-      if (this.D[t]) {
-        const ax = P[(t + 1) * 3] - P[t * 3], ay = P[(t + 1) * 3 + 1] - P[t * 3 + 1], az = P[(t + 1) * 3 + 2] - P[t * 3 + 2];
-        const bx = P[(t + 2) * 3] - P[t * 3], by = P[(t + 2) * 3 + 1] - P[t * 3 + 1], bz = P[(t + 2) * 3 + 2] - P[t * 3 + 2];
-        const nx = ay * bz - az * by, ny = az * bx - ax * bz, nz = ax * by - ay * bx;
-        const l = Math.hypot(nx, ny, nz) || 1;
-        const fx = nx / l, fy = ny / l;
+    for (const [s0, s1] of this.decalSpans) {
+      for (let t = s0; t + 2 < s1; t += 3) {
+        // tile by the average of the three vertex normals (correct for mirrored copies, whose index order is flipped)
+        const Nn = this.N;
+        const fx = (Nn[t * 3] + Nn[(t + 1) * 3] + Nn[(t + 2) * 3]) / 3, fy = (Nn[t * 3 + 1] + Nn[(t + 1) * 3 + 1] + Nn[(t + 2) * 3 + 1]) / 3;
+        let tile = null;
         if (Math.abs(fx) > 0.55 && Math.abs(fx) >= Math.abs(fy)) tile = fx > 0 ? 'left' : 'right';
         else if (fy > 0.55) tile = 'top';
-      }
-      for (let k = 0; k < 3; k++) {
-        const i = t + k;
-        let u = ATLAS.none.u, v = ATLAS.none.v;
-        if (tile) {
+        if (!tile) continue;
+        const T = ATLAS[tile];
+        for (let k = 0; k < 3; k++) {
+          const i = t + k;
           const x = P[i * 3], y = P[i * 3 + 1], z = P[i * 3 + 2];
-          const T = ATLAS[tile];
           let a, b;
           if (tile === 'left') { a = (zMax - z) / (zMax - zMin); b = (y - yMin) / (yMax - yMin); }
           else if (tile === 'right') { a = (z - zMin) / (zMax - zMin); b = (y - yMin) / (yMax - yMin); }
           else { a = (xMax - x) / (xMax - xMin); b = (z - zMin) / (zMax - zMin); }
           a = Math.min(1, Math.max(0, a)); b = Math.min(1, Math.max(0, b));
           // inset so bilinear filtering never bleeds into the neighbouring tile
-          u = T.u0 + (0.004 + a * 0.992) * T.du; v = T.v0 + (0.004 + b * 0.992) * T.dv;
+          uv[i * 2] = T.u0 + (0.004 + a * 0.992) * T.du; uv[i * 2 + 1] = T.v0 + (0.004 + b * 0.992) * T.dv;
         }
-        uv[i * 2] = u; uv[i * 2 + 1] = v;
       }
     }
-    // ---- weld identical vertices (quantised) -> indexed geometry
-    const Q = 19;
-    const key = new Int32Array(n * Q);
-    const buckets = new Map();
-    const remap = new Uint32Array(n);
-    const keep = [];
-    for (let i = 0; i < n; i++) {
-      const o = i * Q;
-      key[o] = Math.round(P[i * 3] * 2000); key[o + 1] = Math.round(P[i * 3 + 1] * 2000); key[o + 2] = Math.round(P[i * 3 + 2] * 2000);
-      key[o + 3] = Math.round(N[i * 3] * 90); key[o + 4] = Math.round(N[i * 3 + 1] * 90); key[o + 5] = Math.round(N[i * 3 + 2] * 90);
-      key[o + 6] = Math.round(C[i * 3] * 300); key[o + 7] = Math.round(C[i * 3 + 1] * 300); key[o + 8] = Math.round(C[i * 3 + 2] * 300);
-      key[o + 9] = Math.round(R[i * 4] * 60); key[o + 10] = Math.round(R[i * 4 + 1] * 60); key[o + 11] = Math.round(R[i * 4 + 2] * 20); key[o + 12] = Math.round(R[i * 4 + 3] * 20);
-      key[o + 13] = Math.round(uv[i * 2] * 3000); key[o + 14] = Math.round(uv[i * 2 + 1] * 3000);
-      key[o + 15] = Bn[i];
-      let h = 2166136261;
-      for (let q = 0; q < 16; q++) { h ^= key[o + q]; h = Math.imul(h, 16777619); }
-      let list = buckets.get(h);
-      let found = -1;
-      if (list) {
-        for (let j = 0; j < list.length; j++) {
-          const c = list[j] * Q;
-          let same = true;
-          for (let q = 0; q < 16; q++) if (key[c + q] !== key[o + q]) { same = false; break; }
-          if (same) { found = list[j]; break; }
-        }
-      } else { list = []; buckets.set(h, list); }
-      if (found < 0) { list.push(i); remap[i] = keep.length; keep.push(i); } else remap[i] = remap[found];
-    }
-    const m = keep.length;
-    const pos = new Float32Array(m * 3), nor = new Float32Array(m * 3), col = new Float32Array(m * 3), pbr = new Float32Array(m * 4), uvs = new Float32Array(m * 2);
-    const si = new Uint8Array(m * 4), sw = new Uint8Array(m * 4);
-    for (let j = 0; j < m; j++) {
-      const i = keep[j];
-      pos[j * 3] = P[i * 3]; pos[j * 3 + 1] = P[i * 3 + 1]; pos[j * 3 + 2] = P[i * 3 + 2];
-      nor[j * 3] = N[i * 3]; nor[j * 3 + 1] = N[i * 3 + 1]; nor[j * 3 + 2] = N[i * 3 + 2];
-      col[j * 3] = C[i * 3]; col[j * 3 + 1] = C[i * 3 + 1]; col[j * 3 + 2] = C[i * 3 + 2];
-      pbr[j * 4] = R[i * 4]; pbr[j * 4 + 1] = R[i * 4 + 1]; pbr[j * 4 + 2] = R[i * 4 + 2]; pbr[j * 4 + 3] = R[i * 4 + 3];
-      uvs[j * 2] = uv[i * 2]; uvs[j * 2 + 1] = uv[i * 2 + 1];
-      si[j * 4] = Bn[i]; sw[j * 4] = 255;
-    }
-    const idxArr = [];
-    for (let t = 0; t < n; t += 3) {
-      const a = remap[t], b = remap[t + 1], c = remap[t + 2];
-      if (a === b || b === c || a === c) continue;
-      idxArr.push(a, b, c);
-    }
+    const si = new Uint8Array(n * 4), sw = new Uint8Array(n * 4);
+    for (let i = 0; i < n; i++) { si[i * 4] = this.B[i]; sw[i * 4] = 255; }
     const g = new THREE.BufferGeometry();
-    g.setAttribute('position', new THREE.BufferAttribute(pos, 3));
-    g.setAttribute('normal', new THREE.BufferAttribute(nor, 3));
-    g.setAttribute('color', new THREE.BufferAttribute(col, 3));
-    g.setAttribute('aPbr', new THREE.BufferAttribute(pbr, 4));
-    g.setAttribute('uv', new THREE.BufferAttribute(uvs, 2));
+    g.setAttribute('position', new THREE.BufferAttribute(P.slice(0, n * 3), 3));
+    g.setAttribute('normal', new THREE.BufferAttribute(this.N.slice(0, n * 3), 3));
+    g.setAttribute('color', new THREE.BufferAttribute(this.C.slice(0, n * 3), 3));
+    g.setAttribute('aPbr', new THREE.BufferAttribute(this.R.slice(0, n * 4), 4));
+    g.setAttribute('uv', new THREE.BufferAttribute(uv, 2));
     g.setAttribute('skinIndex', new THREE.BufferAttribute(si, 4));
     g.setAttribute('skinWeight', new THREE.BufferAttribute(sw, 4, true));
-    g.setIndex(m < 65535 ? new THREE.Uint16BufferAttribute(idxArr, 1) : new THREE.Uint32BufferAttribute(idxArr, 1));
+    const ind = this.I.subarray(0, this.ni);
+    g.setIndex(n < 65535 ? new THREE.BufferAttribute(new Uint16Array(ind), 1) : new THREE.BufferAttribute(new Uint32Array(ind), 1));
     g.computeBoundingSphere();
     g.computeBoundingBox();
-    g.userData.triangles = idxArr.length / 3;
-    g.userData.vertices = m;
+    g.userData.triangles = this.ni / 3;
+    g.userData.vertices = n;
     g.userData.rawTriangles = this.tris;
     g.userData.log = this.log;
     return g;

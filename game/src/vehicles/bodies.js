@@ -66,7 +66,7 @@ export function addWheel(B, pal, o) {
       const a = (i / o.lugs) * Math.PI * 2;
       const stagger = i % 2 ? 0.2 : -0.2;
       const cy = Math.cos(a) * (r + lh * 0.18), cz = Math.sin(a) * (r + lh * 0.18);
-      B.add(cyl((o.lugW ?? r * 0.17) * 0.55, (o.lugW ?? r * 0.17) * 0.78, lh * 1.5, 6), { p: [x + stagger * w, y + cy, z + cz], r: [a, 0, 0], ...mir, ...M.rubber, c: '#23252c', ao: 0.5, tag: 'lugs' });
+      B.add(cyl((o.lugW ?? r * 0.17) * 0.5, (o.lugW ?? r * 0.17) * 0.72, lh * 1.4, 4), { p: [x + stagger * w, y + cy, z + cz], r: [a, Math.PI / 4, 0], s: [1.15, 1, 1.15], ...mir, ...M.rubber, c: '#2a2c34', ao: 0.5, tag: 'lugs' });
     }
   }
   // hub / rim on the outer side (+X for the left wheel)

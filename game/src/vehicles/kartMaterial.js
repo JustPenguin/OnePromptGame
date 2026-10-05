@@ -59,7 +59,7 @@ export function createKartMaterial(o = {}) {
     uRainbow: { value: 0 },
     uGlow: { value: 1 },
     uTime: { value: 0 },
-    uRim: { value: ghost ? 1.6 : 0.34 },
+    uRim: { value: ghost ? 1.6 : 0.22 },
     uRimColor: { value: ghost ? new THREE.Color(0.35, 0.9, 1.0) : new THREE.Color(0.62, 0.78, 1.0) },
   };
   mat.userData.u = u;

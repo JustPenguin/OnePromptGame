@@ -173,7 +173,7 @@ function aimMatrix(p, dir, scale = 1) {
   return new THREE.Matrix4().compose(p, q, s);
 }
 /** Translate a cone/cylinder so its BASE sits at the origin and it points along +Y. */
-function baseUp(geo, h) { geo.translate(0, h / 2, 0); return geo; }
+function baseUp(geo, h) { return geo.clone().translate(0, h / 2, 0); }
 
 /**
  * A pair of ears growing out of a reference ellipsoid (usually the helmet shell).  Adds bones earL / earR (springy).
