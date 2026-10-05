@@ -37,8 +37,11 @@ export const gpCss = /* css */ `
 .st-next .lbl{padding:.7rem 1rem .2rem;font-size:.72rem;letter-spacing:.16em;text-transform:uppercase;color:var(--kr-ink-dim);}
 .st-next .tcard{width:100%;border-radius:0 0 1.2rem 1.2rem;box-shadow:none;pointer-events:none;} .st-next .tcard .tart{height:8.5rem;}
 .st-actions{display:flex;flex-direction:column;gap:.8rem;}
-.l-portrait .s-standings,.l-compact .s-standings{flex-direction:column;overflow:auto;align-items:stretch;} .l-portrait .st-right,.l-compact .st-right{max-width:none;flex:none;} .l-portrait .st-next,.l-compact .st-next{display:none;}
-.l-compact .st-rows{--rh:2.3rem;--pitch:2.55rem;} .l-compact .srow .portrait{width:1.9rem;height:1.9rem;} .l-compact .srow .rk{font-size:1.1rem;} .l-compact .srow .stt{font-size:1.2rem;} .l-compact .st-head,.l-compact .srow{grid-template-columns:1.8rem 1.6rem 2.2rem minmax(0,1fr) 3.4rem 3.4rem;gap:.4rem;} .l-compact .s-standings{flex-direction:row;}
+.l-portrait .s-standings{flex-direction:column;overflow:auto;align-items:stretch;gap:.8rem;} .l-portrait .st-right{max-width:none;flex:none;} .l-portrait .st-next{display:none;} .l-portrait .st-left{flex:none;}
+.l-portrait .st-wrap{padding:.4rem .35rem;} .l-portrait .st-head,.l-portrait .srow{grid-template-columns:1.4rem 1.7rem 2.3rem minmax(0,1fr) 2.6rem 3rem;gap:.35rem;padding:0 .5rem;font-size:.7rem;}
+.l-portrait .st-head{padding-bottom:.25rem;font-size:.6rem;} .l-portrait .st-rows{--rh:2.7rem;--pitch:3rem;} .l-portrait .srow .portrait{width:2rem;height:2rem;} .l-portrait .srow .rk{font-size:1.2rem;} .l-portrait .srow .sn{font-size:.95rem;gap:.3rem;} .l-portrait .srow.me .sn::after{display:none;} .l-portrait .srow .sg{font-size:.85rem;} .l-portrait .srow .stt{font-size:1.25rem;} .l-portrait .srow .ar{font-size:.7rem;}
+.l-compact .s-standings{flex-direction:row;gap:1rem;align-items:flex-start;} .l-compact .st-left{gap:.25rem;} .l-compact .st-left .kicker{font-size:.62rem;} .l-compact .st-left .h1{font-size:1.4rem;} .l-compact .st-right{max-width:11.5rem;gap:.5rem;} .l-compact .st-next{display:none;}
+.l-compact .st-wrap{padding:.3rem .4rem;} .l-compact .st-rows{--rh:1.95rem;--pitch:2.12rem;} .l-compact .st-head,.l-compact .srow{grid-template-columns:1.6rem 1.6rem 2rem minmax(0,1fr) 3rem 3.2rem;gap:.35rem;padding:0 .6rem;} .l-compact .st-head{padding-bottom:.15rem;font-size:.58rem;} .l-compact .srow{border-radius:.5rem;} .l-compact .srow .portrait{width:1.55rem;height:1.55rem;} .l-compact .srow .rk{font-size:1rem;} .l-compact .srow .sn{font-size:.85rem;} .l-compact .srow .sg{font-size:.78rem;} .l-compact .srow .stt{font-size:1.05rem;} .l-compact .srow .ar{font-size:.62rem;}
 .s-podium{justify-content:space-between;}
 .pd-top{display:flex;justify-content:space-between;align-items:flex-start;gap:1rem;z-index:3;}
 .pd-mid{flex:1;display:flex;justify-content:space-between;align-items:flex-end;gap:1rem;z-index:3;min-height:0;}
@@ -52,7 +55,8 @@ export const gpCss = /* css */ `
 .pd-res .sm{font-size:.9rem;color:var(--kr-ink-dim);}
 .pd-res .newb{animation:badge-pop .7s var(--ease-spring) both .9s;}
 .pd-res .res-unlocks{width:100%;text-align:left;}
-.l-portrait .pd-table,.l-compact .pd-table{display:none;} .l-portrait .pd-mid{align-items:flex-end;justify-content:center;} .l-portrait .pd-res{width:100%;} .l-compact .pd-res{width:15rem;padding:.6rem .8rem;gap:.35rem;} .l-compact .pd-res .tro-big{font-size:3rem;} .l-compact .pd-res .pl{font-size:1.4rem;}
+.unl-chip{display:none;}
+.l-portrait .pd-mid{align-items:flex-end;justify-content:center;} .l-portrait .pd-res{width:100%;padding:.7rem .9rem .8rem;gap:.35rem;} .l-portrait .pd-res .tro-big{font-size:2.8rem;} .l-portrait .pd-res .pl{font-size:1.6rem;} .l-portrait .pd-res .tn{font-size:.95rem;} .l-portrait .pd-res .res-unlocks{display:none;} .l-portrait .pd-res .unl-chip{display:inline-flex;} .l-compact .pd-res{width:15rem;padding:.6rem .8rem;gap:.35rem;} .l-compact .pd-res .tro-big{font-size:3rem;} .l-compact .pd-res .pl{font-size:1.4rem;}
 `;
 
 // ------------------------------------------------------------------------------------------------ standings
@@ -157,6 +161,7 @@ export class PodiumScreen extends Screen {
       res.isNewTrophy ? h('span', { class: 'chip gd newb' }, icon('star'), 'New trophy!') : null,
       h('div', { class: 'sm' }, `${gp.player.points} points · ${gp.total} race${gp.total === 1 ? '' : 's'}`),
       unl,
+      (res.unlocked?.length ?? 0) > 0 ? h('span', { class: 'chip gd unl-chip' }, icon('lock'), `${res.unlocked.length} new unlock${res.unlocked.length === 1 ? '' : 's'}`) : null,
       button({ label: 'Continue', icon: 'right', variant: 'green', def: true, block: true, sfx: 'confirm', onClick: () => this.app.quitToMenu() }));
     return h('div', { class: 'screen' },
       h('div', { class: 'scrim-bottom' }), h('div', { class: 'scrim-top' }),

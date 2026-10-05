@@ -410,8 +410,9 @@ export class MenuScene {
     // camera: gentle sway around a base angle (+ user drag shifts the kart, not the camera).
     // Framing adapts to the viewport: on narrow (portrait) screens the camera backs off until the hero kart (~2.3 m half-width) fits.
     const aspect = clamp((this.app.renderer.width || 16) / (this.app.renderer.height || 9), 0.3, 4);
-    const fit = 2.3 / (Math.tan((cam.fov * Math.PI) / 360) * aspect);
-    const dist = Math.max(cam.dist, this.preset === 'podium' ? fit * 1.5 : fit);
+    const halfWidth = this.preset === 'podium' ? 5.6 : 2.3;      // metres that must stay in frame: a podium is ~11 m wide, a kart ~4.6 m
+    const fit = halfWidth / (Math.tan((cam.fov * Math.PI) / 360) * aspect);
+    const dist = Math.max(cam.dist, fit);
     const ang = cam.base + Math.sin(t * cam.speed * Math.PI * 2) * cam.sway * (rm ? 0.25 : 1);
     const bob = Math.sin(t * 0.37) * 0.12 * (rm ? 0 : 1);
     this.camera.position.set(Math.sin(ang) * dist, cam.height * (dist / cam.dist > 1 ? 0.5 + 0.5 * (dist / cam.dist) : 1) + bob, Math.cos(ang) * dist);
