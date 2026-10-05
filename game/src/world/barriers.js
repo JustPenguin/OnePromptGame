@@ -16,7 +16,9 @@ function outward(row, side, out = _o) { return out.set(row.right.x, 0, row.right
 function basePoint(row, side, lateral, out) { return out.copy(row.pos).addScaledVector(row.right, side * lateral); }
 
 /** True where the barrier exists on `side` for the segment row r -> r+1. */
+let _skip = null;
 function wallOn(track, rows, r, side) {
+  if (_skip) { const s = rows[r].s % track.length; for (let k = 0; k < _skip.length; k++) if (s >= _skip[k][0] && s <= _skip[k][1]) return false; }
   const a = rows[r].idx, b = rows[r + 1].idx;
   const arr = side > 0 ? track.wallR : track.wallL;
   return arr[a] === 1 && arr[b] === 1;
@@ -140,7 +142,9 @@ export function buildBarriers(world, spec) {
   const track = world.track;
   const rows = makeRows(track, 0, track.length, track.spacing);
   const B = new GeoBuilder();
+  _skip = spec.skip?.length ? spec.skip.map(([a, b]) => [a % track.length, a % track.length + (b - a)]) : null;
   (STYLES[spec.type] ?? STYLES.wall)(B, track, rows, spec);
+  _skip = null;
   if (!B.vertexCount) return null;
   const geo = B.build();
   const mat = new THREE.MeshLambertMaterial({ vertexColors: true });

@@ -116,7 +116,7 @@ export function buildStartLine(world, cfg = {}) {
   const right = new THREE.Vector3(smp.right.x, 0, smp.right.z).normalize();
   const fwd = new THREE.Vector3(smp.tangent.x, 0, smp.tangent.z).normalize();
   const B = new GeoBuilder();
-  const steel = toColor(cfg.structure ?? '#dfe5f2'), dark = toColor(cfg.pillar ?? '#3a4156'), accent = toColor(cfg.trim ?? '#ffd23f');
+  const steel = toColor(cfg.structure ?? '#e6ebf6'), dark = toColor(cfg.pillar ?? '#7d89a8'), accent = toColor(cfg.trim ?? '#ffd23f');
   const topY = cfg.height ?? 8.2;
   for (const side of [-1, 1]) {
     const base = new THREE.Vector3().copy(smp.position).addScaledVector(smp.right, side * edge);

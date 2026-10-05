@@ -9,10 +9,13 @@ import { makeTileNoise } from './noise.js';
 const LRU_MAX = 22;
 const lru = new Map();
 
+export const texStats = { ms: 0, built: 0 };
 function cachedCanvas(key, make) {
   let c = lru.get(key);
   if (c) { lru.delete(key); lru.set(key, c); return c; }
+  const t0 = performance.now();
   c = make();
+  texStats.ms += performance.now() - t0; texStats.built++;
   lru.set(key, c);
   while (lru.size > LRU_MAX) lru.delete(lru.keys().next().value);
   return c;
@@ -335,6 +338,41 @@ export function bannerTexture({ text = 'START', sub = '', bg = '#e8403a', fg = '
     return c;
   });
   return toTexture(cv, { repeat: false, aniso: 8 });
+}
+
+/** Spectators: 3 horizontal bands of cheering people (tileable across; 1024 px = 9 m, each band 0.9 m tall). */
+export function crowdTexture({ seed = 3, shirts = ['#e5413a', '#ffd23f', '#2f8be8', '#35c759', '#ff7a1a', '#8b4dff', '#ff3d6a', '#22d3ff', '#ffffff', '#1d2a5c'] } = {}) {
+  const cv = cachedCanvas(`crowd:${seed}:${shirts.join('')}`, () => {
+    const W = 1024, H = 384, [c, g] = canvas(W, H);
+    const rnd = mulberry32(seed * 313 + 7);
+    const skins = ['#f4c8a0', '#e0a070', '#b8784a', '#8a5a3a', '#f8d8b8', '#c98e5e'], hairs = ['#2a1c10', '#5a3a1c', '#c89a4a', '#111111', '#d94a2a', '#e8d8a8'];
+    g.fillStyle = '#2b2436'; g.fillRect(0, 0, W, H);
+    for (let band = 0; band < 3; band++) {
+      const y0 = band * 128;
+      const grd = g.createLinearGradient(0, y0, 0, y0 + 128); grd.addColorStop(0, '#3a3148'); grd.addColorStop(1, '#1f1a29'); g.fillStyle = grd; g.fillRect(0, y0, W, 128);
+      for (let row = 0; row < 2; row++) {
+        const n = 30, yBase = y0 + 128 - row * 22 - 4;
+        for (let i = 0; i < n; i++) {
+          const x = ((i + rnd() * 0.6 + row * 0.5) / n) * W, w = 30 + rnd() * 10, bodyH = 44 + rnd() * 12;
+          const shirt = shirts[(rnd() * shirts.length) | 0], skin = skins[(rnd() * skins.length) | 0], hair = hairs[(rnd() * hairs.length) | 0];
+          const arms = rnd() < 0.35, flag = rnd() < 0.08;
+          const draw = (dx) => {
+            const cx = x + dx, top = yBase - bodyH;
+            g.fillStyle = shirt; g.beginPath(); g.roundRect(cx - w / 2, top, w, bodyH + 30, 10); g.fill();
+            g.fillStyle = 'rgba(0,0,0,0.18)'; g.fillRect(cx - w / 2, top + bodyH * 0.55, w, bodyH);
+            if (arms) { g.strokeStyle = skin; g.lineWidth = 6; g.lineCap = 'round'; g.beginPath(); g.moveTo(cx - w / 2 + 4, top + 8); g.lineTo(cx - w / 2 - 8, top - 22); g.moveTo(cx + w / 2 - 4, top + 8); g.lineTo(cx + w / 2 + 8, top - 22); g.stroke(); }
+            if (flag) { g.fillStyle = '#5a3a1c'; g.fillRect(cx + w / 2 + 6, top - 40, 3, 50); g.fillStyle = shirts[(rnd() * shirts.length) | 0]; g.fillRect(cx + w / 2 + 9, top - 40, 22, 14); }
+            g.fillStyle = skin; g.beginPath(); g.arc(cx, top - 9, 11, 0, 7); g.fill();
+            g.fillStyle = hair; g.beginPath(); g.arc(cx, top - 13, 11, Math.PI, 0); g.fill();
+            g.fillStyle = '#222'; g.fillRect(cx - 5, top - 10, 2, 3); g.fillRect(cx + 3, top - 10, 2, 3);
+          };
+          draw(0); if (x < 40) draw(W); if (x > W - 40) draw(-W);
+        }
+      }
+    }
+    return c;
+  });
+  return toTexture(cv, { aniso: 8 });
 }
 
 function shade(hex, k) { const [r, g, b] = hexRgb(hex); return `rgb(${Math.min(255, r * k) | 0},${Math.min(255, g * k) | 0},${Math.min(255, b * k) | 0})`; }

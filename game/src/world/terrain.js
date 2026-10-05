@@ -182,7 +182,7 @@ export class Terrain {
     this.tiles = [];
     this._q = null;
     this._ctx = { dist: 0, noise: this.noise, road: this.road, q: null };
-    this.waterCarve = null;
+    this.carvers = [];       // fn(x,z,nat)->nat modifiers (water beds, chasms...) applied to the natural ground before road grading
     // the distance / reference-height field must exist before the first heightAt() call (recipes scatter props immediately)
     this.road.buildDistanceField(this.track.bounds, cfg.outerMargin ?? 1500, 24);
   }
@@ -193,6 +193,7 @@ export class Terrain {
     const ctx = this._ctx; ctx.dist = q.dist; ctx.q = q;
     ctx.refY = this.refAt(q, x, z);
     let nat = cfg.natural(x, z, ctx);
+    for (let i = 0; i < this.carvers.length; i++) nat = this.carvers[i](x, z, nat);
     if (!q.near) return nat;
     const edge = q.hw + q.sh + (cfg.curb ?? 1);
     const dd = Math.max(0, Math.abs(q.lateral) - edge);
@@ -220,17 +221,20 @@ export class Terrain {
     return out.set(hl - hr, 2 * e, hd - hu).normalize();
   }
 
-  // ---- mesh -------------------------------------------------------------------------------------------------------
-  build(quality) {
-    const cfg = this.cfg, tr = this.track;
+  // ---- height grid + mesh -------------------------------------------------------------------------------------------
+  /** (Re)compute the fine height grid. Cheap to call repeatedly: it only recomputes after a carver was added. */
+  ensureGrid() {
+    if (this.H) return;
+    const tg = performance.now();
+    const cfg = this.cfg, tr = this.track, quality = this.world.quality;
     const lowQ = quality?.id === 'low';
     const cell = (cfg.cell ?? 5) * (lowQ ? 1.6 : quality?.id === 'ultra' ? 0.85 : 1);
     const margin = cfg.margin ?? 130;
     const b = tr.bounds;
     const x0 = Math.floor((b.minX - margin) / cell) * cell, z0 = Math.floor((b.minZ - margin) / cell) * cell;
-    const nx = Math.ceil((b.maxX + margin - x0) / cell), nz = Math.ceil((b.maxZ + margin - z0) / cell);
-    this.inner = { x0, z0, nx, nz, cell, x1: x0 + nx * cell, z1: z0 + nz * cell };
-
+    const ALIGN = 8; // the coarse ring uses cells of ALIGN x the fine cell and shares the fine grid's boundary lines exactly
+    const nx = Math.ceil(Math.ceil((b.maxX + margin - x0) / cell) / ALIGN) * ALIGN, nz = Math.ceil(Math.ceil((b.maxZ + margin - z0) / cell) / ALIGN) * ALIGN;
+    this.inner = { x0, z0, nx, nz, cell, x1: x0 + nx * cell, z1: z0 + nz * cell, ALIGN };
     const VX = nx + 1, VZ = nz + 1;
     const H = new Float32Array(VX * VZ);
     const C = new Uint8Array(VX * VZ); // 1 = deep inside the road corridor (cells fully inside are skipped)
@@ -240,8 +244,32 @@ export class Terrain {
       const q = this.road.out;
       C[j * VX + i] = q.near && Math.abs(q.lateral) < q.hw + q.sh - 1.2 && q.free < 0.01 ? 1 : 0;
     }
-    this.H = H; this.VX = VX; this.VZ = VZ;
+    this.H = H; this.C = C; this.VX = VX; this.VZ = VZ;
+    this.gridMs = (this.gridMs ?? 0) + performance.now() - tg;
+  }
 
+  addCarver(fn) { this.carvers.push(fn); this.H = null; }
+
+  /** Height of the RENDERED mesh at (x,z) (exact triangle interpolation inside the fine grid, analytic outside). */
+  meshHeightAt(x, z) {
+    this.ensureGrid();
+    const g = this.inner, VX = this.VX, H = this.H;
+    const fx = (x - g.x0) / g.cell, fz = (z - g.z0) / g.cell;
+    if (fx < 0 || fz < 0 || fx >= g.nx || fz >= g.nz) return this.heightAt(x, z);
+    const i = Math.floor(fx), j = Math.floor(fz), u = fx - i, v = fz - j;
+    const ha = H[j * VX + i], hb = H[j * VX + i + 1], hc = H[(j + 1) * VX + i], hd = H[(j + 1) * VX + i + 1];
+    if ((i + j) & 1) { // diagonal b-c : triangles (a,c,b) and (b,c,d)
+      return u + v <= 1 ? ha + (hb - ha) * u + (hc - ha) * v : hd + (hc - hd) * (1 - u) + (hb - hd) * (1 - v);
+    }
+    // diagonal a-d : triangles (a,c,d) and (a,d,b)
+    return v >= u ? ha + (hd - hc) * u + (hc - ha) * v : ha + (hb - ha) * u + (hd - hb) * v;
+  }
+
+  build(quality) {
+    const cfg = this.cfg;
+    this.ensureGrid();
+    const { x0, z0, nx, nz, cell, ALIGN } = this.inner;
+    const H = this.H, C = this.C, VX = this.VX, VZ = this.VZ;
     // chunked tiles
     const tile = cfg.tile ?? 32;
     const mat = this.material = makeTerrainMaterial(cfg);
@@ -256,10 +284,15 @@ export class Terrain {
       this.group.add(m); this.tiles.push(m);
     }
 
-    // outer coarse ring to the horizon (skips the inner rect; skirt hides the T-junction cracks)
-    const oc = (cfg.outerCell ?? 48) * (lowQ ? 1.5 : 1), om = cfg.outerMargin ?? 1500;
-    const ox0 = Math.floor((b.minX - om) / oc) * oc, oz0 = Math.floor((b.minZ - om) / oc) * oc;
-    const onx = Math.ceil((b.maxX + om - ox0) / oc), onz = Math.ceil((b.maxZ + om - oz0) / oc);
+    // skirt: a vertical curtain around the fine grid so the T-junction cracks against the coarse ring never show the sky
+    this._addSkirt(H, VX, VZ, x0, z0, cell, mat);
+
+    // outer coarse ring to the horizon: cells of 8x the fine cell on lines shared with the fine grid; cells fully inside the fine
+    // grid are dropped, the skirt hides the T-junction cracks along the shared boundary
+    const b = this.track.bounds;
+    const oc = cell * ALIGN, K = Math.ceil((cfg.outerMargin ?? 1500) / oc);
+    const ox0 = x0 - K * oc, oz0 = z0 - K * oc;
+    const onx = nx / ALIGN + 2 * K, onz = nz / ALIGN + 2 * K;
     const OX = onx + 1, OZ = onz + 1;
     const OH = new Float32Array(OX * OZ);
     for (let j = 0; j < OZ; j++) for (let i = 0; i < OX; i++) OH[j * OX + i] = this.heightAt(ox0 + i * oc, oz0 + j * oc);
@@ -274,6 +307,33 @@ export class Terrain {
       this.group.add(m); this.tiles.push(m);
     }
     return this;
+  }
+
+  _addSkirt(H, VX, VZ, x0, z0, cell, mat) {
+    const per = [];
+    for (let i = 0; i < VX; i++) per.push([i, 0]);
+    for (let j = 1; j < VZ; j++) per.push([VX - 1, j]);
+    for (let i = VX - 2; i >= 0; i--) per.push([i, VZ - 1]);
+    for (let j = VZ - 2; j >= 1; j--) per.push([0, j]);
+    const n = per.length;
+    const pos = new Float32Array(n * 2 * 3), col = new Float32Array(n * 2 * 3), nrm = new Float32Array(n * 2 * 3);
+    const drop = 40;
+    per.forEach(([i, j], k) => {
+      const x = x0 + i * cell, z = z0 + j * cell, y = H[j * VX + i];
+      this._vertexColor(x, z, y, 0.9, _tmpC);
+      const o = k * 6;
+      pos[o] = x; pos[o + 1] = y + 0.2; pos[o + 2] = z; pos[o + 3] = x; pos[o + 4] = y - drop; pos[o + 5] = z;
+      col[o] = _tmpC.r * 0.85; col[o + 1] = _tmpC.g * 0.85; col[o + 2] = _tmpC.b * 0.85; col[o + 3] = _tmpC.r * 0.5; col[o + 4] = _tmpC.g * 0.5; col[o + 5] = _tmpC.b * 0.5;
+      nrm[o + 1] = 1; nrm[o + 4] = 1;
+    });
+    const idx = [];
+    for (let k = 0; k < n; k++) { const a = k * 2, b = ((k + 1) % n) * 2; idx.push(a, a + 1, b, b, a + 1, b + 1); }
+    const g = new THREE.BufferGeometry();
+    g.setAttribute('position', new THREE.BufferAttribute(pos, 3)); g.setAttribute('normal', new THREE.BufferAttribute(nrm, 3)); g.setAttribute('color', new THREE.BufferAttribute(col, 3));
+    g.setIndex(idx); g.computeBoundingSphere();
+    const m = new THREE.Mesh(g, new THREE.MeshLambertMaterial({ vertexColors: true, side: THREE.DoubleSide }));
+    m.userData.skirt = true;
+    this.group.add(m); this.skirt = m;
   }
 
   _vertexColor(x, z, y, ny, out) {
@@ -348,8 +408,8 @@ export class Terrain {
     const idx = [];
     for (let j = 0; j < cz; j++) for (let i = 0; i < cx; i++) {
       const x = x0 + (tx + i) * cell, z = z0 + (tz + j) * cell;
-      // drop cells that overlap the fine inner grid (slightly inset so the seam overlaps instead of leaving a gap)
-      if (x + cell > inn.x0 + cell * 0.5 && x < inn.x1 - cell * 0.5 && z + cell > inn.z0 + cell * 0.5 && z < inn.z1 - cell * 0.5) continue;
+      // drop cells fully covered by the fine inner grid (the shared boundary lines are aligned, so no partial overlaps exist)
+      if (x >= inn.x0 - 1e-3 && x + cell <= inn.x1 + 1e-3 && z >= inn.z0 - 1e-3 && z + cell <= inn.z1 + 1e-3) continue;
       const a = j * (cx + 1) + i, b = a + 1, c = a + cx + 1, d = c + 1;
       idx.push(a, c, b, b, c, d);
     }
@@ -390,6 +450,7 @@ export class Terrain {
 
   dispose() {
     for (const m of this.tiles) m.geometry.dispose();
+    if (this.skirt) { this.skirt.geometry.dispose(); this.skirt.material.dispose(); }
     this.material?.dispose();
     this.tiles.length = 0;
     this.group.removeFromParent();

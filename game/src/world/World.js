@@ -10,7 +10,7 @@ import { createNoise } from './noise.js';
 import { RoadIndex, Terrain } from './terrain.js';
 import { PropLayer, scatter as scatterRules } from './props.js';
 import { makeRows, ribbon, skirt, loopVScale } from './ribbon.js';
-import { roadTexture, curbTexture, groundTexture, disposeTextures } from './textures.js';
+import { roadTexture, curbTexture, groundTexture, glowTexture, disposeTextures, texStats } from './textures.js';
 import { buildBarriers } from './barriers.js';
 import { buildBoostPads, buildStartLine } from './features.js';
 import { createSky } from './sky.js';
@@ -35,6 +35,7 @@ export class World {
     this.textures = [];
     this.updaters = [];
     this.layers = [];
+    this.waters = [];
     this.excludes = [];
     this.terrain = null;
     this.sky = null;
@@ -50,9 +51,14 @@ export class World {
     this.session = null;
     this.stats = { buildMs: 0, layers: 0, instances: 0 };
     const t0 = performance.now();
+    this.stats.phases = {};
     getRecipe(this.def)(this);
+    this.stats.phases.recipe = performance.now() - t0;
+    this.stats.phases.gridMs = this.terrain?.gridMs ?? 0;
     this._build();
     this.stats.buildMs = performance.now() - t0;
+    this.stats.phases.textures = texStats.ms;
+    for (const k of Object.keys(this.stats.phases)) this.stats.phases[k] = Math.round(this.stats.phases[k]);
   }
 
   // ---- services for recipes ---------------------------------------------------------------------------------------
@@ -71,8 +77,15 @@ export class World {
   addUpdater(fn) { this.updaters.push(fn); return fn; }
   place(obj) { this.group.add(obj); return obj; }
   layer(opts) { const l = new PropLayer(this, opts); this.layers.push(l); return l; }
-  scatter(layer, rules) { return scatterRules(this, layer, rules); }
-  groundAt(x, z) { return this.terrain ? this.terrain.heightAt(x, z) : this.track.bounds.minY - 30; }
+  scatter(layer, rules) { const t = performance.now(); const n = scatterRules(this, layer, rules); this.stats.phases.scatter = (this.stats.phases.scatter ?? 0) + performance.now() - t; return n; }
+  /** A layer of flat soft dark discs (fake contact shadows). Use via scatter(..., { blob: { layer, k } }). */
+  blobLayer({ opacity = 0.42, color = '#0a1a05', name = 'blobs' } = {}) {
+    const g = new THREE.CircleGeometry(0.5, 14); g.rotateX(-Math.PI / 2);
+    const mat = new THREE.MeshBasicMaterial({ map: this.tex(glowTexture({ inner: 'rgba(0,0,0,1)', outer: 'rgba(0,0,0,0)', hard: 0.1, size: 64 })), transparent: true, opacity, depthWrite: false, color: toColor(color), polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2, fog: true });
+    const l = this.layer({ name, geometry: g, material: mat, castShadow: false, cull: 0.35, chunk: 120 });
+    return l;
+  }
+  groundAt(x, z) { return this.terrain ? this.terrain.meshHeightAt(x, z) : this.track.bounds.minY - 30; }
   /** Keep scatter away from a footprint (set pieces, ponds...). */
   exclude(x, z, r) { this.excludes.push({ x, z, r }); }
   isExcluded(x, z, margin = 0) {
@@ -88,20 +101,26 @@ export class World {
 
   // ---- build --------------------------------------------------------------------------------------------------------
   _build() {
-    const c = this.cfg;
-    this._buildLightsAndSky();
+    const c = this.cfg, ph = this.stats.phases;
+    let t = performance.now();
+    const lap = (k) => { const n = performance.now(); ph[k] = (ph[k] ?? 0) + (n - t); t = n; };
+    this._buildLightsAndSky(); lap('sky');
     if (this.terrain) {
       this.terrain.build(this.quality);
       this.group.add(this.terrain.group);
     }
-    this._buildRoadSurface();
+    lap('terrain');
+    this._buildRoadSurface(); lap('road');
     const barriers = buildBarriers(this, c.barriers);
     if (barriers) this.group.add(barriers);
+    lap('barriers');
     const pads = buildBoostPads(this, c.boost);
     if (pads) this.group.add(pads);
     if (c.start !== false) this.group.add(buildStartLine(this, { sub: this.def.name?.toUpperCase(), ...c.start }));
+    lap('features');
     let inst = 0;
     for (const l of this.layers) { l.build(); inst += l.chunks.reduce((a, m) => a + m.userData.full, 0); }
+    lap('layers');
     this.stats.layers = this.layers.length; this.stats.instances = inst;
     this.applyQuality(this.quality);
   }
@@ -148,7 +167,7 @@ export class World {
       const faMat = new THREE.MeshLambertMaterial({ color: toColor(fa.color), side: THREE.DoubleSide });
       for (const side of [-1, 1]) {
         const m = new THREE.Mesh(skirt(rows, { side, lateral: (r) => r.hw + r.sh, depth: fa.depth }), faMat);
-        m.matrixAutoUpdate = false; this.group.add(m);
+        m.name = 'fascia'; m.matrixAutoUpdate = false; this.group.add(m);
       }
     }
   }

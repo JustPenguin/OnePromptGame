@@ -4,15 +4,16 @@ import * as THREE from 'three';
 
 export class GeoBuilder {
   constructor() {
-    this.p = []; this.n = []; this.c = []; this.uv = []; this.idx = [];
+    this.p = []; this.n = []; this.c = []; this.uv = []; this.idx = []; this.wv = [];
     this._a = new THREE.Vector3(); this._b = new THREE.Vector3(); this._n = new THREE.Vector3();
+    this._wave = 0;   // value written to the optional `aWave` attribute for the next vertices (flags / cloth: 0 = rigid, 1 = free end)
   }
   get vertexCount() { return this.p.length / 3; }
 
   /** One vertex. Returns its index. */
   vert(x, y, z, nx, ny, nz, r, g, b, u = 0, v = 0) {
     const i = this.p.length / 3;
-    this.p.push(x, y, z); this.n.push(nx, ny, nz); this.c.push(r, g, b); this.uv.push(u, v);
+    this.p.push(x, y, z); this.n.push(nx, ny, nz); this.c.push(r, g, b); this.uv.push(u, v); this.wv.push(this._wave);
     return i;
   }
 
@@ -38,6 +39,20 @@ export class GeoBuilder {
     const i = this.p.length / 3;
     q.forEach(([p, u, v], k) => { const cc = cols[k]; this.vert(p.x, p.y, p.z, n.x, n.y, n.z, cc.r ?? cc[0], cc.g ?? cc[1], cc.b ?? cc[2], u, v); });
     this.idx.push(i, i + 1, i + 2, i, i + 2, i + 3);
+  }
+
+  /** Quad with a per-vertex wave weight (cloth: pass [0,1,1,0] etc.) - used with build({ wave:true }) + windMaterial({ flag }). Double-sided friendly: emits both windings. */
+  quadW(a, b, c, d, col, waves) {
+    const save = this._wave;
+    for (const flip of [false, true]) {
+      const n = this._n.subVectors(b, a).cross(this._a.subVectors(d, a)).normalize();
+      if (flip) n.negate();
+      const pts = flip ? [[a, 0], [b, 1], [c, 2], [d, 3]] : [[a, 0], [b, 1], [c, 2], [d, 3]];
+      const base = this.p.length / 3;
+      pts.forEach(([p, k]) => { this._wave = waves[k]; this.vert(p.x, p.y, p.z, n.x, n.y, n.z, col.r ?? col[0], col.g ?? col[1], col.b ?? col[2], k === 1 || k === 2 ? 1 : 0, k >= 2 ? 1 : 0); });
+      if (flip) this.idx.push(base, base + 2, base + 1, base, base + 3, base + 2); else this.idx.push(base, base + 1, base + 2, base, base + 2, base + 3);
+    }
+    this._wave = save;
   }
 
   tri(a, b, c, col) {
@@ -76,12 +91,13 @@ export class GeoBuilder {
     this.quad(a, b, c, d, col, uvs);
   }
 
-  build({ uv = false } = {}) {
+  build({ uv = false, wave = false } = {}) {
     const g = new THREE.BufferGeometry();
     g.setAttribute('position', new THREE.BufferAttribute(new Float32Array(this.p), 3));
     g.setAttribute('normal', new THREE.BufferAttribute(new Float32Array(this.n), 3));
     g.setAttribute('color', new THREE.BufferAttribute(new Float32Array(this.c), 3));
     if (uv) g.setAttribute('uv', new THREE.BufferAttribute(new Float32Array(this.uv), 2));
+    if (wave) g.setAttribute('aWave', new THREE.BufferAttribute(new Float32Array(this.wv), 1));
     g.setIndex(this.p.length / 3 > 65535 ? new THREE.Uint32BufferAttribute(this.idx, 1) : new THREE.Uint16BufferAttribute(this.idx, 1));
     g.computeBoundingSphere();
     return g;

@@ -158,3 +158,31 @@ export function composeMatrix(x, y, z, ry, sx, sy = sx, sz = sx, rx = 0, rz = 0)
 
 /** Count triangles in a geometry (for budget logging). */
 export const triCount = (g) => (g.index ? g.index.count : g.attributes.position.count) / 3;
+
+/**
+ * Lambert material with gentle wind sway (foliage) and/or cloth waving (attribute `aWave`, flags).
+ * `time` = world.timeUniform ({ value }).  sway = amplitude in metres at 10 m height; flag = cloth amplitude in metres.
+ */
+export function windMaterial(time, { sway = 0, flag = 0, vertexColors = true, side = THREE.FrontSide, map = null, emissive = null } = {}) {
+  const m = new THREE.MeshLambertMaterial({ vertexColors, side, map });
+  if (emissive) m.emissive = new THREE.Color(emissive);
+  m.customProgramCacheKey = () => `wind:${sway}:${flag}`; // the baked-in amplitudes change the shader text, so they must be part of the cache key
+  m.onBeforeCompile = (shader) => {
+    shader.uniforms.uWTime = time;
+    shader.vertexShader = 'uniform float uWTime;\n' + (flag ? 'attribute float aWave;\n' : '') + shader.vertexShader.replace(
+      '#include <begin_vertex>',
+      `#include <begin_vertex>
+      #ifdef USE_INSTANCING
+        vec3 iP = vec3( instanceMatrix[3][0], instanceMatrix[3][1], instanceMatrix[3][2] );
+      #else
+        vec3 iP = vec3( 0.0 );
+      #endif
+      ${sway ? `float sw = sin( uWTime * 1.35 + iP.x * 0.19 + iP.z * 0.23 ) * ${sway.toFixed(3)} * 0.1 * max( position.y, 0.0 );
+      transformed.x += sw; transformed.z += sw * 0.6 + cos( uWTime * 0.9 + iP.x * 0.31 ) * ${(sway * 0.3).toFixed(3)} * 0.1 * max( position.y, 0.0 );` : ''}
+      ${flag ? `float fw = aWave * ${flag.toFixed(3)};
+      transformed.z += sin( uWTime * 5.5 + position.x * 2.2 + iP.x * 0.4 ) * fw;
+      transformed.y += sin( uWTime * 4.1 + position.x * 1.7 ) * fw * 0.35;` : ''}`,
+    );
+  };
+  return m;
+}
