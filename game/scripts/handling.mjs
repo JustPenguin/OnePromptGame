@@ -176,6 +176,20 @@ function drift() {
   check('drift can be widened (outside > neutral)', rad.outside / rad.neutral, 1.25, 6, 'x');
   const plain = steadyTurn(28, -1);
   info('plain full-lock radius @ 28 m/s', plain.radius, 'm');
+  // driftYawRange() is what AI planners read: its min / neutral / max must predict the real drift turn rates (stick fully against / centred / fully into)
+  {
+    const radiusAt = (steer) => {
+      const rg = newRig(); const kk = rg.addKart(kartOpts({ s: 60, speed: 28 }));
+      const ss = rg.run(5, (t) => { kk.input.throttle = 1; kk.input.drift = true; kk.input.steer = t < 0.3 ? -1 : steer; }, { every: 1 / 60, pin: (q) => { q.speed = 28; } });
+      let tot = 0, n = 0; for (let i = 1; i < ss.length; i++) if (ss[i].t >= 2.2) { tot += wrap(ss[i].moveYaw - ss[i - 1].moveYaw); n++; }
+      return { w: Math.abs(tot) / (n / 60), range: rg.physics.driftYawRange(kk, 28) };
+    };
+    const into = radiusAt(-1), neutral = radiusAt(0), against = radiusAt(1);
+    info('driftYawRange @ 28 m/s: min / neutral / max (rad/s)', `${into.range.min.toFixed(2)} / ${into.range.neutral.toFixed(2)} / ${into.range.max.toFixed(2)}   measured against / neutral / into: ${against.w.toFixed(2)} / ${neutral.w.toFixed(2)} / ${into.w.toFixed(2)}`);
+    check('driftYawRange.max predicts the turn rate with the stick fully into the drift', into.w / into.range.max, 0.92, 1.08, 'x');
+    check('driftYawRange.neutral predicts the turn rate with the stick centred', neutral.w / neutral.range.neutral, 0.92, 1.08, 'x');
+    check('driftYawRange.min predicts the turn rate with the stick fully against', against.w / against.range.min, 0.85, 1.25, 'x');
+  }
 
   // -- release boost per level + continuity of the heading at release
   for (const [lvl, hold] of [[1, 1.3], [2, 2.2], [3, 3.4]]) {

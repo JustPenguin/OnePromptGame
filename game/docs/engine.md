@@ -88,10 +88,13 @@ R=45 m hairpins; the baseline Sunny Meadows has few real corners so the margin t
   `slipAngle` (chassis vs travel direction, rad) and `skid` (0..1 tyre slide: drives smoke / skid marks / squeal), getter `driftProgress` (0..1 toward the next mini-turbo level, for the HUD charge meter).
   `isInvulnerable()` also includes `grace`. `spinOut/launch/shrinkFor` document their false return (see above). `placeAt()` also clears drift/draft/wall state.
   `kart.orientation` includes the airborne nose pitch (up on the way up, down on the way down).
-* `Kart.driftAssist` (default **true for AI karts**, false for the player): inside a drift the AI's `input.steer` is read as a PLAIN steering command and translated to the stick that gives the same yaw rate
-  (a drift has a built-in turn bias (neutral stick = 0.5x yaw rate) that a naive `steer = -err * 2.6` controller does not know about; a naive drifting AI laps the baseline Sunny Meadows in 50.3 s with
-  0 wall hits with the assist and in 56.8 s with 3 hits without it (`node scripts/handling.mjs --only=aiDrift`; sweepers 47.4 s vs 49.9 s)). A controller that already steers through `steerForYawRate()` is detected automatically (per frame), so adopting that API needs no flag; `kart.driftAssist = false` switches it off.
+* `Kart.driftAssist` (default **false**; opt-in): a drift has a built-in turn bias (neutral stick = 0.5x yaw rate, stick into it 1.3x, against it 0.14x), so inside a drift the stick means "relative to the drift".
+  A controller that steers with PLAIN sticks everywhere (e.g. `steer = -err * 2.6`) can set `kart.driftAssist = true`: inside a drift its stick is then read as a plain steering command and translated to the stick that gives
+  the same yaw rate (such a naive drifting AI laps the baseline Sunny Meadows in 50.3 s with 0 wall hits with the assist and in 56.8 s with 3 hits without it; sweepers 47.4 s vs 49.9 s: `node scripts/handling.mjs --only=aiDrift`).
+  Controllers that already think in drift-relative sticks (Agent D's `AIDriver`) get a worse result from the assist (measured on Frostbite Peak, 8 AI racers: 6 % slower, 2.4x the wall hits; the baseline AI is indifferent), which is why it is off by default.
+  A controller that steers through `steerForYawRate()` is detected automatically (per frame) and never translated.
 * `KartPhysics.steerForYawRate(kart, yawRate)` -> stick -1..1 that yields that yaw rate right now (speed, surface and drift aware; `+yawRate` = turn left). **AI should steer through this.**
+  `driftYawRange(kart, speed?, out?)` -> `{min, neutral, max}` rad/s a drift can hold at that speed (stick against / centred / into; matches the measured rates to 1 %): a corner whose needed rate (speed x curvature) lies inside can be drifted.
   `maxYawRate(kart, speed?, drift?)` and `maxCornerSpeed(kart, curvature, {drift})` give the real limits for brake-point planning (verified: full lock at `maxCornerSpeed(1/R)` traces radius R within 1 %;
   e.g. R = 20 m -> 97 km/h, R = 14 m -> 76 km/h for Pip + Classic at `pro`). `track.maxSpeedAt()` assumes 24 m/s^2 lateral, the karts manage 29-41 m/s^2.
 * `tuning.js` exports `T`, `DRIFT_LEVEL_TIME`, `DRIFT_BOOST`, `derivePhys`, `steerAuthority`, `driftMul`, `driftAlongFor` (`KartPhysics.js` re-exports the first three as before).

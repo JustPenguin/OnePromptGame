@@ -207,6 +207,16 @@ export class KartPhysics {
   }
 
   /**
+   * Yaw rates (rad/s, magnitudes) a drift can hold right now at `speed`: `min` = stick fully against the drift, `neutral` = stick centred,
+   * `max` = stick fully into it.  A corner whose needed rate (speed * curvature) lies inside [min, max] can be drifted.  Writes into `out` (no allocation).
+   */
+  driftYawRange(k, speed = Math.abs(k.speed), out = { min: 0, neutral: 0, max: 0 }) {
+    const w = this.maxYawRate(k, speed, false) * k.stats.driftTurn;
+    out.min = w * T.driftTurnMin; out.neutral = w * T.driftTurnMid; out.max = w * T.driftTurnMax;
+    return out;
+  }
+
+  /**
    * Fastest speed (m/s) at which the kart can follow a corner of the given curvature (1/radius, 1/m) with full-lock plain steering
    * (or a full-inside drift). Returns the top speed when the corner is gentle enough, and a crawl speed for impossible ones.
    * Handy for brake-point planning: AI should enter corners at or below this.
