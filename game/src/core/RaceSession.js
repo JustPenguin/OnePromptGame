@@ -163,6 +163,17 @@ export class RaceSession {
     return this._ghostResult;
   }
 
+  /**
+   * Live time-trial delta against the ghost in seconds: positive = you are AHEAD of the ghost (it reached your current distance
+   * later than you did), negative = behind. null when there is no ghost, before GO, or once the ghost's run has ended.
+   */
+  get ghostDelta() {
+    const gp = this.ghostPlayer, p = this.player;
+    if (!gp?.ready || !p || (this.race.phase !== 'racing' && this.race.phase !== 'finishing') || p.race.finished) return null;
+    const tg = gp.timeAtDistance(p.race.distance);
+    return tg === null ? null : tg - this.race.time;
+  }
+
   setupStats() {
     const S = this.stats, me = () => this.player;
     this.on(EV.HOP, ({ kart }) => { if (kart === me()) S.hops++; });

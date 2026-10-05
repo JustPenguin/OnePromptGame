@@ -83,6 +83,7 @@ export function installDebug(app) {
         scene: 'race', loaded: s.loaded, phase: s.race?.phase, raceTime: r2(s.race?.time ?? 0),
         track: s.track?.id, trackLength: r2(s.track?.length ?? 0), laps: s.race?.lapCount,
         paused: app.paused, quality: s.quality?.id, mode: s.config?.mode,
+        ghostDelta: s.ghostDelta == null ? null : r2(s.ghostDelta), respawnHold: r2(s.respawnHold ?? 0),
         player: s.player ? kartInfo(s.player) : null,
         karts: s.karts.map(kartInfo),
       };

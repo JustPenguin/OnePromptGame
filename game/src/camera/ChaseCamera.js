@@ -32,7 +32,7 @@ export class ChaseCamera {
     this.session = session;
     this.camera = session.camera;
     this.mode = session.settings?.cameraMode ?? 'chase';
-    this._settingMode = this.mode;
+    this._seenSetting = session.settings?.cameraMode;   // last value of settings.cameraMode we looked at (only a CHANGE overrides the key-cycled mode)
     this.yaw = 0;
     this.pos = new THREE.Vector3();
     this.look = new THREE.Vector3();
@@ -80,8 +80,8 @@ export class ChaseCamera {
   get target() { return this.session.cameraTarget ?? this.session.player ?? this.session.karts[0]; }
   get reduced() { return !!this.session.settings?.reducedMotion; }
   addShake(v) { if (this.session.settings?.cameraShake !== false && !this.reduced) this.shake = Math.min(1, this.shake + v); }
-  cycleMode() { this.mode = MODE_ORDER[(MODE_ORDER.indexOf(this.mode) + 1) % MODE_ORDER.length]; this._settingMode = this.mode; return this.mode; }
-  setMode(m) { if (CAMERA_MODES[m]) { this.mode = m; this._settingMode = m; } return this.mode; }
+  cycleMode() { this.mode = MODE_ORDER[(MODE_ORDER.indexOf(this.mode) + 1) % MODE_ORDER.length]; return this.mode; }
+  setMode(m) { if (CAMERA_MODES[m]) { this.mode = m; } return this.mode; }
   /** Jump straight to the chase pose of the current target (after teleports / debug moves). */
   snapToTarget() { this._init = false; }
 
@@ -91,7 +91,7 @@ export class ChaseCamera {
     this.time += dt;
     // settings can change live (settings screen) - follow them unless the player cycled the mode with the key since
     const wanted = s.settings?.cameraMode;
-    if (wanted && wanted !== this._settingMode && CAMERA_MODES[wanted]) { this.mode = wanted; this._settingMode = wanted; }
+    if (wanted !== this._seenSetting) { this._seenSetting = wanted; if (wanted && CAMERA_MODES[wanted]) this.mode = wanted; }
     const cfg = CAMERA_MODES[this.mode] ?? CAMERA_MODES.chase;
     const phase = s.race?.phase;
     this.boostKick = damp(this.boostKick, 0, 2.2, dt);

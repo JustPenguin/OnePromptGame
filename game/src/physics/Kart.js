@@ -6,7 +6,7 @@ import { getDriver, getBody, resolveStats } from '../data/roster.js';
 import { TrackQuery } from '../track/SplineTrack.js';
 import { Surface } from '../track/surfaces.js';
 import { EV } from '../core/events.js';
-import { derivePhys, T } from './tuning.js';
+import { derivePhys, T, DRIFT_LEVEL_TIME } from './tuning.js';
 
 export class KartInput {
   constructor() {
@@ -133,6 +133,14 @@ export class Kart {
   }
 
   get speedRatio() { return Math.max(0, this.speed) / this.stats.topSpeed; }
+  /** 0..1 progress toward the NEXT mini-turbo level while drifting (1 once the pink level is reached; 0 when not drifting). */
+  get driftProgress() {
+    const d = this.drift;
+    if (d.dir === 0) return 0;
+    if (d.level >= 3) return 1;
+    const lo = d.level === 0 ? 0 : DRIFT_LEVEL_TIME[d.level - 1], hi = DRIFT_LEVEL_TIME[d.level];
+    return Math.min(1, Math.max(0, (d.charge - lo) / (hi - lo)));
+  }
   get isBoosting() { return this.boost.timer > 0; }
   get isDrifting() { return this.drift.dir !== 0; }
   get isSpinning() { return this.spin.timer > 0; }

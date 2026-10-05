@@ -141,7 +141,40 @@ export class GhostPlayer {
     if (this.kart.visual?.setGhost) this.kart.visual.setGhost(true);
     else this.fallbackGhostLook();
     this.kart.root.name = 'kart:ghost';
+    this.buildDistance();
     this.update(0);
+  }
+
+  /** Cumulative race distance of every sample (same convention as kart.race.distance), so a live time delta can be computed. */
+  buildDistance() {
+    const g = this.track, track = this.session.track, L = track.length;
+    const q = this.kart.query, p = this.kart.position;
+    this.dist = new Float32Array(g.n);
+    let hint = -1, prevS = 0, acc = 0;
+    for (let i = 0; i < g.n; i++) {
+      p.set(g.x[i], g.y[i], g.z[i]);
+      track.project(p, q, hint); hint = q.index;
+      if (i === 0) acc = q.s > L / 2 ? q.s - L : q.s;
+      else acc += track.deltaS(prevS, q.s);
+      prevS = q.s;
+      this.dist[i] = acc;
+    }
+    this._cursor = 0;
+    this.kart.hint = -1;
+  }
+
+  /** Race time at which the ghost had covered `distance` metres (null if it never did). Monotone cursor: call with rising distances. */
+  timeAtDistance(distance) {
+    if (!this.dist) return null;
+    const d = this.dist, n = d.length;
+    if (distance > d[n - 1]) return null;
+    let i = this._cursor;
+    if (i > 0 && d[i] > distance) i = 0;                         // the player went backwards (respawn): rescan
+    while (i < n - 1 && d[i + 1] < distance) i++;
+    this._cursor = i;
+    const span = d[Math.min(n - 1, i + 1)] - d[i];
+    const f = span > 1e-4 ? clamp((distance - d[i]) / span, 0, 1) : 0;
+    return (i + f) / this.track.hz;
   }
 
   /** Visual fallback when the kart visual has no setGhost(): clone the materials so only this kart goes translucent. */
