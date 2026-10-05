@@ -84,7 +84,8 @@ export class KartPhysics {
     const sAbs = Math.abs(k.speed);
     const rev = k.speed < -0.3 ? -1 : 1;
     const airCtl = k.grounded ? 1 : d.hop > 0 ? T.hopAirControl : T.airControl;
-    const omega = P.turn * steerAuthority(sAbs, top, P) * (1 - T.surfaceSteer * (1 - sp.grip));
+    const rec = k.recover > 0 ? 1 - k.recover / T.recoverTime : 1;                 // 0 right after a spin-out .. 1 fully recovered
+    const omega = P.turn * steerAuthority(sAbs, top, P) * (1 - T.surfaceSteer * (1 - sp.grip)) * lerp(T.recoverSteer, 1, rec);
     if (d.dir !== 0) {
       const along = clamp(steerIn * d.dir, -1, 1);
       const u = (along + 1) * 0.5;
@@ -106,7 +107,7 @@ export class KartPhysics {
     const thr = inp.throttle, brk = inp.brake;
     if (thr > 0.01 && k.speed < cap) {
       const f = clamp(k.speed / cap, 0, 1);
-      let a = P.launch * (1 - f) * (k.burnout > 0 ? T.burnoutTraction : 1);
+      let a = P.launch * (1 - f) * (k.burnout > 0 ? T.burnoutTraction : 1) * lerp(T.recoverAccel, 1, rec);
       if (boosting) a = Math.max(a, Math.min((cap - k.speed) / T.boostTau, T.boostAccelMax));
       if (k.draft.t > 0) a += T.draftAccel * k.draft.t;
       k.speed = Math.min(cap, k.speed + a * thr * h);
@@ -148,6 +149,7 @@ export class KartPhysics {
     if (k.rocket > 0) { k.rocket -= h; if (k.rocket <= 0) { k.rocket = 0; ev.emit(EV.ROCKET, { kart: k, active: false }); } }
     if (k.stun > 0) k.stun = Math.max(0, k.stun - h);
     if (k.burnout > 0) k.burnout = Math.max(0, k.burnout - h);
+    if (k.recover > 0) k.recover = Math.max(0, k.recover - h);
     if (k.grace > 0) k.grace = Math.max(0, k.grace - h);
     if (k.hitGrace > 0) k.hitGrace = Math.max(0, k.hitGrace - h);
     if (k._bumpCool > 0) k._bumpCool -= h;
@@ -160,7 +162,7 @@ export class KartPhysics {
       k.spinAngle = TAU * T.spinTurns * k.spin.dir * e;
       k.speed *= Math.exp(-T.spinSpeedDecay * h);
       k.slide *= Math.exp(-3 * h);
-      if (k.spin.timer <= 0) { k.spin.timer = 0; k.spinAngle = 0; ev.emit(EV.RECOVER, { kart: k }); }
+      if (k.spin.timer <= 0) { k.spin.timer = 0; k.spinAngle = 0; k.recover = T.recoverTime; ev.emit(EV.RECOVER, { kart: k }); }
     }
   }
 
@@ -173,7 +175,8 @@ export class KartPhysics {
     const st = k.stats, P = k.phys;
     const sp = SURFACE_PROPS[k.query.surface] ?? SURFACE_PROPS[Surface.ROAD];
     const sAbs = Math.abs(k.speed);
-    const omega = P.turn * steerAuthority(sAbs, st.topSpeed, P) * (1 - T.surfaceSteer * (1 - sp.grip));
+    const rec = k.recover > 0 ? 1 - k.recover / T.recoverTime : 1;
+    const omega = P.turn * steerAuthority(sAbs, st.topSpeed, P) * (1 - T.surfaceSteer * (1 - sp.grip)) * lerp(T.recoverSteer, 1, rec);
     if (omega < 1e-3) return 0;
     const d = k.drift;
     if (d.dir !== 0) {

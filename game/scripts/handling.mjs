@@ -11,6 +11,7 @@ import { makeRig, DEFS, aim, makeBot, soloLap, angleDiff, wrapAngle, Surface } f
 import { DRIFT_LEVEL_TIME } from '../src/physics/tuning.js';
 import { DRIVERS, KART_BODIES } from '../src/data/roster.js';
 import { EV } from '../src/core/events.js';
+import { Input } from '../src/core/Input.js';
 
 const args = Object.fromEntries(process.argv.slice(2).map((a) => a.replace(/^--/, '').split('=')).map(([k, v]) => [k, v ?? true]));
 const DRIVER = args.driver ?? 'pip', BODY = args.body ?? 'classic', CLASS = args.class ?? 'pro';
@@ -109,6 +110,29 @@ function steering() {
   // low speed pivot
   const lo = steadyTurn(3, -1, { seconds: 5, settle: 2 });
   info('turn radius @ 3 m/s (parking-lot)', lo.radius, 'm');
+  // slalom like a keyboard player: lane changes every 1.1 s, pursuit chooses left / none / right, the real Input ramp shapes it
+  {
+    const rig = newRig(DEFS.walls);
+    const k = rig.addKart(kartOpts({ s: 150, speed: 28 }));
+    const inp = new Input();
+    let walls = 0; rig.events.on(EV.WALL_HIT, () => walls++);
+    let maxLat = 0, minSpeed = 99, prev = 0;
+    const pt = new (k.position.constructor)();
+    rig.run(16, (t) => {
+      const lane = Math.floor(t / 1.1) % 2 ? -3.2 : 3.2;
+      rig.track.pointAt(k.query.s + 9 + k.speed * 0.4, lane, pt);
+      const err = angleDiff(Math.atan2(pt.x - k.position.x, pt.z - k.position.z), k.heading);
+      const target = err > 0.07 ? -1 : err < -0.07 ? 1 : 0;          // + err = target is to the left = steer left (-1)
+      inp.speedRatio = k.speed / k.stats.topSpeed;
+      prev = inp._rampSteer(prev, target, 1 / 60);
+      k.input.throttle = 1; k.input.steer = prev;
+      if (t > 3) { maxLat = Math.max(maxLat, Math.abs(k.query.lateral)); minSpeed = Math.min(minSpeed, k.speed); }
+    });
+    info('slalom (+-3.2 m lanes every 1.1 s, keyboard ramp): max lateral / min speed / wall hits', `${maxLat.toFixed(1)} m / ${(minSpeed * 3.6).toFixed(0)} km/h / ${walls}`);
+    check('slalom reaches the lanes without leaving the road', maxLat, 2.5, 6.5, 'm');
+    check('slalom keeps most of its speed', minSpeed / k.stats.topSpeed, 0.78, 1.1, '');
+    check('slalom never touches a wall', walls, 0, 0, '');
+  }
   // planning helper: maxCornerSpeed(kart, curvature) must agree with what full lock actually achieves
   for (const R of [14, 20, 25]) {
     const rig = newRig(); const k = rig.addKart(kartOpts({ s: 10 }));
@@ -383,7 +407,6 @@ function spinAndAir() {
     for (const r of s) { maxAng = Math.max(maxAng, Math.abs(r.yaw - r.heading)); yawStepMax = Math.max(yawStepMax, Math.abs(wrap(r.yaw - prev))); prev = r.yaw; }
     check('spin-out rotates about two full turns', maxAng / (2 * Math.PI), 1.7, 2.1, 'turns');
     check('control returns after the spin', recovered ?? 99, 1.2, 1.5, 's');
-    info('speed after recovering, 1 s later', `${(s.find((r) => r.t > (recovered ?? 0) + 1)?.kmh ?? NaN).toFixed(0)} km/h`);
     // the kart is back under control now (spin 1.3 s) but still inside the grace window: a second hit must be ignored
     const blocked = !k.spinOut(1.3, 'again');
     check('chain-hit is blocked while recovering', blocked ? 1 : 0, 1, 1, '', `(blockReason "${k.blockReason}")`);

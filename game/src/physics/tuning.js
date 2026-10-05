@@ -72,6 +72,7 @@ export const T = {
   // ---- spin / launch
   spinTurns: 2,              // full rotations in a spin-out
   spinSpeedDecay: 1.7,
+  recoverTime: 0.45, recoverSteer: 0.35, recoverAccel: 0.5,   // control returns smoothly after a spin-out: steering / throttle start at these fractions
   hitGraceExtra: 0.9,        // seconds after a spin-out during which further spins/launches are ignored
 
   // ---- respawn

@@ -277,8 +277,10 @@ export class ChaseCamera {
     const c0 = this._c.copy(P).addScaledVector(R, -30).addScaledVector(T, -34); c0.y += 34;
     const c1 = this._tmp.copy(P).addScaledVector(R, -13).addScaledVector(T, -21); c1.y += 11;
     const c2 = this._tmp2.set(P.x - fx * cfg.dist, P.y + cfg.height, P.z - fz * cfg.dist);
-    const a0 = this._la.copy(P).addScaledVector(T, 70); a0.y += 1;
-    const a1 = this._lb.copy(P).addScaledVector(T, 26); a1.y += 1.2;
+    // the aim point first sweeps along the REAL circuit ahead of the grid (so curvy courses show their first corners), then settles on the pack
+    const sP = k.query.s;
+    const a0 = track.pointAt(sP + 210, 0, this._la, 2.5);
+    const a1 = track.pointAt(sP + 34, 0, this._lb, 1.2);
     const a2 = this._lc.set(P.x + fx * cfg.look, P.y + cfg.lookUp, P.z + fz * cfg.look);
     bezier3(this.pos, c0, c1, c2, e);
     bezier3(this.look, a0, a1, a2, e);
