@@ -14,6 +14,7 @@ export const EV = Object.freeze({
   PLACE_CHANGE: 'race:place',        // { kart, from, to }
   OVERTAKE: 'race:overtake',         // { kart, passed }  kart just passed `passed`
   WRONG_WAY: 'race:wrongWay',        // { kart, active }
+  DRAFT: 'kart:draft',               // { kart, target, active }  slipstream: kart is (no longer) tucked in behind `target`
 
   // ---- kart physics ----
   HOP: 'kart:hop',                   // { kart }
