@@ -594,3 +594,6 @@ function poseFake(k, pose, t, pt) {
   }
   void pt;
 }
+
+// portraits live in portraits.js; re-exported here so `import { getKartPortrait } from '../vehicles/KartVisuals.js'` works too
+export { getDriverPortrait, getKartPortrait } from './portraits.js';
