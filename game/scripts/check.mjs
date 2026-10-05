@@ -6,6 +6,8 @@
 //   node scripts/check.mjs --track=neon-nights --shot=.qa/neon.png    also render one frame mid-race
 //   node scripts/check.mjs --no-build               reuse dist/
 //   options: --racers=8 --speed=pro --seconds=600 --seed=1 --quality=low --size=640x360 --verbose
+//   --prod   test the minified production build        --csp   serve with an artifact-like Content-Security-Policy and
+//                                                      fail on any CSP violation (no eval, no external loads...)
 //
 // Fails (exit 1) on: console/page errors, non-finite kart state, karts that never finish, stuck karts, excess respawns.
 import { spawnSync } from 'node:child_process';
@@ -31,15 +33,21 @@ function loadPlaywright() {
 }
 
 if (!args['no-build']) {
-  const r = spawnSync('node', ['scripts/build.mjs'], { cwd: root, stdio: 'inherit' });
+  const r = spawnSync('node', ['scripts/build.mjs', ...(args.prod ? ['--prod'] : [])], { cwd: root, stdio: 'inherit' });
   if (r.status !== 0) process.exit(1);
 }
 
 const dist = resolve(root, 'dist');
+// Approximation of the Claude Artifact sandbox CSP: inline script/style only (plus a few CDNs), data:/blob: media, no network.
+const CSP = "default-src 'none'; script-src 'unsafe-inline' https://cdnjs.cloudflare.com https://cdn.jsdelivr.net https://unpkg.com; style-src 'unsafe-inline' https://fonts.googleapis.com; font-src data: https://fonts.gstatic.com; img-src data: blob:; media-src data: blob:; connect-src 'none'; worker-src blob:; frame-src 'none'; object-src 'none'";
 const server = createServer((req, res) => {
   const p = new URL(req.url, 'http://x').pathname;
   const f = resolve(dist, '.' + (p === '/' ? '/index.html' : p));
-  if (f.startsWith(dist) && existsSync(f)) { res.writeHead(200, { 'content-type': f.endsWith('.html') ? 'text/html' : 'text/javascript' }); res.end(readFileSync(f)); }
+  if (f.startsWith(dist) && existsSync(f)) {
+    const h = { 'content-type': f.endsWith('.html') ? 'text/html' : 'text/javascript' };
+    if (args.csp) h['content-security-policy'] = CSP;
+    res.writeHead(200, h); res.end(readFileSync(f));
+  } else if (p === '/favicon.ico') { res.writeHead(204); res.end(); }
   else { res.writeHead(404); res.end(); }
 });
 await new Promise((r) => server.listen(0, '127.0.0.1', r));
@@ -54,6 +62,7 @@ const page = await (await browser.newContext({ viewport: { width: opt.size[0], h
 const problems = [];
 page.on('console', (m) => { if (m.type() === 'error') { const t = m.text(); if (!/favicon/.test(t)) problems.push(`console.error: ${t}`); } else if (opt.verbose && m.type() === 'warning') console.log('[warn]', m.text()); });
 page.on('pageerror', (e) => problems.push(`pageerror: ${e.message}`));
+if (args.csp) await page.addInitScript(() => { document.addEventListener('securitypolicyviolation', (e) => { (window.__csp ??= []).push(`${e.violatedDirective} ${e.blockedURI}`); }); });
 
 await page.goto(`http://127.0.0.1:${port}/?quality=${opt.quality}`);
 await page.waitForFunction(() => window.__kart?.ready, null, { timeout: 60000 });
@@ -99,6 +108,7 @@ for (const trackId of tracks) {
   console.log(`   events: ${Object.entries(counts).map(([k, v]) => `${k.replace(/^[a-z]+:/, '')}=${v}`).join(' ')}`);
   if (local.length) { failed = true; console.log('   PROBLEMS:'); [...new Set(local)].forEach((p) => console.log('   - ' + p)); } else console.log('   OK');
 }
+if (args.csp) { const v = await page.evaluate(() => window.__csp ?? []); if (v.length) { failed = true; console.log('\nCSP VIOLATIONS:'); [...new Set(v)].forEach((x) => console.log(' - ' + x)); } else console.log('\nCSP: no violations'); }
 if (problems.length) { failed = true; console.log('\nBROWSER ERRORS:'); [...new Set(problems)].slice(0, 20).forEach((p) => console.log(' - ' + p)); }
 await browser.close();
 server.close();
