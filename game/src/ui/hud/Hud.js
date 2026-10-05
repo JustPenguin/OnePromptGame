@@ -348,12 +348,16 @@ export class Hud {
     const tw = this.touchWanted();
     if (tw !== this.touch.shown) { this.root.classList.toggle('touch', tw); this.touch.setShown(tw); }
 
-    // fps overlay
+    // fps overlay (settings.showFps).  Uses Agent C's renderer.stats() when it exists, else three's render info.
     if (st.showFps) {
       this.fpsFrames++; this.fpsAcc += dt;
       if (this.fpsAcc >= 0.5) {
-        const info = this.app.renderer?.renderer?.info?.render;
-        this.fpsText = `${Math.round(this.fpsFrames / this.fpsAcc)} fps  ${(1000 * this.fpsAcc / this.fpsFrames).toFixed(1)} ms${info ? `\n${info.calls} calls  ${Math.round(info.triangles / 1000)}k tris` : ''}`;
+        const r = this.app.renderer;
+        let calls, tris;
+        try { const rs = r.stats?.(); calls = rs?.drawCalls ?? rs?.calls; tris = rs?.triangles; } catch { /* optional */ }
+        const info = r?.renderer?.info?.render;
+        calls ??= info?.calls; tris ??= info?.triangles;
+        this.fpsText = `${Math.round(this.fpsFrames / this.fpsAcc)} fps  ${(1000 * this.fpsAcc / this.fpsFrames).toFixed(1)} ms${calls !== undefined ? `\n${calls} calls  ${Math.round((tris ?? 0) / 1000)}k tris` : ''}`;
         this.fpsFrames = 0; this.fpsAcc = 0;
       }
       setText(this.fps, this.fpsText);

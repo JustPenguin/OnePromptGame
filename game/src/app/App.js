@@ -141,6 +141,8 @@ export class App {
       throw e;
     }
     if (this.session !== session) return session;       // quit while loading
+    // Time Trial = no rivals, no item boxes, 3 boosts to spend.  (Agent A's engine may already do this; giving them again is idempotent.)
+    if (config.mode === 'timetrial' && session.player && !session.player.item?.type) session.items?.giveItem?.(session.player, 'boost', 3);
     this._hold = true;                                  // keep the intro cinematic frozen until the player can actually see it
     session._krStats = new RaceStats(session);
     session.on(EV.RACE_RESULTS, ({ standings }) => this._onResults(session, standings));
