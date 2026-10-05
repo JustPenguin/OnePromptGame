@@ -79,7 +79,7 @@ export const T = {
   hitGraceExtra: 0.9,        // seconds after a spin-out during which further spins/launches are ignored
 
   // ---- respawn
-  respawnTime: 1.7, respawnBack: 6, respawnSpeed: 0.28, respawnGrace: 2.2, fallTime: 1.1, chasmDepth: 2.5,   // chasmDepth: airborne this far below the ground = fell into a gap, no landing
+  respawnTime: 1.7, respawnBack: 6, respawnSpeed: 0.28, respawnGrace: 2.2, fallTime: 1.1, respawnRunUp: 60, chasmDepth: 2.5,   // chasmDepth: airborne this far below the ground = fell into a gap, no landing
   stuckTime: 4,
 
   // ---- slipstream

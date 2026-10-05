@@ -475,14 +475,16 @@ function spinAndAir() {
   }
   {
     // ramp over a chasm (the ramp at s=1400 is 14 m long, then 14 m of no ground): fast karts fly over it like any other jump, slow ones fall and are rescued
-    const run = (speed, drift) => {
+    const run = (speed, drift, pinFirstOnly = false) => {
       const rig = newRig(DEFS.strip);
       rig.addGap(1414, 1428);
       const k = rig.addKart(kartOpts({ s: 1380, speed }));
-      const c = { jump: 0, land: 0, respawn: 0, trick: 0, air: 0 };
-      rig.events.on(EV.JUMP, () => c.jump++); rig.events.on(EV.LAND, () => c.land++); rig.events.on(EV.RESPAWN, () => c.respawn++);
+      const c = { jump: 0, land: 0, respawn: 0, trick: 0, air: 0, rescueS: NaN };
+      const q = new k.query.constructor();
+      rig.events.on(EV.JUMP, () => c.jump++); rig.events.on(EV.LAND, () => c.land++);
+      rig.events.on(EV.RESPAWN, () => { c.respawn++; if (c.respawn === 1) c.rescueS = rig.track.project(k.respawn.to, q, -1).s; });
       rig.events.on(EV.BOOST, (e) => { if (e.source === 'trick') c.trick++; });
-      const s = rig.run(8, () => { k.input.throttle = 1; k.input.drift = drift; }, { every: 1 / 60, pin: speed < 20 ? (kk) => { if (kk.query.s < 1414) kk.speed = Math.min(kk.speed, speed); } : null });
+      const s = rig.run(pinFirstOnly ? 16 : 8, () => { k.input.throttle = 1; k.input.drift = drift; }, { every: 1 / 60, pin: speed < 20 ? (kk) => { if (kk.query.s < 1414 && (!pinFirstOnly || c.respawn === 0)) kk.speed = Math.min(kk.speed, speed); } : null });
       c.air = s.filter((r) => !r.grounded).length / 60;
       return { c, s, k };
     };
@@ -493,6 +495,11 @@ function spinAndAir() {
     check('chasm: ...and its landing once', fast.c.land, 1, 1, '');
     check('chasm: ...and clears the gap without a rescue', fast.c.respawn, 0, 0, '');
     check('chasm: a slow kart falls and is rescued (and is not snapped up onto the far side)', slow.c.respawn >= 1 && slow.c.land === 0 ? 1 : 0, 1, 1, '', `(rescues ${slow.c.respawn}: it retries at the same pinned speed)`);
+    // the rescue gives a run-up: the kart restarts well before the ramp (s=1400) and, driving normally, clears the chasm on its second attempt instead of falling in a loop
+    const retry = run(13, false, true);
+    info('chasm retry: first rescue placed at s / jumps / rescues / landed beyond the gap', `${retry.c.rescueS.toFixed(0)} / ${retry.c.jump} / ${retry.c.respawn} / ${retry.s.at(-1).s > 1428}`);
+    check('chasm: the rescue point is a run-up before the ramp (m before it)', 1400 - retry.c.rescueS, 55, 400, 'm');
+    check('chasm: after the rescue the kart clears the gap (one rescue only)', retry.c.respawn === 1 && retry.s.at(-1).s > 1428 ? 1 : 0, 1, 1, '');
     check('chasm: landing trick pays out once when drift is held across the gap', trick.c.trick, 1, 1, '');
     // throttle does nothing in the air: a 20 m/s kart does not gain speed during the flight (it used to gain ~3 m/s)
     const f = run(20, false);

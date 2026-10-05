@@ -425,9 +425,32 @@ export class KartPhysics {
   }
 
   // ------------------------------------------------------------------ respawn ("rescue drone" carries the kart back)
+  /**
+   * Move a rescue point back so the kart never restarts on a ramp / in a chasm and always has a run-up (T.respawnRunUp m) before the next one:
+   * a kart that fell short of a gap must be able to get up to jumping speed again instead of falling in a loop.
+   */
+  safeRespawnS(s) {
+    const zs = this.track.zones, L = this.track.length;
+    if (!zs || !(L > 0)) return s;
+    const run = T.respawnRunUp;
+    for (let pass = 0; pass < 4; pass++) {
+      let moved = false;
+      for (let i = 0; i < zs.length; i++) {
+        const z = zs[i];
+        if (z.type !== 'ramp' && z.type !== 'gap') continue;
+        let d = z.s0 - s;                                  // distance ahead to the start of the zone (wrapped into -L/2 .. L/2)
+        d -= Math.round(d / L) * L;
+        const len = z.s1 - z.s0;
+        if (d < run - 0.01 && d > -(len + 3)) { s = z.s0 - run; moved = true; }
+      }
+      if (!moved) break;
+    }
+    return s;
+  }
+
   respawnKart(k, reason = 'manual') {
     if (k.respawn.active) return;
-    const s = (k.lastSafeS ?? k.query.s) - T.respawnBack;
+    const s = this.safeRespawnS((k.lastSafeS ?? k.query.s) - T.respawnBack);
     const target = this.track.getRespawn(s, 0);
     const r = k.respawn;
     r.active = true; r.t = 0; r.dur = T.respawnTime; r.reason = reason; r.yaw = target.yaw;
