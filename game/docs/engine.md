@@ -156,6 +156,7 @@ node scripts/handling.mjs --only=start,walls,eventsAudit,chaos   # sections: lon
 node scripts/handling.mjs --roster             # + stat-spread table for 8 driver/kart combos
 node scripts/handling.mjs --driver=bruno --body=crusher --class=master --only=drift,walls
 node scripts/check.mjs --track=all --laps=2    # headless AI races in Chromium (D's AI on this physics)
+node scripts/camera.mjs [--track=id] [--shots=.qa/camera]   # camera report in Chromium: intro hand-over, speed FOV, boost kick, look-back, modes, drift swing, a whole lap, walls, shake settings, slow frames, finish / spectating, aspect ratios, cost (exit 1 on a miss; --only=intro,lap,... ; --shots saves a PNG per state)
 ```
 Browser: `node scripts/serve.mjs --port=8101 &`, `playwright-cli -s=a open http://127.0.0.1:8101/?quality=low --config=tools/playwright-cli.config.json`, then run-code scripts that `startRace`, `freeze`, `bot(true)`/`setInput`, `advance`, `render`
 and `page.screenshot` (see `docs/TESTING.md`). `scripts/lib/rig.mjs` builds real `SplineTrack`s with DOM stubs and a mock session (stadium / walls / ice / hairpin / hilly-banked "coaster" / rippled circuits) for physics experiments in Node.

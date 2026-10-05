@@ -127,7 +127,7 @@ export class ChaseCamera {
       this.settle = 0.9;
       this._init = true;
     }
-    if (this._followed !== k) { this._followed = k; this._finishT = 0; if (this._init) this.settle = 0.7; }
+    if (this._followed !== k) { this._followed = k; this._finishT = 0; this._hint = -1; if (this._init) this.settle = 0.7; }   // a new target may be anywhere on the circuit: forget the old projection hint
     if (!this._init) { this._init = true; this.yaw = k.heading; this.focus.copy(k.position); this.snap(k, cfg); }
 
     const finished = k.race.finished && (phase === 'finishing' || phase === 'results');
@@ -235,12 +235,15 @@ export class ChaseCamera {
     this._hint = q.index;
     const minY = q.height + 0.85;
     if (p.y < minY) p.y = minY;
-    if (q.wall) {
+    // keep the camera inside the corridor walls - only where the projection is really this stretch of road (hairpin / switchback
+    // tracks run neighbouring roads close together: a far-away projection must never drag the camera sideways)
+    if (q.wall && q.dist < q.halfWidth + q.shoulder + 10) {
       const limit = q.halfWidth + q.shoulder - 0.8;
       const over = Math.abs(q.lateral) - limit;
       if (over > 0) {
         const side = q.lateral >= 0 ? 1 : -1;
-        p.x -= q.right.x * side * over; p.z -= q.right.z * side * over;
+        const push = Math.min(over, 4);
+        p.x -= q.right.x * side * push; p.z -= q.right.z * side * push;
       }
     }
     this.camera.position.copy(p);
