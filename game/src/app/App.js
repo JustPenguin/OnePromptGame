@@ -57,6 +57,7 @@ export class App {
     this.last = 0;
     this._pauseUi = false;
     this._broken = false;
+    this._hold = false;
     this._tick = (t) => this.tick(t);
 
     // a hidden tab must never keep a race running (and rAF throttles anyway): pause + silence
@@ -132,6 +133,7 @@ export class App {
       throw e;
     }
     if (this.session !== session) return session;       // quit while loading
+    this._hold = true;                                  // keep the intro cinematic frozen until the player can actually see it
     session._krStats = new RaceStats(session);
     session.on(EV.RACE_RESULTS, ({ standings }) => this._onResults(session, standings));
     this.audio?.setPaused?.(false);
@@ -139,6 +141,7 @@ export class App {
       this.ui.clearScreens();
       this.ui.showHud(session);
       this.input.enabled = true;
+      this._hold = false;
     };
     if (opts.transition) await this.ui.wipe(begin); else begin();
     return session;
@@ -155,6 +158,7 @@ export class App {
   quitToMenu() {
     this.input.enabled = false;
     this._broken = false;
+    this._hold = false;
     this._pauseUi = false;
     this.paused = false;
     this._disposeSession();
@@ -238,8 +242,8 @@ export class App {
       const s = this.session;
       this.menuScene.active = !s?.loaded;
       if (s?.loaded) {
-        if (!this.paused && this.input.pressed('pause') && s.race.phase !== 'results') this.setPaused(true);
-        if (!this.paused) {
+        if (!this.paused && !this._hold && this.input.pressed('pause') && s.race.phase !== 'results') this.setPaused(true);
+        if (!this.paused && !this._hold) {
           if (this.input.pressed('camera')) { const m = s.cameraRig.cycleMode(); if (m) { this.settings.cameraMode = m; this.save.commit(); } }
           if (this.input.pressed('respawn') && s.player && s.race.phase === 'racing') s.physics.respawnKart(s.player, 'manual');
           s.update(dt);
