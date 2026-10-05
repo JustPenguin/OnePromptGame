@@ -197,7 +197,8 @@ export class Terrain {
     if (!q.near) return nat;
     const edge = q.hw + q.sh + (cfg.curb ?? 1);
     const dd = Math.max(0, Math.abs(q.lateral) - edge);
-    const w = smooth(dd / (cfg.blend ?? 40));
+    const bl = typeof cfg.blend === 'function' ? cfg.blend(q) : (cfg.blend ?? 40);
+    const w = smooth(dd / bl);
     const hRoad = q.planeY - (cfg.sink ?? 0.35);
     let hCorr = hRoad;
     if (q.free > 0) {

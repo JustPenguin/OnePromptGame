@@ -46,7 +46,7 @@ const SKY_FRAGMENT = /* glsl */ `
       col += uSunColor * ( pow( sd, 5.0 ) * 0.10 + pow( sd, 48.0 ) * 0.28 * uSunGlow + pow( sd, 900.0 ) * 0.35 );
       float cosR = cos( uSunSize );
       float disc = smoothstep( cosR - 0.0016, cosR + 0.0006, sd );
-      col = mix( col, uSunColor * 3.0, disc );
+      col = mix( col, uSunColor * 1.9, disc );
     #endif
     #ifdef NEBULA
       if ( h > -0.2 ) {

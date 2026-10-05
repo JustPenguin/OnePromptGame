@@ -163,9 +163,9 @@ export function scatter(world, layer, r) {
     if (r.color) { const c = typeof r.color === 'function' ? r.color(rnd, ctx) : r.color[(rnd() * r.color.length) | 0]; color = c; }
     const tilt = r.tilt ?? 0;
     layer.add(x, y - (r.sink ?? 0), z, ry, sc, color, (rnd() - 0.5) * tilt, (rnd() - 0.5) * tilt);
-    if (r.blob) { // soft contact shadow under the prop: { layer, k } (k = blob diameter per unit of prop scale)
-      const sz = (typeof sc === 'number' ? sc : sc[0]) * r.blob.k;
-      r.blob.layer.add(x, y + 0.04, z, 0, sz, null, 0, 0);
+    if (r.blob && world.terrain) { // soft contact shadow under the prop: { layer, k } (k = blob diameter per unit of prop scale); flat ground only
+      world.terrain.normalAt(x, z, nrm, 2.5);
+      if (nrm.y > 0.9) r.blob.layer.add(x, y + 0.04, z, 0, (typeof sc === 'number' ? sc : sc[0]) * r.blob.k, null, 0, 0);
     }
     placed++;
   }

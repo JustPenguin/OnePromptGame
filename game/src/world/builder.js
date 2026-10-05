@@ -6,6 +6,7 @@ export class GeoBuilder {
   constructor() {
     this.p = []; this.n = []; this.c = []; this.uv = []; this.idx = []; this.wv = [];
     this._a = new THREE.Vector3(); this._b = new THREE.Vector3(); this._n = new THREE.Vector3();
+    this.uvDefault = [0, 0, 1, 1];   // uv rectangle used by quad() when none is passed (lets posts/frames sample a solid swatch of a shared texture)
     this._wave = 0;   // value written to the optional `aWave` attribute for the next vertices (flags / cloth: 0 = rigid, 1 = free end)
   }
   get vertexCount() { return this.p.length / 3; }
@@ -18,7 +19,7 @@ export class GeoBuilder {
   }
 
   /** Flat-shaded quad a-b-c-d (counter-clockwise seen from the FRONT).  col = THREE.Color | [r,g,b]; uvs optional [u0,v0,u1,v1] (a,b,c,d order: a=(u0,v0) b=(u1,v0) c=(u1,v1) d=(u0,v1)). */
-  quad(a, b, c, d, col, uvs = null, nOverride = null) {
+  quad(a, b, c, d, col, uvs = this.uvDefault, nOverride = null) {
     const n = nOverride ?? this._n.subVectors(b, a).cross(this._a.subVectors(d, a)).normalize();
     // if the quad is degenerate fall back to the other diagonal
     if (!isFinite(n.x) || n.lengthSq() < 0.5) n.set(0, 1, 0);

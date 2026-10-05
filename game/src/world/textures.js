@@ -340,6 +340,62 @@ export function bannerTexture({ text = 'START', sub = '', bg = '#e8403a', fg = '
   return toTexture(cv, { repeat: false, aniso: 8 });
 }
 
+/**
+ * Jump-ramp surface: plate with hazard-striped side borders and big forward chevrons (u across 0..1, v along 0..1 = one tile per ramp).
+ * style: { base, plank (wood grain), stripeA, stripeB, chevron }
+ */
+export function rampTexture(style = {}) {
+  const s = { base: '#3b4258', grain: false, stripeA: '#ffd23f', stripeB: '#1b1e29', chevron: '#ffffff', glow: null, seed: 4, ...style };
+  const cv = cachedCanvas('ramp:' + JSON.stringify(s), () => {
+    const W = 512, H = 512, [c, g] = canvas(W, H);
+    const rnd = mulberry32(s.seed);
+    g.fillStyle = s.base; g.fillRect(0, 0, W, H);
+    if (s.grain) {
+      for (let i = 0; i < 16; i++) { const y = (i / 16) * H; g.fillStyle = i % 2 ? 'rgba(0,0,0,0.10)' : 'rgba(255,255,255,0.06)'; g.fillRect(0, y, W, H / 16); g.fillStyle = 'rgba(0,0,0,0.5)'; g.fillRect(0, y, W, 2); }
+      for (let i = 0; i < 700; i++) { g.fillStyle = `rgba(${rnd() < 0.5 ? '0,0,0' : '255,255,255'},${0.04 + rnd() * 0.08})`; g.fillRect(rnd() * W, rnd() * H, 20 + rnd() * 80, 1); }
+    } else {
+      for (let i = 0; i < 2500; i++) { g.fillStyle = `rgba(${rnd() < 0.5 ? '0,0,0' : '255,255,255'},${0.05 + rnd() * 0.1})`; g.fillRect(rnd() * W, rnd() * H, 1 + rnd() * 2, 1 + rnd() * 2); }
+    }
+    // hazard-striped borders
+    const bw = W * 0.085;
+    for (const x0 of [0, W - bw]) {
+      g.save(); g.beginPath(); g.rect(x0, 0, bw, H); g.clip();
+      for (let k = -2; k < 24; k++) { g.fillStyle = k % 2 ? s.stripeA : s.stripeB; g.beginPath(); const y = k * 44; g.moveTo(x0, y); g.lineTo(x0 + bw, y - 26); g.lineTo(x0 + bw, y + 18); g.lineTo(x0, y + 44); g.fill(); }
+      g.restore();
+    }
+    // forward chevrons (point toward +v = driving direction = up the texture)
+    g.fillStyle = s.chevron;
+    for (let k = 0; k < 4; k++) {
+      const y = H * (0.12 + k * 0.23), th = 38;
+      g.beginPath(); g.moveTo(W * 0.2, y + 70); g.lineTo(W * 0.5, y); g.lineTo(W * 0.8, y + 70); g.lineTo(W * 0.8, y + 70 + th); g.lineTo(W * 0.5, y + th); g.lineTo(W * 0.2, y + 70 + th); g.closePath();
+      g.globalAlpha = 0.55 + k * 0.12; g.fill(); g.globalAlpha = 1;
+    }
+    if (s.glow) { g.globalCompositeOperation = 'lighter'; const grd = g.createLinearGradient(0, H, 0, 0); grd.addColorStop(0, 'rgba(0,0,0,0)'); grd.addColorStop(1, s.glow); g.fillStyle = grd; g.globalAlpha = 0.18; g.fillRect(0, 0, W, H); g.globalAlpha = 1; g.globalCompositeOperation = 'source-over'; }
+    return c;
+  });
+  return toTexture(cv, { aniso: 8, repeat: false });
+}
+
+/** Chevron warning board (320x256): `dir` = +1 points LEFT (left-hand corner), -1 points RIGHT. Corners are dark border (posts sample them). */
+export function arrowTexture({ dir = 1, a = '#e5413a', b = '#ffffff', border = '#22262f' } = {}) {
+  const cv = cachedCanvas(`arrow:${dir}:${a}:${b}`, () => {
+    const W = 320, H = 256, [c, g] = canvas(W, H);
+    g.fillStyle = border; g.fillRect(0, 0, W, H);
+    g.fillStyle = a; g.beginPath(); g.roundRect(14, 14, W - 28, H - 28, 16); g.fill();
+    g.fillStyle = b;
+    const n = 3, gap = 78, w0 = W / 2 - gap * (n - 1) / 2;
+    for (let i = 0; i < n; i++) {
+      const cx = w0 + i * gap - dir * 6, s = -dir; // s = +1 means pointing RIGHT
+      g.beginPath();
+      g.moveTo(cx - 34 * s, 40); g.lineTo(cx + 18 * s, H / 2); g.lineTo(cx - 34 * s, H - 40);
+      g.lineTo(cx - 6 * s, H - 40); g.lineTo(cx + 46 * s, H / 2); g.lineTo(cx - 6 * s, 40);
+      g.closePath(); g.fill();
+    }
+    return c;
+  });
+  return toTexture(cv, { repeat: false, aniso: 8 });
+}
+
 /** Spectators: 3 horizontal bands of cheering people (tileable across; 1024 px = 9 m, each band 0.9 m tall). */
 export function crowdTexture({ seed = 3, shirts = ['#e5413a', '#ffd23f', '#2f8be8', '#35c759', '#ff7a1a', '#8b4dff', '#ff3d6a', '#22d3ff', '#ffffff', '#1d2a5c'] } = {}) {
   const cv = cachedCanvas(`crowd:${seed}:${shirts.join('')}`, () => {

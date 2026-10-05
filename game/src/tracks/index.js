@@ -4,6 +4,7 @@
 import { SplineTrack } from '../track/SplineTrack.js';
 import { compileLayout } from './layout.js';
 import { sunnyMeadows } from './sunny-meadows.js';
+import { cactusCanyon } from './cactus-canyon.js';
 
 function prepare(def) {
   if (def.layout && !def.points) {
@@ -15,11 +16,11 @@ function prepare(def) {
   return def;
 }
 
-export const TRACK_DEFS = [sunnyMeadows].map(prepare);
+export const TRACK_DEFS = [sunnyMeadows, cactusCanyon].map(prepare);
 
 /** Cups are ordered groups of tracks (Grand Prix = race every track in a cup in order). */
 export const CUPS = [
-  { id: 'blossom', name: 'Blossom Cup', trackIds: ['sunny-meadows'] },
+  { id: 'blossom', name: 'Blossom Cup', trackIds: ['sunny-meadows', 'cactus-canyon'] },
 ];
 
 export const getTrackDef = (id) => TRACK_DEFS.find((t) => t.id === id) ?? TRACK_DEFS[0];

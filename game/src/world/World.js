@@ -13,6 +13,9 @@ import { makeRows, ribbon, skirt, loopVScale } from './ribbon.js';
 import { roadTexture, curbTexture, groundTexture, glowTexture, disposeTextures, texStats } from './textures.js';
 import { buildBarriers } from './barriers.js';
 import { buildBoostPads, buildStartLine } from './features.js';
+import { buildRamps } from './ramps.js';
+import { buildCornerSigns } from './signs.js';
+import { GeoBuilder } from './builder.js';
 import { createSky } from './sky.js';
 import { getRecipe } from './recipes/index.js';
 import { mulberry32 } from '../core/math.js';
@@ -111,11 +114,14 @@ export class World {
     }
     lap('terrain');
     this._buildRoadSurface(); lap('road');
-    const barriers = buildBarriers(this, c.barriers);
+    const gapSkip = this.track.gaps.map((g) => [g.s0 - 2, g.s1 + 2]);
+    const barriers = buildBarriers(this, c.barriers ? { ...c.barriers, skip: [...(c.barriers.skip ?? []), ...gapSkip] } : null);
     if (barriers) this.group.add(barriers);
     lap('barriers');
     const pads = buildBoostPads(this, c.boost);
     if (pads) this.group.add(pads);
+    if (this.track.ramps.length) this.group.add(buildRamps(this, c.ramp ?? {}));
+    if (c.signs !== false) { const signs = buildCornerSigns(this, c.signs ?? {}); if (signs) this.group.add(signs); }
     if (c.start !== false) this.group.add(buildStartLine(this, { sub: this.def.name?.toUpperCase(), ...c.start }));
     lap('features');
     let inst = 0;
@@ -125,51 +131,72 @@ export class World {
     this.applyQuality(this.quality);
   }
 
+  /** Stretches of road between `gap` zones (a closed loop when there are none). */
+  _roadRuns() {
+    const tr = this.track, L = tr.length;
+    const g = tr.gaps.slice().sort((a, b) => a.s0 - b.s0);
+    if (!g.length) return [{ s0: 0, s1: L, loop: true }];
+    return g.map((gap, i) => ({ s0: gap.s1, s1: i + 1 < g.length ? g[i + 1].s0 : g[0].s0 + L, loop: false }));
+  }
+
   _buildRoadSurface() {
-    const tr = this.track, L = tr.length, rc = this.cfg.road;
-    const rows = makeRows(tr, 0, L, tr.spacing);
-    // road
+    const tr = this.track, rc = this.cfg.road;
     const roadTex = this.tex(roadTexture(rc.texture ?? {}));
     const roadMat = new THREE.MeshStandardMaterial({ map: roadTex, roughness: rc.roughness ?? 0.88, metalness: rc.metalness ?? 0 });
     if (rc.emissive) { roadMat.emissive = toColor(rc.emissive); roadMat.emissiveMap = roadTex; roadMat.emissiveIntensity = rc.emissiveIntensity ?? 0.2; }
-    const vRoad = loopVScale(tr, 12);
-    const road = new THREE.Mesh(ribbon(rows, { l0: (r) => -r.hw, l1: (r) => r.hw, lift: 0.02, vScale: vRoad }), roadMat);
-    road.name = 'road'; road.receiveShadow = true; road.matrixAutoUpdate = false;
-    this.group.add(road);
-    this.roadMesh = road;
-    // curbs
     const cu = { a: '#e5413a', b: '#f8f6ee', width: 0.95, ...(rc.curb ?? {}) };
+    let curbMat = null;
     if (cu.width > 0) {
-      const curbMat = new THREE.MeshStandardMaterial({ map: this.tex(curbTexture({ a: cu.a, b: cu.b })), roughness: 0.7, metalness: 0 });
+      curbMat = new THREE.MeshStandardMaterial({ map: this.tex(curbTexture({ a: cu.a, b: cu.b })), roughness: 0.7, metalness: 0 });
       if (cu.emissive) { curbMat.emissive = toColor(cu.emissive); curbMat.emissiveIntensity = cu.emissiveIntensity ?? 0.6; }
-      const vCurb = loopVScale(tr, 4);
-      const left = ribbon(rows, { l0: (r) => -r.hw - cu.width, l1: (r) => -r.hw, lift: 0.045, vScale: vCurb, flip: false });
-      const right = ribbon(rows, { l0: (r) => r.hw, l1: (r) => r.hw + cu.width, lift: 0.045, vScale: vCurb });
-      for (const g of [left, right]) { const m = new THREE.Mesh(g, curbMat); m.receiveShadow = true; m.matrixAutoUpdate = false; this.group.add(m); }
     }
-    // shoulders (the drivable off-road band between the curb and the barrier)
     const sh = { ground: 'grass', tint: '#ffffff', tile: 10, ...(rc.shoulder ?? {}) };
+    let shMat = null;
     if (sh.ground) {
-      const shMat = new THREE.MeshLambertMaterial({ map: this.tex(sh.map ?? groundTexture(sh.ground, sh.groundOverrides)), color: toColor(sh.tint) });
+      shMat = new THREE.MeshLambertMaterial({ map: this.tex(sh.map ?? groundTexture(sh.ground, sh.groundOverrides)), color: toColor(sh.tint) });
       if (sh.emissive) shMat.emissive = toColor(sh.emissive);
-      const cw = cu.width > 0 ? cu.width : 0;
-      for (const side of [-1, 1]) {
-        const g = ribbon(rows, {
-          l0: side < 0 ? (r) => -r.hw - r.sh : (r) => r.hw + cw, l1: side < 0 ? (r) => -r.hw - cw : (r) => r.hw + r.sh,
-          lift: 0.0, vScale: sh.tile, uMode: 'metres', uScale: sh.tile, vOffset: side * 0.37,
-        });
-        const m = new THREE.Mesh(g, shMat); m.receiveShadow = true; m.matrixAutoUpdate = false; this.group.add(m);
-      }
     }
-    // fascia: gives elevated road sections a body and hides seams against the terrain
     const fa = { color: '#4a4f5e', depth: 0.9, ...(rc.fascia ?? {}) };
-    if (fa.depth > 0) {
-      const faMat = new THREE.MeshLambertMaterial({ color: toColor(fa.color), side: THREE.DoubleSide });
-      for (const side of [-1, 1]) {
-        const m = new THREE.Mesh(skirt(rows, { side, lateral: (r) => r.hw + r.sh, depth: fa.depth }), faMat);
-        m.name = 'fascia'; m.matrixAutoUpdate = false; this.group.add(m);
+    const faMat = fa.depth > 0 ? new THREE.MeshLambertMaterial({ color: toColor(fa.color), side: THREE.DoubleSide }) : null;
+    const cw = cu.width > 0 ? cu.width : 0;
+    const add = (geo, mat, name, shadow = true) => { const m = new THREE.Mesh(geo, mat); m.name = name; m.receiveShadow = shadow; m.matrixAutoUpdate = false; this.group.add(m); return m; };
+
+    for (const run of this._roadRuns()) {
+      const rows = makeRows(tr, run.s0, run.s1, tr.spacing);
+      const vRoad = run.loop ? loopVScale(tr, 12) : 12, vCurb = run.loop ? loopVScale(tr, 4) : 4;
+      this.roadMesh = add(ribbon(rows, { l0: (r) => -r.hw, l1: (r) => r.hw, lift: 0.02, vScale: vRoad }), roadMat, 'road');
+      if (curbMat) {
+        add(ribbon(rows, { l0: (r) => -r.hw - cu.width, l1: (r) => -r.hw, lift: 0.045, vScale: vCurb }), curbMat, 'curb');
+        add(ribbon(rows, { l0: (r) => r.hw, l1: (r) => r.hw + cu.width, lift: 0.045, vScale: vCurb }), curbMat, 'curb');
       }
+      if (shMat) {
+        for (const side of [-1, 1]) {
+          add(ribbon(rows, {
+            l0: side < 0 ? (r) => -r.hw - r.sh : (r) => r.hw + cw, l1: side < 0 ? (r) => -r.hw - cw : (r) => r.hw + r.sh,
+            lift: 0.0, vScale: sh.tile, uMode: 'metres', uScale: sh.tile, vOffset: side * 0.37,
+          }), shMat, 'shoulder');
+        }
+      }
+      if (faMat) for (const side of [-1, 1]) add(skirt(rows, { side, lateral: (r) => r.hw + r.sh, depth: fa.depth }), faMat, 'fascia', false);
+      if (!run.loop) this._buildRunCaps(rows, fa);
     }
+  }
+
+  /** Rock/concrete end faces where the road stops at a gap (so the cut-off road has thickness, not a paper edge). */
+  _buildRunCaps(rows, fa) {
+    const B = new GeoBuilder();
+    const col = toColor(this.cfg.road.capColor ?? this.cfg.road.fascia?.color ?? '#7a6a58');
+    for (const [row, dir] of [[rows[0], -1], [rows[rows.length - 1], 1]]) {
+      const e = row.hw + row.sh, d = this.cfg.road.capDepth ?? 3.2;
+      const l = new THREE.Vector3().copy(row.pos).addScaledVector(row.right, -e), r = new THREE.Vector3().copy(row.pos).addScaledVector(row.right, e);
+      const lb = l.clone(); lb.y -= d; const rb = r.clone(); rb.y -= d;
+      // front face (towards the gap) + a darker underside slab so it reads as a ledge
+      if (dir > 0) B.quad(l, r, rb, lb, col); else B.quad(r, l, lb, rb, col);
+      const lb2 = lb.clone().addScaledVector(row.tan, -dir * 2.5), rb2 = rb.clone().addScaledVector(row.tan, -dir * 2.5);
+      B.quad(lb, rb, rb2, lb2, col.clone().multiplyScalar(0.7));
+    }
+    const m = new THREE.Mesh(B.build(), new THREE.MeshLambertMaterial({ vertexColors: true, side: THREE.DoubleSide }));
+    m.name = 'run-caps'; m.matrixAutoUpdate = false; this.group.add(m);
   }
 
   _buildLightsAndSky() {
