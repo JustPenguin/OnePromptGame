@@ -17,6 +17,7 @@ import * as THREE from 'three';
 import { EV } from '../core/events.js';
 import { clamp, damp, dampAngle, lerp, smoothstep, angleDiff } from '../core/math.js';
 import { TrackQuery } from '../track/SplineTrack.js';
+import { SURFACE_PROPS } from '../track/surfaces.js';
 
 // dist/height: metres behind/above the focus point; look: metres ahead of the kart to aim at; fov: base vertical FOV (deg)
 export const CAMERA_MODES = {
@@ -40,6 +41,7 @@ export class ChaseCamera {
     this.fov = 60;
     this.shake = 0;
     this.roll = 0;
+    this.rough = 0;         // 0..1 off-road rattle amount
     this.lookBackBlend = 0;
     this.boostKick = 0;     // 0..1, decays: FOV punch + pull-back after a boost
     this.dip = 0;           // metres the camera sinks after a hard landing
@@ -138,8 +140,9 @@ export class ChaseCamera {
 
     // distance / height: speed pulls the camera back, a boost pulls it back further for a moment
     const air = !k.grounded ? clamp(k.airTime * 2, 0, 1) : 0;
-    const dist = cfg.dist + cfg.speedDist * smoothstep(0, 1.1, ratio) + (reduced ? 0 : this.boostKick * 1.25) + air * 0.4;
-    const height = cfg.height + air * 0.5 - (d.dir !== 0 ? 0.12 : 0) - this.dip;
+    const small = 1 - clamp((k.scale - 0.55) / 0.45, 0, 1);                   // 1 while shrunk: come closer so the tiny kart stays readable
+    const dist = (cfg.dist + cfg.speedDist * smoothstep(0, 1.1, ratio) + (reduced ? 0 : this.boostKick * 1.25) + air * 0.4) * (1 - 0.3 * small);
+    const height = (cfg.height + air * 0.5 - (d.dir !== 0 ? 0.12 : 0)) * (1 - 0.2 * small) - this.dip;
 
     // focus: horizontal rigid, vertical smoothed (jumps & landings feel soft, slopes stay glued)
     const f = this.focus;
@@ -155,7 +158,7 @@ export class ChaseCamera {
 
     // FOV: speed + boost kick + a touch in drifts
     let fov = cfg.fov;
-    if (s.settings?.fovBoost !== false && !reduced) fov += Math.pow(clamp(ratio, 0, 1.4), 1.5) * cfg.speedFov + this.boostKick * 9 + (d.dir !== 0 ? 1.5 : 0);
+    if (s.settings?.fovBoost !== false && !reduced) fov += Math.pow(clamp(ratio, 0, 1.4), 1.5) * cfg.speedFov + this.boostKick * 9 + (d.dir !== 0 ? 1.5 : 0) + (k.draft.bonus / 0.06) * 2;
     this.fov = damp(this.fov, fov, 5, dt);
     this.fovKick = this.boostKick * 9;
     cam.position.copy(this.pos);
@@ -221,6 +224,14 @@ export class ChaseCamera {
       cam.position.x += (Math.sin(t * 53.1) + Math.sin(t * 31.7 + 1.3)) * 0.5 * a;
       cam.position.y += (Math.sin(t * 47.9 + 2.1) + Math.sin(t * 27.3 + 0.4)) * 0.5 * a;
       cam.position.z += (Math.sin(t * 41.3 + 4.2) + Math.sin(t * 23.9 + 3.3)) * 0.5 * a;
+    }
+    // off-road rattle: a fine, fast tremble that scales with speed (not part of the hit shake, so it never builds up)
+    const offroad = k.grounded && k.speed > 6 && SURFACE_PROPS[k.surface]?.offroad;
+    this.rough = damp(this.rough, offroad && !this.reduced && this.session.settings?.cameraShake !== false ? clamp(k.speed / k.stats.topSpeed, 0, 1) : 0, 7, dt);
+    if (this.rough > 0.01) {
+      const r = this.rough * 0.045;
+      cam.position.y += (Math.sin(t * 83.7) + Math.sin(t * 61.3 + 1.1)) * 0.5 * r;
+      cam.position.x += Math.sin(t * 71.9 + 2.3) * r * 0.5;
     }
     // a hair of roll into corners and drifts (never for reduced motion)
     const rollT = this.reduced || this.session.settings?.cameraShake === false ? 0 : -(k.steerVisual * 0.018 + k.drift.dir * 0.016) * clamp(k.speed / k.stats.topSpeed, 0, 1) + (this.shake > 0.002 ? Math.sin(t * 37.7) * this.shake * 0.02 : 0);
