@@ -34,4 +34,13 @@ export const sunnyMeadows = {
   zones: [
     { type: 'boost', at: 'T>', offset: 120, length: 14, lateral: 0, width: 6 },
   ],
+  // coin trails (data only: the item system draws/collects track.coins); `arch` lifts the middle of a line (air coins over jumps), `weave` is a sine slalom
+  coinLines: [
+    { at: 'T>', offset: 50, count: 8, spacing: 7, lateral: 0, weave: 3.5 },
+    { at: 'A>', offset: 30, count: 6, spacing: 6, lateral: -4, lateralTo: 4 },
+    { at: 'C>', offset: 10, count: 8, spacing: 6, lateral: 0, weave: 2.5 },
+    { at: 'D>', offset: 50, count: 8, spacing: 6, lateral: 0 },
+    { at: 'F>', offset: 5, count: 6, spacing: 6, lateral: 3 },
+    { at: 'I>', offset: 10, count: 8, spacing: 7, lateral: -3, lateralTo: 3 },
+  ],
 };

@@ -42,9 +42,17 @@ export const starlightSpiral = {
     { type: 'boost', at: 'E1>', offset: 40, length: 14, lateral: 0, width: 6 },
     // the summit leap: boost pad -> ramp -> 26 m of nothing (too slow and you fall to the rescue drone)
     { type: 'boost', at: 'c11>', offset: 20, length: 14, lateral: 0, width: 6 },
-    { type: 'ramp', at: 'c11>', offset: 70, length: 12, height: 3.6, lateral: 0, width: 19 },
-    { type: 'gap', at: 'c11>', offset: 82, length: 26, width: 200 },
+    { type: 'ramp', at: 'c11>', offset: 70, length: 12, height: 4.0, lateral: 0, width: 19 },
+    { type: 'gap', at: 'c11>', offset: 82, length: 21, width: 200 },
     { type: 'boost', at: 'E0>', offset: 20, length: 14, lateral: 0, width: 6 },
   ],
   openEdges: [{ s0: 0, s1: 1e6, side: 'both' }],
+  // coin trails (data only: the item system draws/collects track.coins); `arch` lifts the middle of a line (air coins over jumps), `weave` is a sine slalom
+  coinLines: [
+    { at: 'E1>', offset: 30, count: 8, spacing: 7, lateral: 0, weave: 3 },
+    { at: 'c2>', offset: 30, count: 8, spacing: 7, lateral: 0 },
+    { at: 'c6>', offset: 20, count: 7, spacing: 6, lateral: 0, weave: 2.5 },
+    { at: 'c11>', offset: 72, count: 9, spacing: 4.4, lateral: 0, lift: 1.3, arch: 3.6 },
+    { at: 'E0>', offset: 40, count: 7, spacing: 7, lateral: 0 },
+  ],
 };

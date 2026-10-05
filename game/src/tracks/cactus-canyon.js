@@ -38,4 +38,12 @@ export const cactusCanyon = {
     { type: 'ramp', at: 'J>', offset: 64, length: 12, height: 3.2, lateral: 0, width: 17 },
     { type: 'gap', at: 'J>', offset: 76, length: 14, width: 120 },
   ],
+  // coin trails (data only: the item system draws/collects track.coins); `arch` lifts the middle of a line (air coins over jumps), `weave` is a sine slalom
+  coinLines: [
+    { at: 'T>', offset: 40, count: 8, spacing: 7, lateral: 0, weave: 3 },
+    { at: 'B>', offset: 8, count: 6, spacing: 6, lateral: -3, lateralTo: 3 },
+    { at: 'E>', offset: 10, count: 9, spacing: 7, lateral: 0 },
+    { at: 'G>', offset: 4, count: 7, spacing: 6, lateral: 0, weave: 2 },
+    { at: 'J>', offset: 64, count: 8, spacing: 4.2, lateral: 0, lift: 1.3, arch: 3.4 },
+  ],
 };

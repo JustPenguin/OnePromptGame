@@ -17,7 +17,7 @@ export const neonNights = {
   layout: {
     width: 18,
     shoulder: 4,
-    start: { at: 'W3', offset: 30 },
+    start: { at: 'W3', offset: 62 },
     v: [
       { id: 'W3', x: -240, z: 0, r: 75, y: 0, w: 20, bank: 0 },
       { id: 'E1', x: 240, z: 0, r: 75, y: 0, bank: 4 },
@@ -32,8 +32,16 @@ export const neonNights = {
     ],
   },
   zones: [
-    { type: 'boost', at: 'W3>', offset: 112, length: 14, lateral: 0, width: 6 },
+    { type: 'boost', at: 'W3>', offset: 142, length: 14, lateral: 0, width: 6 },
     { type: 'boost', at: 'E2>', offset: 12, length: 14, lateral: 0, width: 6 },
     { type: 'ramp', at: 'E2>', offset: 64, length: 11, height: 2.2, lateral: 0, width: 18 },
+  ],
+  // coin trails (data only: the item system draws/collects track.coins); `arch` lifts the middle of a line (air coins over jumps), `weave` is a sine slalom
+  coinLines: [
+    { at: 'W3>', offset: 40, count: 8, spacing: 7, lateral: 0, weave: 3 },
+    { at: 'E1>', offset: 70, count: 8, spacing: 8, lateral: 0 },
+    { at: 'E2>', offset: 60, count: 5, spacing: 4.2, lateral: 0, lift: 1.2, arch: 2.0 },
+    { at: 'Ob>', offset: 30, count: 10, spacing: 8, lateral: 0, weave: 3 },
+    { at: 'W1>', offset: 10, count: 6, spacing: 6, lateral: 2 },
   ],
 };

@@ -98,7 +98,10 @@ function analyse(track, buildMs) {
     v = Math.min(vmax, Math.sqrt(v * v + 2 * 9 * sp));
     if (k >= N) time += sp / v;
   }
-  console.log(`   est. lap ${time.toFixed(1)} s  (avg ${(L / time).toFixed(1)} m/s)`);
+  let vmin = 1e9, vsum = 0; for (let i = 0; i < N; i++) { vmin = Math.min(vmin, track.racingLine.maxSpeed[i]); vsum += Math.min(33, track.racingLine.maxSpeed[i]); }
+  const offMax = track.racingLine.offset.reduce((a, b) => Math.max(a, Math.abs(b)), 0);
+  console.log(`   est. lap ${time.toFixed(1)} s  (avg ${(L / time).toFixed(1)} m/s)   line: |offset| max ${offMax.toFixed(1)} m, slowest ${vmin.toFixed(1)} m/s, mean(min(33,v)) ${(vsum / N).toFixed(1)}`);
+  if (track.gaps.length) console.log(`   jumps: ${track.gaps.map((g) => `gap@${g.s0.toFixed(0)}+${(g.s1 - g.s0).toFixed(0)} needs ${g.minSpeed?.toFixed(1)} m/s`).join(' | ')}`);
   const mk = Object.entries(track.markers).map(([k, m]) => `${k}:${m.s0.toFixed(0)}`);
   if (mk.length) console.log(`   markers: ${mk.join(' ')}`);
 }
@@ -133,8 +136,10 @@ function render(track) {
     const col = pass === 0 ? [46, 64, 98] : [Math.round(255 - 190 * v), Math.round(80 + 150 * v), 90];
     line(X(track.pos[i * 3]), Y(track.pos[i * 3 + 2]), X(track.pos[j * 3]), Y(track.pos[j * 3 + 2]), r, col, pass === 0 ? 1 : 0.95);
   }
-  // centre line + ticks
-  for (let i = 0; i < N; i++) { const j = (i + 1) % N; line(X(track.pos[i * 3]), Y(track.pos[i * 3 + 2]), X(track.pos[j * 3]), Y(track.pos[j * 3 + 2]), 0, [255, 255, 255], 0.5); }
+  // centre line (thin white) + the racing line (yellow) offset by racingLine.offset along the right vector
+  for (let i = 0; i < N; i++) { const j = (i + 1) % N; line(X(track.pos[i * 3]), Y(track.pos[i * 3 + 2]), X(track.pos[j * 3]), Y(track.pos[j * 3 + 2]), 0, [255, 255, 255], 0.35); }
+  const rl = (i) => [track.pos[i * 3] + track.right[i * 3] * track.racingLine.offset[i], track.pos[i * 3 + 2] + track.right[i * 3 + 2] * track.racingLine.offset[i]];
+  for (let i = 0; i < N; i++) { const j = (i + 1) % N, a = rl(i), b = rl(j); line(X(a[0]), Y(a[1]), X(b[0]), Y(b[1]), 1, [255, 214, 63], 0.95); }
   for (let s = 0; s < track.length; s += 100) {
     const smp = track.sampleAt(s);
     const px = X(smp.position.x), py = Y(smp.position.z);

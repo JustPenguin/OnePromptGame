@@ -16,7 +16,7 @@ export const spookyHollow = {
   layout: {
     width: 14,
     shoulder: 3.5,
-    start: { at: 'P0', offset: 20 },
+    start: { at: 'P0', offset: 58 },
     v: [
       { id: 'P0', x: -145, z: 263, r: 60, y: 0, w: 16 },
       { id: 'P1', x: 180, z: 263, r: 55, y: 0, bank: 4 },
@@ -33,7 +33,15 @@ export const spookyHollow = {
     ],
   },
   zones: [
-    { type: 'boost', at: 'P0>', offset: 100, length: 14, lateral: 0, width: 5 },
+    { type: 'boost', at: 'P0>', offset: 140, length: 14, lateral: 0, width: 5 },
     { type: 'boost', at: 'P5>', offset: 24, length: 14, lateral: 0, width: 5 },
+  ],
+  // coin trails (data only: the item system draws/collects track.coins); `arch` lifts the middle of a line (air coins over jumps), `weave` is a sine slalom
+  coinLines: [
+    { at: 'P0>', offset: 40, count: 8, spacing: 7, lateral: 0, weave: 2.5 },
+    { at: 'P1>', offset: 10, count: 6, spacing: 6, lateral: 2 },
+    { at: 'P3>', offset: 6, count: 6, spacing: 6, lateral: -2 },
+    { at: 'P7>', offset: 6, count: 6, spacing: 6, lateral: 0, weave: 2 },
+    { at: 'P9b>', offset: 8, count: 8, spacing: 6, lateral: -2, lateralTo: 2 },
   ],
 };

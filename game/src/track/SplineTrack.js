@@ -35,7 +35,7 @@ export class SplineTrack {
   constructor(def, opts = {}) {
     if (!def.points && def.layout) {
       const lay = compileLayout({ width: def.width, shoulder: def.shoulder, ...def.layout });
-      def = { ...def, points: lay.points, _layoutMarkers: lay.markers, _layoutLength: lay.length };
+      def = { ...def, points: lay.points, _layoutMarkers: lay.markers, _layoutLength: lay.length, _layoutWarnings: lay.warnings };
     }
     this.def = def;
     this.id = def.id;
@@ -56,7 +56,10 @@ export class SplineTrack {
     this.group.name = `track:${this.id}`;
     this.world = null;
     this.sky = null;
-    if (!opts.headless) this.world = new World(this, opts);
+    if (!opts.headless) {
+      this.world = new World(this, opts);
+      this.sky = this.world.sky;          // THREE.Group (rotation-only dome, safe to render in a CubeCamera / PMREM pass for environment maps)
+    }
   }
 
   // ------------------------------------------------------------------ data build
@@ -240,9 +243,18 @@ export class SplineTrack {
         this.itemBoxes.push({ id: this.itemBoxes.length, row: r, s: row.s, lateral, position });
       }
     });
-    // coins (optional): def.coins = [{ s | at+offset, lateral, lift? }]
-    this.coins = (def.coins ?? []).map((c, i) => {
-      const s = wrapS(this.resolveRange(c)[0], L);
+    // coins (optional): def.coins = [{ s | at+offset, lateral, lift? }]  and  def.coinLines = [{ s | at+offset, count, spacing, lateral, lateralTo?, lift?, arc?: metres of sine weave }]
+    const coinDefs = [...(def.coins ?? [])];
+    for (const line of def.coinLines ?? []) {
+      const s0 = this.resolveRange(line)[0], n = line.count ?? 8, step = line.spacing ?? 6;
+      for (let k = 0; k < n; k++) {
+        const t = n === 1 ? 0 : k / (n - 1);
+        const lateral = (line.lateral ?? 0) + ((line.lateralTo ?? line.lateral ?? 0) - (line.lateral ?? 0)) * t + Math.sin(t * Math.PI * 2) * (line.weave ?? 0);
+        coinDefs.push({ s: s0 + k * step, lateral, lift: (line.lift ?? 0.9) + Math.sin(t * Math.PI) * (line.arch ?? 0) });
+      }
+    }
+    this.coins = coinDefs.map((c, i) => {
+      const s = wrapS(c.at !== undefined ? this.resolveRange(c)[0] : c.s ?? 0, L);
       return { id: i, s, lateral: c.lateral ?? 0, position: this.pointAt(s, c.lateral ?? 0, new THREE.Vector3(), c.lift ?? 0.9) };
     });
   }
@@ -280,7 +292,14 @@ export class SplineTrack {
     // width profile + elevation (handy for fancy minimaps: 0..1 along the polyline, same order as points)
     const width = [], height = [];
     for (let i = 0; i < this.count; i += step) { width.push(this.hw[i] * 2); height.push(this.pos[i * 3 + 1]); }
-    this.minimap = { points: pts, bounds: { minX, maxX, minZ, maxZ }, start: [this.pos[0], this.pos[2]], width, height, closed: true };
+    // features for fancy minimaps: boost pads / ramps / gaps / ice as short polylines in the same x,z space as `points`
+    const features = [];
+    for (const z of this.zones) {
+      if (!['boost', 'ramp', 'gap', 'ice', 'mud', 'sand', 'water'].includes(z.type)) continue;
+      const a = this.sampleAt(z.s0), b = this.sampleAt(z.s1);
+      features.push({ type: z.type, s0: z.s0, s1: z.s1, from: [a.position.x, a.position.z], to: [b.position.x, b.position.z] });
+    }
+    this.minimap = { points: pts, bounds: { minX, maxX, minZ, maxZ }, start: [this.pos[0], this.pos[2]], width, height, closed: true, features };
   }
 
   // ------------------------------------------------------------------ public queries (HOT PATH: no allocation)
@@ -436,6 +455,10 @@ export class SplineTrack {
   lineOffsetAt(s) { const f = wrapS(s, this.length) / this.spacing; const i = Math.floor(f) % this.count; return lerp(this.racingLine.offset[i], this.racingLine.offset[(i + 1) % this.count], f - Math.floor(f)); }
   maxSpeedAt(s) { const f = wrapS(s, this.length) / this.spacing; const i = Math.floor(f) % this.count; return lerp(this.racingLine.maxSpeed[i], this.racingLine.maxSpeed[(i + 1) % this.count], f - Math.floor(f)); }
   curvatureAt(s) { return this.curvature[Math.floor(wrapS(s, this.length) / this.spacing) % this.count]; }
+  /** Curvature of the racing LINE itself (rad/m, + = left) - tighter than the centreline's in corners, 0 on straights. */
+  lineCurvatureAt(s) { return this.racingLine.curv[Math.floor(wrapS(s, this.length) / this.spacing) % this.count]; }
+  /** Speed the kart should carry here (m/s), > 0 only just before / over a jump (ramp + gap): below it the jump falls short. */
+  minSpeedAt(s) { return this.racingLine.minSpeed[Math.floor(wrapS(s, this.length) / this.spacing) % this.count]; }
 
   // ------------------------------------------------------------------ lifecycle (visuals live in World)
   /** Add the track to the session's scene and set up lighting/fog/sky. */

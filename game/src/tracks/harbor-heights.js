@@ -40,4 +40,12 @@ export const harborHeights = {
     { type: 'boost', at: 'G', offset: 10, length: 14, lateral: 2, width: 5 },
     { type: 'boost', at: 'L>', offset: 20, length: 14, lateral: -2, width: 5 },
   ],
+  // coin trails (data only: the item system draws/collects track.coins); `arch` lifts the middle of a line (air coins over jumps), `weave` is a sine slalom
+  coinLines: [
+    { at: 'S0>', offset: 30, count: 8, spacing: 7, lateral: 0, weave: 3 },
+    { at: 'S1>', offset: 50, count: 8, spacing: 4.2, lateral: 0, lift: 1.3, arch: 3.2 },
+    { at: 'F>', offset: 4, count: 6, spacing: 6, lateral: 2 },
+    { at: 'I>', offset: 8, count: 6, spacing: 6, lateral: -2 },
+    { at: 'M>', offset: 2, count: 8, spacing: 6, lateral: 0, weave: 2.5 },
+  ],
 };

@@ -18,6 +18,7 @@ function prepare(def) {
     def.points = lay.points;
     def._layoutMarkers = lay.markers;
     def._layoutLength = lay.length;
+    def._layoutWarnings = lay.warnings;
   }
   return def;
 }

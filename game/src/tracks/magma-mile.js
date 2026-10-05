@@ -38,4 +38,12 @@ export const magmaMile = {
   ],
   // no walls on the bridge: the physics lets a kart roll 2 m past the road edge (sh = 0) before it falls
   openEdges: [{ at: 'C>', offset: 58, length: 114, side: 'both' }],
+  // coin trails (data only: the item system draws/collects track.coins); `arch` lifts the middle of a line (air coins over jumps), `weave` is a sine slalom
+  coinLines: [
+    { at: 'S>', offset: 40, count: 8, spacing: 7, lateral: 0, weave: 3 },
+    { at: 'B3>', offset: 20, count: 8, spacing: 6, lateral: 0 },
+    { at: 'C>', offset: 70, count: 10, spacing: 8, lateral: 0 },
+    { at: 'D>', offset: 30, count: 6, spacing: 6, lateral: -2, lateralTo: 2 },
+    { at: 'E2>', offset: 4, count: 6, spacing: 6, lateral: 0, weave: 2 },
+  ],
 };

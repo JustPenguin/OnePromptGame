@@ -77,13 +77,16 @@ export function compileLayout(spec) {
     p.hasArc = p.r > 0 && Math.abs(p.turn) > 0.5 * DEG;
     p.t = p.hasArc ? p.r * Math.tan(Math.abs(p.turn) / 2) : 0;
   });
-  // shrink radii where two fillets would overlap on a shared straight
+  // shrink radii where two fillets would overlap on a shared straight (and keep a short straight between two real corners: a curvature
+  // reversal with no straight at all makes the spline ring and gives the kart a violent steering flip)
+  const MIN_GAP = spec.minStraight ?? 10;
   for (let pass = 0; pass < 4; pass++) {
     V.forEach((p, i) => {
       const q = V[(i + 1) % n], D = edge[i].len;
-      if (p.t + q.t > D - 1) {
-        const k = (D - 1) / (p.t + q.t);
-        if (pass === 0) warnings.push(`corners ${p.id}/${q.id}: radii shrunk x${k.toFixed(2)} to fit the ${D.toFixed(0)} m between them`);
+      const gap = p.hasArc && q.hasArc && p.turn * q.turn < 0 ? MIN_GAP : 1;   // only a curvature REVERSAL (S-bend) needs the straight
+      if (p.t + q.t > D - gap) {
+        const k = (D - gap) / (p.t + q.t);
+        if (pass === 0) warnings.push(`corners ${p.id}/${q.id}: radii shrunk x${k.toFixed(2)} to fit ${gap < 5 ? 'the' : 'a ' + gap + ' m straight in the'} ${D.toFixed(0)} m between them`);
         for (const c of [p, q]) if (c.hasArc) { c.t *= k; c.r *= k; }
       }
     });
