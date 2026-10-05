@@ -46,7 +46,19 @@ const SKY_FRAGMENT = /* glsl */ `
       col += uSunColor * ( pow( sd, 5.0 ) * 0.10 + pow( sd, 48.0 ) * 0.28 * uSunGlow + pow( sd, 900.0 ) * 0.35 );
       float cosR = cos( uSunSize );
       float disc = smoothstep( cosR - 0.0016, cosR + 0.0006, sd );
-      col = mix( col, uSunColor * 1.9, disc );
+      #ifdef MOON
+        // moon: disc coordinates -> maria + craters + soft limb darkening
+        vec3 t1 = normalize( cross( uSunDir, vec3( 0.0, 1.0, 0.0 ) ) ); vec3 t2 = cross( t1, uSunDir );
+        vec2 mp = vec2( dot( d, t1 ), dot( d, t2 ) ) / sin( uSunSize );
+        float mr = length( mp );
+        float mare = fbm( mp * 1.7 + 3.0 ), cr = fbm( mp * 7.0 + 11.0 ), cr2 = fbm( mp * 15.0 - 5.0 );
+        float surf = 0.78 + 0.22 * smoothstep( 0.35, 0.7, mare ) - 0.2 * smoothstep( 0.55, 0.75, cr ) * 0.8 - 0.12 * smoothstep( 0.6, 0.8, cr2 );
+        float limb = 0.72 + 0.28 * sqrt( max( 0.0, 1.0 - mr * mr ) );
+        vec3 moonCol = uSunColor * 1.5 * surf * limb;
+        col = mix( col, moonCol, disc );
+      #else
+        col = mix( col, uSunColor * 1.9, disc );
+      #endif
     #endif
     #ifdef NEBULA
       if ( h > -0.2 ) {
@@ -119,6 +131,7 @@ export function createSky(cfg) {
   if (cfg.stars) defines.STARS = 1;
   if (cfg.aurora) defines.AURORA = 1;
   if (cfg.nebula) defines.NEBULA = 1;
+  if (sun?.moon) defines.MOON = 1;
   const cl = cfg.clouds ?? {}, au = cfg.aurora ?? {}, ne = cfg.nebula ?? {}, st = cfg.stars ?? {};
   const uniforms = {
     uTop: { value: col(cfg.top, '#3d8bff') }, uMid: { value: col(cfg.mid ?? cfg.top, '#7dbbff') }, uHorizon: { value: col(cfg.horizon, '#cfe9ff') }, uGround: { value: col(cfg.ground ?? cfg.horizon, '#cfe9ff') },

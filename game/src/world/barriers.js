@@ -122,6 +122,34 @@ const STYLES = {
     }
   },
 
+  /** Wrought-iron fence: thin bars with spear tips between stone pillars, two rails.  o: { bar, cap, height, pillarEvery, barEvery } */
+  ironfence(B, track, rows, o) {
+    const bar = toColor(o.bar ?? '#1a1c24'), stone = toColor(o.stone ?? '#4a4f5c'), stoneTop = toColor(o.stoneTop ?? '#5f6575');
+    const h = o.height ?? 1.9, base0 = (row) => row.hw + row.sh + 0.2;
+    const A = new THREE.Vector3(), Bp = new THREE.Vector3(), right = new THREE.Vector3(), fwd = new THREE.Vector3();
+    for (const side of [-1, 1]) {
+      posts(B, track, rows, side, { every: o.pillarEvery ?? 6, h: h + 0.5, w: 0.5, d: 0.5, color: stone, topColor: stoneTop, lateral: (row) => row.hw + row.sh + 0.2, sink: 0.4 });
+      for (const y of [0.35, h - 0.3]) sweep(B, track, rows, side, [[-0.05, y - 0.05], [0.07, y - 0.05], [0.07, y + 0.05], [-0.05, y + 0.05]], () => bar, { baseLateral: base0 });
+      const perRow = Math.max(1, Math.round(track.spacing / (o.barEvery ?? 0.55)));
+      for (let r = 0; r < rows.length - 1; r++) {
+        if (!wallOn(track, rows, r, side)) continue;
+        for (let k = 0; k < perRow; k++) {
+          const t = k / perRow;
+          const r0 = rows[r], r1 = rows[r + 1];
+          basePoint(r0, side, base0(r0), A); basePoint(r1, side, base0(r1), Bp);
+          A.lerp(Bp, t);
+          outward(r0, side, right); fwd.copy(r0.tan).setY(0).normalize();
+          B.box(A.x, A.y - 0.1, A.z, right, UP, fwd, 0.07, h + 0.1, 0.07, { top: bar, side: bar, bottom: bar }, true);
+          // spear tip: a four-sided pyramid
+          const tip = A.clone(); tip.y += h;
+          const v = (dx, dz) => new THREE.Vector3(tip.x + right.x * dx + fwd.x * dz, tip.y, tip.z + right.z * dx + fwd.z * dz);
+          const ap = new THREE.Vector3(tip.x, tip.y + 0.28, tip.z);
+          B.tri(v(-0.07, -0.07), v(0.07, -0.07), ap, bar); B.tri(v(0.07, -0.07), v(0.07, 0.07), ap, bar); B.tri(v(0.07, 0.07), v(-0.07, 0.07), ap, bar); B.tri(v(-0.07, 0.07), v(-0.07, -0.07), ap, bar);
+        }
+      }
+    }
+  },
+
   /** Metal guard rail on posts.  o: { rail, post, height } */
   rail(B, track, rows, o) {
     const rail = toColor(o.rail ?? '#cfd6e2'), post = toColor(o.post ?? '#6b7384'), h = o.height ?? 0.9;
@@ -133,16 +161,22 @@ const STYLES = {
   },
 };
 
-/**
- * Build all barriers for a track. Returns a Mesh (or null) ready to add to the scene.
- * spec = { type:'fence'|'wall'|'jersey'|'rail', ...style options }  |  null for none (e.g. floating roads)
- */
-export function buildBarriers(world, spec) {
-  if (!spec || spec.type === 'none') return null;
+/** Complement of s-ranges on a loop of length L (the stretches NOT covered), as [[a,b],...] with a <= b. */
+function complement(ranges, L) {
+  const r = ranges.map(([a, b]) => [((a % L) + L) % L, ((a % L) + L) % L + (b - a)]).sort((x, y) => x[0] - y[0]);
+  const out = [];
+  let cur = 0;
+  for (const [a, b] of r) { if (a > cur) out.push([cur, a]); cur = Math.max(cur, b); }
+  if (cur < L) out.push([cur, L]);
+  return out;
+}
+
+function buildLayer(world, spec) {
   const track = world.track;
   const rows = makeRows(track, 0, track.length, track.spacing);
   const B = new GeoBuilder();
-  _skip = spec.skip?.length ? spec.skip.map(([a, b]) => [a % track.length, a % track.length + (b - a)]) : null;
+  const skip = [...(spec.skip ?? []), ...(spec.ranges ? complement(spec.ranges, track.length) : [])];
+  _skip = skip.length ? skip.map(([a, b]) => [a % track.length, a % track.length + (b - a)]) : null;
   (STYLES[spec.type] ?? STYLES.wall)(B, track, rows, spec);
   _skip = null;
   if (!B.vertexCount) return null;
@@ -156,6 +190,23 @@ export function buildBarriers(world, spec) {
   mesh.receiveShadow = true;
   mesh.matrixAutoUpdate = false;
   return mesh;
+}
+
+/**
+ * Build all barriers for a track.  Returns a Mesh / Group (or null) ready to add to the scene.
+ * spec = { type:'fence'|'wall'|'jersey'|'rail'|'ironfence', skip:[[s0,s1]...], ranges:[[s0,s1]...] (only here), ...style options }
+ *      | { layers: [spec, spec, ...], skip }   several styles on different stretches (e.g. forest wall + cemetery iron fence)
+ *      | null for none (floating roads)
+ */
+export function buildBarriers(world, spec) {
+  if (!spec || spec.type === 'none') return null;
+  if (spec.layers) {
+    const g = new THREE.Group();
+    g.name = 'barriers';
+    for (const l of spec.layers) { const m = buildLayer(world, { ...l, skip: [...(l.skip ?? []), ...(spec.skip ?? [])] }); if (m) g.add(m); }
+    return g.children.length ? g : null;
+  }
+  return buildLayer(world, spec);
 }
 
 export { posts as _posts, sweep as _sweep };

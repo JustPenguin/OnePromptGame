@@ -54,7 +54,7 @@ export function createBillboards(world, items, opts = {}) {
   const info = new Float32Array(n * 3);
   const geo = quad.clone();
   geo.setAttribute('aInfo', new THREE.InstancedBufferAttribute(info, 3));
-  const map = world.tex(glowTexture({ inner: 'rgba(255,255,255,1)', outer: 'rgba(255,255,255,0)', hard: 0.02, ...(opts.texture ?? {}), size: 128 }));
+  const map = opts.map ?? world.tex(glowTexture({ inner: 'rgba(255,255,255,1)', outer: 'rgba(255,255,255,0)', hard: 0.02, ...(opts.texture ?? {}), size: 128 }));
   const mat = new THREE.ShaderMaterial({
     uniforms: { uTime: world.timeUniform, uMap: { value: map }, uFadeFar: { value: opts.fadeFar ?? 420 }, uFlicker: { value: 1 }, uIntensity: { value: opts.intensity ?? 1 }, uAspect: { value: opts.aspect ?? 1 } },
     vertexShader: VERT, fragmentShader: FRAG, transparent: true, depthWrite: false,

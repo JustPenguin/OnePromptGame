@@ -118,7 +118,7 @@ export class World {
     lap('terrain');
     this._buildRoadSurface(); lap('road');
     const gapSkip = this.track.gaps.map((g) => [g.s0 - 2, g.s1 + 2]);
-    const barriers = buildBarriers(this, c.barriers ? { ...c.barriers, skip: [...(c.barriers.skip ?? []), ...gapSkip] } : null);
+    const barriers = buildBarriers(this, c.barriers ? { ...c.barriers, skip: [...(c.barriers.skip ?? []), ...gapSkip] } : null);   // gaps (and layered styles) are handled inside buildBarriers
     if (barriers) this.group.add(barriers);
     lap('barriers');
     const pads = buildBoostPads(this, c.boost);
