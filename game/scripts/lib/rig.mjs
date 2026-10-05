@@ -76,9 +76,28 @@ export const DEFS = {
   meadows: sunnyMeadows,
 };
 
+/**
+ * Real SplineTrack. If its constructor needs more of a browser than the stubs provide (e.g. when the world/visual build was
+ * rewritten), fall back to building only the data side (samples, zones, features, racing line, minimap) - all physics needs.
+ * Set RIG_DATA_ONLY=1 to force the fallback.
+ */
+export function buildTrack(def) {
+  if (!process.env.RIG_DATA_ONLY) {
+    try { return new SplineTrack(def, {}); } catch (e) { if (process.env.RIG_VERBOSE) console.warn('[rig] full SplineTrack failed, data-only fallback:', e.message); }
+  }
+  const t = Object.create(SplineTrack.prototype);
+  t.def = def; t.id = def.id; t.name = def.name; t.theme = def.theme ?? 'meadow'; t.laps = def.laps ?? 3; t.quality = {};
+  const steps = [['_buildSamples', [def]], ['_buildZones', [def]], ['_buildFeatures', [def]], ['_buildRacingLine', []], ['_buildMinimap', []]];
+  for (const [name, args] of steps) {
+    if (typeof t[name] !== 'function') throw new Error(`rig: SplineTrack.${name} not found - adapt scripts/lib/rig.mjs buildTrack() to the new track internals`);
+    t[name](...args);
+  }
+  return t;
+}
+
 export function makeRig(def = DEFS.open, { speedClass = 'pro', seed = 1, laps = 1, withRace = false } = {}) {
   const events = new EventBus();
-  const track = new SplineTrack(def, {});
+  const track = buildTrack(def);
   const session = {
     events, track, karts: [], player: null, rng: mulberry32(seed), time: 0,
     config: { laps, mode: 'versus', skipIntro: true, speedClass, seed, racers: 1 },
