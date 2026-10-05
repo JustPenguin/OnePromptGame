@@ -34,7 +34,7 @@ export class SplineTrack {
   /** @param def track definition (see src/tracks/sunny-meadows.js)  @param opts { quality, headless } */
   constructor(def, opts = {}) {
     if (!def.points && def.layout) {
-      const lay = compileLayout(def.layout);
+      const lay = compileLayout({ width: def.width, shoulder: def.shoulder, ...def.layout });
       def = { ...def, points: lay.points, _layoutMarkers: lay.markers, _layoutLength: lay.length };
     }
     this.def = def;

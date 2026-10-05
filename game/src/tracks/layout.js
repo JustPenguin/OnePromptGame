@@ -137,6 +137,12 @@ export function compileLayout(spec) {
     if (p.sh !== undefined) shKeys.push([apex, p.sh]);
     if (p.yOut !== undefined) yKeys.push([rel(p.lineOut.s0 + Math.min(20, (p.lineOut.s1 - p.lineOut.s0) / 3)), p.yOut]);
   });
+  // every waypoint pins width (and shoulder, when the layout has a default) so un-keyed corners stay at the default instead of drifting between keys
+  V.forEach((p) => {
+    const apex = rel((p.arc.s0 + p.arc.s1) / 2);
+    if (p.w === undefined) wKeys.push([apex, defW]);
+    if (p.sh === undefined && spec.shoulder !== undefined) shKeys.push([apex, spec.shoulder]);
+  });
   if (!yKeys.length) yKeys.push([0, spec.y0 ?? 0]);
   if (!wKeys.length) wKeys.push([0, defW]);
   const yAt = periodicProfile(yKeys, L), wAt = periodicProfile(wKeys, L);

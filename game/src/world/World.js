@@ -15,6 +15,7 @@ import { buildBarriers } from './barriers.js';
 import { buildBoostPads, buildStartLine } from './features.js';
 import { buildRamps } from './ramps.js';
 import { buildCornerSigns } from './signs.js';
+import { buildSurfaceZones } from './surfaces.js';
 import { GeoBuilder } from './builder.js';
 import { createSky } from './sky.js';
 import { getRecipe } from './recipes/index.js';
@@ -121,6 +122,7 @@ export class World {
     const pads = buildBoostPads(this, c.boost);
     if (pads) this.group.add(pads);
     if (this.track.ramps.length) this.group.add(buildRamps(this, c.ramp ?? {}));
+    { const sz = buildSurfaceZones(this, c.zones ?? {}); if (sz) this.group.add(sz); }
     if (c.signs !== false) { const signs = buildCornerSigns(this, c.signs ?? {}); if (signs) this.group.add(signs); }
     if (c.start !== false) this.group.add(buildStartLine(this, { sub: this.def.name?.toUpperCase(), ...c.start }));
     lap('features');
@@ -283,7 +285,7 @@ export class World {
     const dd = this.quality.drawDistance ?? 1000;
     this.terrain?.cull(cp, dd);
     for (let i = 0; i < this.layers.length; i++) this.layers[i].cullTo(cp, dd);
-    for (let i = 0; i < this.updaters.length; i++) { const u = this.updaters[i]; (u.update ?? u)(dt, this.t, cp, session); }
+    for (let i = 0; i < this.updaters.length; i++) { const u = this.updaters[i]; const f = typeof u === 'function' ? u : u.update; if (f) f(dt, this.t, cp, session); }
   }
 
   dispose() {

@@ -41,7 +41,7 @@ const WATER_FRAG = /* glsl */ `
     if ( depth < 0.012 || uvm.x < 0.0 || uvm.y < 0.0 || uvm.x > 1.0 || uvm.y > 1.0 ) discard;
     vec2 p = vWorld.xz * uWaveScale;
     float t = uTime * uWaveSpeed;
-    #ifdef LAVA
+    #if defined( LAVA )
       vec2 q = vWorld.xz * 0.045 + uFlow * uTime * 0.04;
       float n = fbm( q + vec2( fbm( q * 1.7 + t * 0.15 ), fbm( q * 1.3 - t * 0.12 ) ) * 1.6 );
       float crust = smoothstep( 0.46, 0.66, n );
@@ -53,6 +53,19 @@ const WATER_FRAG = /* glsl */ `
       float edge = 1.0 - smoothstep( 0.0, 0.7, depth );
       col += uLavaB * edge * 0.8;
       gl_FragColor = vec4( col * uGlow, 1.0 );
+    #elif defined( ICE )
+      vec3 V = normalize( cameraPosition - vWorld );
+      float fres = pow( 1.0 - max( V.y, 0.0 ), 3.0 );
+      float nn = fbm( vWorld.xz * 0.08 );
+      float cr1 = 1.0 - smoothstep( 0.0, 0.045, abs( vnoise( vWorld.xz * 0.33 + nn * 3.0 ) - 0.5 ) );
+      float cr2 = 1.0 - smoothstep( 0.0, 0.03, abs( vnoise( vWorld.xz * 1.1 - 4.0 ) - 0.5 ) );
+      vec3 base = mix( uShallow, uDeep, smoothstep( 0.0, 2.2, depth ) * 0.8 + nn * 0.2 );
+      vec3 col = mix( base, mix( uHorizon, uSky, 0.5 ), 0.22 + fres * 0.6 );
+      col += vec3( 0.7, 0.86, 1.0 ) * ( cr1 * 0.4 + cr2 * 0.22 );
+      vec3 H = normalize( uSunDir + V );
+      col += uSunColor * pow( max( H.y, 0.0 ), 90.0 ) * 1.2;
+      col += vec3( 0.9, 0.95, 1.0 ) * step( 0.992, vnoise( vWorld.xz * 11.0 + floor( uTime * 2.0 ) ) ) * 0.8;
+      gl_FragColor = vec4( col, 1.0 );
     #else
       vec2 f = uFlow * uTime;
       float a = fbm3( p + f + vec2( t * 0.7, -t * 0.4 ) ), b = fbm3( p * 1.9 - f * 1.3 + vec2( -t * 0.5, t * 0.6 ) + 7.0 );
@@ -192,7 +205,7 @@ export function addWater(world, spec) {
     uOpacity: { value: spec.opacity ?? 0.92 }, uFoamAmt: { value: spec.foam ?? 1 },
     uLavaA: { value: toColor(col.lavaA ?? '#ff3d0a') }, uLavaB: { value: toColor(col.lavaB ?? '#ffd23f') }, uGlow: { value: spec.glow ?? 1.4 },
   };
-  const mat = shaderMaterial({ uniforms, vertex: WATER_VERT, fragment: WATER_FRAG, transparent: kind !== 'lava', depthWrite: kind === 'lava', defines: kind === 'lava' ? { LAVA: 1 } : undefined });
+  const mat = shaderMaterial({ uniforms, vertex: WATER_VERT, fragment: WATER_FRAG, transparent: kind !== 'lava' && spec.look !== 'ice', depthWrite: kind === 'lava' || spec.look === 'ice', defines: kind === 'lava' ? { LAVA: 1 } : spec.look === 'ice' ? { ICE: 1 } : undefined });
   const geo = new THREE.PlaneGeometry(sx, sz, 1, 1);
   geo.rotateX(-Math.PI / 2);
   const mesh = new THREE.Mesh(geo, mat);
