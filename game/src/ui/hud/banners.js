@@ -11,8 +11,8 @@ export class Countdown {
   constructor() {
     this.burst = h('div', { class: 'burst' });
     this.num = h('div', { class: 'cd' });
-    this.hint = h('div', { class: 'cdhint hint' });
-    this.el = h('div', { class: 'hz c' }, this.burst, this.num, this.hint);
+    this.hint = h('div', { class: 'cdhint hint' });         // placed by the HUD in its bottom-centre stack (.zb), not here
+    this.el = h('div', { class: 'hz c' }, this.burst, this.num);
   }
 
   /** gasNode: keycap / glyph / text shown in the rocket-start hint. */
@@ -38,7 +38,7 @@ export class Banners {
     this.finBanner = h('div', { class: 'banner fin stay' }, h('div', {}, h('span', { class: 'fp' }), h('small', {})));
     this.wrong = h('div', { class: 'wrongway', role: 'alert' }, icon('down'), 'Wrong way', icon('down'));
     this.photo = h('div', { class: 'banner photo' }, h('div', {}, 'Photo finish!', h('small', {})));
-    this.el = h('div', { class: 'hz c' }, this.finalBanner, this.finBanner, this.photo, this.wrong);
+    this.el = h('div', { class: 'hz c' }, this.finalBanner, this.finBanner, this.photo);   // .wrong lives in the top-centre stack (.zt)
   }
   final() { replay(this.finalBanner, 'show'); }
   finish(place, time, name = 'Finish!') {

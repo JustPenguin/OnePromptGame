@@ -1,8 +1,8 @@
 // Race HUD. OWNER: Agent E.  Reads session.player / race / track / karts and session events; never writes to the game.
 //   new Hud(ui, session)  .root (mount in ui.layers.hud)  .update(dt, session, snap)  .destroy()
 //   .setDim(on) .hide() .applySettings() .onResize() .onDevice(d)
-// Zones: tl (item, coins, status) · ml (standings) · bl (position) · tr (lap, timer, lap times, ghost) · mr (minimap) · br (speedometer)
-//        bc (drift meter) · tc (event toasts) · c (countdown, banners, intro).  CSS: ./hudCss.js
+// Zones (CSS: ./hudCss.js): zl (item, position, coins, status chips, standings, ghost) · zr (lap, respawn, pause, timer, lap times, minimap, speedometer)
+//        zb (coach, rocket-start hint, skip pill, drift label + meter, fps) · zt (wrong-way, respawn ring, event toasts) · c (countdown, banners, intro).
 import { h } from '../dom.js';
 import { icon } from '../icons.js';
 import { EV } from '../../core/events.js';
@@ -81,19 +81,14 @@ export class Hud {
     this.touch = new TouchControls(this.app);
     this.coach = new Coach(this);
 
+    // Four reserved zones (see hudCss.js): every dynamic widget lives INSIDE one, so nothing can overlap.
     this.root = h('div', { class: 'hud', 'data-phase': session.race?.phase ?? 'intro' },
       this.effects.el,
-      h('div', { class: 'hz tl' }, this.item.el, this.coins, this.status.el),
-      h('div', { class: 'hz ml' }, this.board.el),
-      h('div', { class: 'hz bl' }, this.posEl),
-      h('div', { class: 'hz tr' }, h('div', { class: 'trrow' }, this.lapbox, this.respawnBtn, this.pauseBtn), this.timerEl, this.lapList, this.ghostBox),
-      h('div', { class: 'hz mr' }, this.mini.el),
-      h('div', { class: 'hz br' }, this.speedo.el),
-      h('div', { class: 'hz bc' }, h('div', { style: { position: 'relative' } }, this.drift.label, this.drift.el)),
-      this.coach.el,
-      h('div', { class: 'hz tc' }, this.feed.el),
-      this.countdown.el, this.banners.el, this.introCard.el, this.skip,
-      this.respawnRing.el, this.touch.root, this.fps);
+      h('div', { class: 'zl' }, this.item.el, h('div', { class: 'zl-mid' }, this.posEl, this.coins, this.ghostBox), this.status.el, this.board.el),
+      h('div', { class: 'zr' }, h('div', { class: 'trrow' }, this.lapbox, this.respawnBtn, this.pauseBtn), this.timerEl, this.lapList, h('div', { class: 'zr-inst' }, this.mini.el, this.speedo.el)),
+      h('div', { class: 'zb' }, this.coach.el, this.countdown.hint, this.skip, h('div', { class: 'dwrap' }, this.drift.label, this.drift.el), this.fps),
+      h('div', { class: 'zt' }, this.banners.wrong, this.respawnRing.el, this.feed.el),
+      this.countdown.el, this.banners.el, this.introCard.el, this.touch.root);
 
     this.mini.setTrack(session);
     this._bindEvents();
@@ -141,7 +136,7 @@ export class Hud {
       this.posEl.classList.add(to < from ? 'up' : 'down');
       this.placeAcc = { from: this.placeAcc?.from ?? from, last: this.t };
     });
-    on(EV.WRONG_WAY, ({ kart, active }) => { if (kart === me) this.banners.wrongWay(active); });
+    on(EV.WRONG_WAY, ({ kart, active }) => { if (kart === me) { this.banners.wrongWay(active); this.root.classList.toggle('alert', !!active); } });
     if (EV.DRAFT) on(EV.DRAFT, ({ kart, active }) => { if (kart === me) this.status.setDraft(active); });
     if (EV.PHOTO_FINISH) on(EV.PHOTO_FINISH, ({ active, rival }) => this.banners.photoFinish(active, rival?.name));
     on(EV.ITEM_HIT, ({ victim, attacker, type }) => {
@@ -239,12 +234,14 @@ export class Hud {
     this.root.classList.toggle('nomap', st.showMinimap === false);
     this.root.classList.toggle('noboard', st.showLeaderboard === false);
     this.effects.reduceFlashes = !!st.reduceFlashes;
-    this.fps.style.display = st.showFps ? '' : 'none';
+    this.fps.style.display = st.showFps ? 'block' : 'none';
+    this.root.classList.toggle('showfps', !!st.showFps);
+    this.root.style.setProperty('--ts', String(clamp(Number(st.touchScale) || 1, 0.7, 1.5)));   // touch-button size: the zones that must clear the buttons scale with it
     this.touch.applySettings();
     this.onDevice(this.ui.device);
   }
 
-  onResize() { this.mini.base = null; }
+  onResize() { this.mini.base = null; this.touch.applySettings(); }   // rotating a phone mid-race: the touch buttons re-fit the new layout
   setDim(on) { this.root.classList.toggle('dim', !!on); }
   hide() { this.root.classList.add('gone'); }
 
@@ -333,6 +330,8 @@ export class Hud {
     // optional engine hooks (Agent A): hold-to-respawn progress, rocket-start window
     const hold = Number.isFinite(session.respawnHold) ? session.respawnHold : 0;
     this.respawnRing.update(hold);
+    const respawning = hold > 0.03;
+    if (respawning !== this._respawning) { this._respawning = respawning; this.root.classList.toggle('respawning', respawning); }
     const rw = !!race.rocketWindowOpen;
     this.countdown.setWindow(rw && race.phase === 'countdown');
 

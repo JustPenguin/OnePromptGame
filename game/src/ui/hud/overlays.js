@@ -107,7 +107,7 @@ export class StatusChips {
     this.chips = {};
     const mk = (id, ico, label, color) => {
       const t = h('small', {});
-      const el = h('div', { class: 'chipst', style: { '--sc': color, display: 'none' } }, icon(ico), label, t);
+      const el = h('div', { class: `chipst c-${id}`, style: { '--sc': color, display: 'none' } }, icon(ico), h('span', { class: 'cl' }, label), t);
       this.el.appendChild(el);
       this.chips[id] = { el, t };
     };
