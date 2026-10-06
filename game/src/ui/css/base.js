@@ -222,6 +222,8 @@ textarea.txt{resize:none;font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,
 .spacer{flex:1;}
 .scroll{overflow-y:auto;overflow-x:hidden;scrollbar-width:thin;scrollbar-color:rgba(255,255,255,.3) transparent;overscroll-behavior:contain;}
 .scroll::-webkit-scrollbar{width:.5rem;} .scroll::-webkit-scrollbar-thumb{background:rgba(255,255,255,.28);border-radius:1rem;}
+.fade-b{-webkit-mask-image:linear-gradient(180deg,#000 0,#000 calc(100% - 1.7rem),transparent 100%);mask-image:linear-gradient(180deg,#000 0,#000 calc(100% - 1.7rem),transparent 100%);}
+.fade-b::after{content:'';display:block;height:1.6rem;flex:none;}   /* keeps the last row clear of the fade */
 .lockdim{filter:grayscale(.9) brightness(.55);}
 .ghost-pulse{animation:ghostp 1.6s ease-in-out infinite;}
 @keyframes ghostp{50%{opacity:.55}}

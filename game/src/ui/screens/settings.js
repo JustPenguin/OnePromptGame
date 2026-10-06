@@ -70,7 +70,7 @@ export class SettingsScreen extends Screen {
       el.addEventListener('click', () => this.switchTab(i));
       return el;
     });
-    this.body = h('div', { class: 'set-body scroll', role: 'tabpanel' });
+    this.body = h('div', { class: 'set-body scroll fade-b', role: 'tabpanel' });
     this.foot = h('div', { class: 'set-foot' });
     const from = this.params.from;
     const el = h('div', { class: 'screen' },

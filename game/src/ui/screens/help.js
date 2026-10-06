@@ -47,7 +47,7 @@ export class HelpScreen extends Screen {
       el.addEventListener('click', () => this.switchTab(i));
       return el;
     });
-    this.body = h('div', { class: 'help-body scroll', role: 'tabpanel', tabindex: 0, 'data-nav': '', 'data-scroll': '', 'aria-label': 'Help content' });
+    this.body = h('div', { class: 'help-body scroll fade-b', role: 'tabpanel', tabindex: 0, 'data-nav': '', 'data-scroll': '', 'aria-label': 'Help content' });
     const el = h('div', { class: 'screen' },
       h('div', { class: 'scrim-all' }),
       h('div', { class: 'help-wrap' },

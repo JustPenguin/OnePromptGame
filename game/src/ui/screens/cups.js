@@ -122,7 +122,7 @@ export class TrackScreen extends Screen {
     return h('div', { class: 'screen' },
       h('div', { class: 'scrim-all' }),
       screenHeader({ kicker: MODE_NAMES[f.mode], title: 'Choose the track', steps: f.stepLabels(), step: f.stepIndex('track'), back: () => this.onBack() }),
-      h('div', { class: 'track-scroll scroll' }, groups),
+      h('div', { class: 'track-scroll scroll fade-b' }, groups),
       h('div', { class: 'tt-bar' }, this.info, this.ghostBtn));
   }
 

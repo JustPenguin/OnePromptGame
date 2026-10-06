@@ -69,7 +69,7 @@ export class RecordsScreen extends Screen {
       el.addEventListener('click', () => this.switchTab(i));
       return el;
     });
-    this.body = h('div', { class: 'rec-body scroll', role: 'tabpanel', tabindex: 0, 'data-nav': '', 'data-scroll': '', 'aria-label': 'Records' });
+    this.body = h('div', { class: 'rec-body scroll fade-b', role: 'tabpanel', tabindex: 0, 'data-nav': '', 'data-scroll': '', 'aria-label': 'Records' });
     const el = h('div', { class: 'screen' },
       h('div', { class: 'scrim-all' }),
       h('div', { class: 'rec-wrap' },

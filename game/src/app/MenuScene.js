@@ -50,6 +50,7 @@ export class MenuScene {
     this.comp = { x: 0, y: 0, cx: 0, cy: 0 };
     this.drag = { on: false, vel: 0, extra: 0, lastX: 0 };
     this.theme = { primary: c('#22d3ff'), secondary: c('#ff7a1a'), tp: c('#22d3ff'), ts: c('#ff7a1a') };
+    this.calm = 1;      // 1 = full show (title/select), ~0.22 on text-heavy 'dim' screens so rings and grid never cut through copy
     this.showcase = null;
     this.leaving = [];
     this.podium = null;
@@ -399,10 +400,11 @@ export class MenuScene {
     // theme colour tween
     const tk = 1 - Math.exp(-2.5 * dt);
     this.theme.primary.lerp(this.theme.tp, tk); this.theme.secondary.lerp(this.theme.ts, tk);
-    this.ringMat.color.copy(this.theme.primary).multiplyScalar(2.4);
-    this.ringMat2.color.copy(this.theme.secondary).multiplyScalar(2.2);
+    this.calm += ((this.preset === 'dim' ? 0.2 : 1) - this.calm) * (1 - Math.exp(-4 * dt));
+    this.ringMat.color.copy(this.theme.primary).multiplyScalar(2.4 * this.calm);
+    this.ringMat2.color.copy(this.theme.secondary).multiplyScalar(2.2 * this.calm);
     this.rimA.color.copy(this.theme.primary); this.rimB.color.copy(this.theme.secondary);
-    this.gridUniforms.uColor.value.copy(this.theme.primary);
+    this.gridUniforms.uColor.value.copy(this.theme.primary).multiplyScalar(0.55 + 0.45 * this.calm);
     this.gridUniforms.uTime.value = rm ? 0 : t;
     if (this.cones[0]) { this.cones[0].material.uniforms.uColor.value.copy(this.theme.primary); this.cones[1].material.uniforms.uColor.value.copy(this.theme.secondary); }
     for (const m of this.cones) m.material.uniforms.uTime.value = t;
