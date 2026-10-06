@@ -207,12 +207,16 @@ export class Nav {
     if (!scope) return;
     if (e.ctrlKey || e.metaKey || e.altKey) return;
     const typing = isTyping(e.target);
-    const code = e.code;
+    // soft keyboards (Android) often report an empty `code`: fall back to `key` for the two keys that matter inside text fields
+    const code = e.code || (e.key === 'Enter' ? 'Enter' : e.key === 'Escape' ? 'Escape' : '');
     this._setDevice('keyboard');
     let handled = false;
     if (scope.onKey?.(e)) { e.preventDefault(); e.stopImmediatePropagation(); return; }   // screens may claim a key first (title: any key)
     // inside a text field: Esc / Enter finish editing (never leave the screen); only Up/Down move on
     if (typing && (code === 'Escape' || ((code === 'Enter' || code === 'NumpadEnter') && e.target.tagName !== 'TEXTAREA'))) {
+      // a field can claim them (`input._onEnter` / `input._onEsc`, e.g. the welcome dialog: Enter = "Let's race", Esc = "Skip")
+      const hook = code === 'Escape' ? e.target._onEsc : e.target._onEnter;
+      if (typeof hook === 'function') { e.preventDefault(); e.stopImmediatePropagation(); if (!e.repeat) hook(e); return; }
       e.target.blur?.();
       if (this.focused && this.scope?.root.contains(this.focused)) { try { this.focused.focus({ preventScroll: true }); } catch { /* ignore */ } }
       e.preventDefault(); e.stopImmediatePropagation();

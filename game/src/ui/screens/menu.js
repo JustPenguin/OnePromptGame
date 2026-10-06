@@ -109,10 +109,11 @@ export class MainMenuScreen extends Screen {
   async welcome() {
     const p = this.app.save.profile;
     p.seen.welcome = true; this.app.save.commit();
-    const input = h('input', { type: 'text', class: 'txt', maxlength: 14, placeholder: 'Racer', 'aria-label': 'Your racer name', spellcheck: 'false', autocomplete: 'off', 'data-nav': '', 'data-default': '' });
+    const input = h('input', { type: 'text', class: 'txt', maxlength: 14, placeholder: 'Racer', 'aria-label': 'Your racer name', spellcheck: 'false', autocomplete: 'off', enterkeyhint: 'go', 'data-nav': '', 'data-default': '' });
     input.value = p.nameSet ? p.name : '';
     const body = h('div', {}, h('p', { style: { margin: '0 0 .7rem' } }, 'Pick a name for the results board. You can change it any time in Settings.'), input);
     const go = await this.ui.modal({ title: 'Welcome to Kart Rush GP!', body, dismissValue: false,
+      onBuild: ({ close }) => { input._onEnter = () => close(true); input._onEsc = () => close(false); },    // Enter in the field = "Let's race", Esc = "Skip"
       buttons: [{ label: 'Skip', value: false, variant: 'glass', icon: 'right' }, { label: 'Let\'s race', value: true, variant: 'green', icon: 'check', def: true }] });
     const v = input.value.replace(/[<>]/g, '').trim().slice(0, 14);
     if (go && v) { p.name = v; p.nameSet = true; this.app.save.commit(); this.root?.querySelector('.profile .pn')?.replaceChildren(v); }
