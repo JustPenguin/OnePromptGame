@@ -86,6 +86,30 @@ await ok('unlocks: rule table drives the evaluator, hints carry progress', () =>
   assert.deepEqual([p.cur, p.goal, p.done], [0, 6, false]);
 });
 
+await ok('unlock everything (profile.unlockAll): all selectable at once, earned progress still tracked, off = normal rules again', async () => {
+  const { isCupUnlocked, isTrackUnlocked, allUnlocked, cupOfTrack } = await import('./catalog.js');
+  const save = fakeSave();
+  assert.equal(allUnlocked(save), false);
+  for (const [k, id] of [['driver', 'luna'], ['driver', 'rocco'], ['body', 'crusher'], ['body', 'hopper'], ['speedClass', 'master']]) assert.equal(isUnlocked(save, k, id), false, `${k}:${id} locked by default`);
+  assert.equal(isCupUnlocked(save, 'starlight'), false);
+  save.data.profile.unlockAll = true;
+  assert.ok(allUnlocked(save));
+  for (const [k, id] of [['driver', 'luna'], ['driver', 'gizmo'], ['driver', 'quill'], ['driver', 'rocco'], ['body', 'crusher'], ['body', 'hopper'], ['speedClass', 'master']]) assert.ok(isUnlocked(save, k, id), `${k}:${id} open with the switch`);
+  assert.ok(isCupUnlocked(save, 'starlight'));
+  const starTrack = getCups().find((c) => c.id === 'starlight')?.tracks[0]?.id;
+  if (starTrack) assert.ok(isTrackUnlocked(save, starTrack) && cupOfTrack(starTrack).id === 'starlight');
+  // earned unlocks are still recorded (and Full Garage still needs the real thing) but nothing is announced as new
+  save.data.stats.races = 3;
+  assert.deepEqual(evaluateUnlocks(save), []);
+  assert.ok(save.data.unlocks.drivers.includes('luna'));
+  assert.ok(!save.data.unlocks.drivers.includes('rocco'), 'the switch never writes into the earned lists');
+  save.data.profile.unlockAll = false;
+  assert.equal(isUnlocked(save, 'driver', 'luna'), true, 'what was earned stays');
+  assert.equal(isUnlocked(save, 'driver', 'rocco'), false); assert.equal(isUnlocked(save, 'body', 'crusher'), false); assert.equal(isCupUnlocked(save, 'starlight'), false);
+  save.data.stats.wins = 2;
+  assert.deepEqual(evaluateUnlocks(save).map((u) => u.target), ['gizmo'], 'normal progression announces new unlocks again');
+});
+
 await ok('achievements: single-race context and totals', () => {
   const save = fakeSave();
   assert.deepEqual(evaluateAchievements(save, null), []);

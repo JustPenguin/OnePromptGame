@@ -63,6 +63,7 @@ function sanitizeProfile(raw, base) {
   if (Number.isFinite(raw.created)) out.created = raw.created;
   if (typeof raw.tutorialDone === 'boolean') out.tutorialDone = raw.tutorialDone;
   if (typeof raw.nameSet === 'boolean') out.nameSet = raw.nameSet;
+  if (typeof raw.unlockAll === 'boolean') out.unlockAll = raw.unlockAll;
   if (isObj(raw.seen)) { out.seen = { ...base.seen }; for (const k of Object.keys(base.seen)) if (typeof raw.seen[k] === 'boolean') out.seen[k] = raw.seen[k]; }
   else out.seen = { ...base.seen };
   if (isObj(raw.versus)) {

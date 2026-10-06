@@ -9,6 +9,8 @@ import { canFullscreen, toggleFullscreen, isFullscreen } from '../fullscreen.js'
 import { summarizeSave } from '../../save/Save.js';
 import { copyText } from '../clipboard.js';
 import { HudPreview } from '../hud/preview.js';
+import { DRIVERS, KART_BODIES, SPEED_CLASSES } from '../../data/roster.js';
+import { getCups } from '../../modes/catalog.js';
 
 export const settingsCss = /* css */ `
 .s-settings{align-items:center;}
@@ -304,6 +306,13 @@ export class SettingsScreen extends Screen {
     return [
       h('div', { class: 'set-h' }, 'Profile'), nameRow, status,
       h('div', { class: 'set-note' }, `${sum.races} races · ${sum.wins} wins · ${sum.trophies} trophies · ${Math.round(sum.playSeconds / 60)} min played`),
+      h('div', { class: 'set-h' }, 'Unlocks'),
+      h('div', { class: 'set-note' }, p.unlockAll
+        ? 'Everything is unlocked. Your records and real progress are still tracked.'
+        : 'Drivers, karts, cups and speed classes normally open as you race. Want to try them all right away?'),
+      h('div', { class: 'btn-row' }, p.unlockAll
+        ? button({ label: 'Back to normal', icon: 'lock', variant: 'glass', size: 'sm', onClick: () => this.unlockAllFlow(false) })
+        : button({ label: 'Unlock everything', icon: 'star', variant: 'green', size: 'sm', onClick: () => this.unlockAllFlow(true) })),
       h('div', { class: 'set-h' }, 'Backup'),
       h('div', { class: 'set-note' }, 'Downloads are not available here, so your save is shared as a text code you can copy and paste.'),
       h('div', { class: 'btn-row' },
@@ -312,6 +321,21 @@ export class SettingsScreen extends Screen {
         button({ label: 'Show tips again', icon: 'tip', variant: 'glass', size: 'sm', onClick: () => { const seen = this.app.save.profile.seen; for (const k of Object.keys(seen)) seen[k] = false; this.app.save.commit(); this.ui.toast({ title: 'Tips are back', text: 'You will see the driving hints in your next race.', icon: 'tip' }); } }),
         button({ label: 'Reset progress', icon: 'trash', variant: 'red', size: 'sm', onClick: () => this.resetFlow() })),
     ];
+  }
+
+  /** "Unlock everything": a saved switch (profile.unlockAll), confirmed in-page. Earned progress keeps being tracked underneath it. */
+  async unlockAllFlow(on) {
+    const save = this.app.save;
+    if (on) {
+      const what = `${DRIVERS.length} drivers, ${KART_BODIES.length} karts, ${getCups().length} cups and all ${Object.keys(SPEED_CLASSES).length} speed classes`;
+      const ok = await this.ui.confirm({ title: 'Unlock everything?', body: `${what} will be open right away. Your records and real progress are kept, and you can switch this off again here whenever you like.`, confirm: 'Unlock everything', cancel: 'Not now', confirmIcon: 'star' });
+      if (!ok) return;
+    }
+    save.profile.unlockAll = !!on;
+    save.commit(true);
+    this.ui.sfx(on ? 'unlock' : 'back');
+    this.ui.toast(on ? { title: 'Everything unlocked', text: 'Try any driver, kart, cup and speed class.', kind: 'good', icon: 'star' } : { title: 'Back to normal', text: 'Locked items open as you earn them again.', icon: 'lock' });
+    this.renderTab();
   }
 
   async exportFlow() {
