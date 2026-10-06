@@ -3,7 +3,7 @@
 //   attachKartVisual(kart, session)  builds kart.visual = { root, update(dt, kart, session), dispose(), ... } and adds it under
 //                                    kart.root (positioned/oriented by physics; the model faces +Z, origin on the ground under the kart's centre).
 //   createKartShowcase(driverId, bodyId, opts) -> { root, update(dt), dispose(), setPose(name), setPaint(color), ... }   for menu turntables / podium.
-//   opts: { pose, quality, envMap, paint }   (paint = optional custom paint colour, e.g. '#ff3d9a')
+//   opts: { pose, quality, envMap, paint, trim }   (paint = optional custom paint colour, e.g. '#ff3d9a'; trim = exposure trim, default 0.72 for menu stages)
 // Each kart is ONE SkinnedMesh (rigid-bound bones, one patched PBR material, see kartMaterial.js) + one face-decal mesh = 2 draw calls.
 // Animation is procedural, driven every frame by kart fields (speed, steerVisual, lean, drift, boost, spin, grounded, race...) and by
 // session events, and is allocation-free.  The pose solve is deferred to render time (`flush()`), so fast headless simulation
@@ -147,6 +147,7 @@ export class KartVisual {
     this.session = opts.session ?? null;
     this.deferred = false;
     this.pending = 0;
+    this._td = 0;
     this.time = Math.random() * 10;
     this.qualityId = opts.quality ?? 'high';
     this.envMap = opts.envMap ?? getSharedEnvironment() ?? null;
@@ -184,6 +185,7 @@ export class KartVisual {
     this.matHigh = null; this.matStd = null; this.matGhost = null;
     this.driverPrimary = new THREE.Color(A.driver.colors.primary);
     this.paint = opts.paint ? new THREE.Color(opts.paint) : null;
+    this.trim = opts.trim ?? 1;
     this.mat = this._pickMaterial();
     this._syncPaint();
     this.mesh = new THREE.SkinnedMesh(A.geometry, this.mat);
@@ -209,6 +211,7 @@ export class KartVisual {
     });
     if (st.emissive) { fm.emissive = new THREE.Color(1, 1, 1); fm.emissiveMap = this.faceTex; fm.emissiveIntensity = 1.7; }
     this.faceMat = fm;
+    if (this.trim !== 1) fm.color.setScalar(this.trim);
     const h = A.drv.head;
     this.face = new THREE.Mesh(A.faceGeo, fm);
     this.face.name = 'face';
@@ -252,7 +255,7 @@ export class KartVisual {
       susp: new Spring(260, 18), squash: new Spring(210, 13), bob: new Spring(90, 7), roll: new Spring(120, 10),
       torsoRoll: 0, torsoPitch: 0, headYaw: 0, headPitch: 0, headRoll: 0, lookBack: 0, boostBlend: 0, driftBlend: 0,
       blinkT: 1 + Math.random() * 3, blinkLeft: 0, hold: 0, holdFrame: FACE.OPEN, flash: 0, wobble: 0, flicker: 0,
-      throwT: 0, throwDir: 1, cheerT: 0, bump: 0, boostPunch: 0, wasAir: false, steerWheel: 0, rainbow: 0, glow: 1,
+      throwT: 0, throwDir: 1, cheerT: 0, bump: 0, boostPunch: 0, wasAir: false, steerWheel: 0, rainbow: 0, hot: 0, glow: 1,
       celebrate: 0, slump: 0, finishPose: 0, airT: 0, idle: Math.random() * 6,
     };
 
@@ -279,8 +282,11 @@ export class KartVisual {
     this.paint = color == null ? null : new THREE.Color(color);
     this._syncPaint();
   }
+  /** Exposure trim of the whole kart (1 = as lit; < 1 darkens): menu showcases use ~0.72 so paint colours pop under the stage lights. */
+  setTrim(t) { this.trim = t; this._syncPaint(); if (this.faceMat) this.faceMat.color.setScalar(t); }
   _syncPaint() {
     const u = this.mat?.userData?.u; if (!u) return;
+    u.uTrim.value = this.trim;
     const p = this.paint, f = this.driverPrimary;
     u.uPaintOn.value = p ? 1 : 0;
     if (p) { u.uPaintFrom.value.copy(f); u.uPaintTo.value.copy(p); u.uPaintLum.value = Math.max(0.02, 0.2126 * f.r + 0.7152 * f.g + 0.0722 * f.b); }
@@ -341,8 +347,9 @@ export class KartVisual {
     if (!k) return;
     let dt = this.pending;
     this.pending = 0;
+    this._td = Math.min(dt, 8);          // wall-clock the one-shot timers (flash, flicker, hold...) must still age by, even after a long headless advance()
     if (dt <= 0) dt = 1e-4;
-    dt = Math.min(dt, 0.1);
+    dt = Math.min(dt, 0.1);              // springs / animation integrate with a clamped step (stability)
     this.time += dt;
     this._updateLod(k);
     this._solve(dt, k);
@@ -400,13 +407,14 @@ export class KartVisual {
     s.boostBlend = damp(s.boostBlend, boosting ? 1 : 0, boosting ? 9 : 4, dt);
     s.driftBlend = damp(s.driftBlend, dr.dir !== 0 ? 1 : 0, 10, dt);
     s.lookBack = damp(s.lookBack, k.input?.lookBack && !finished ? 1 : 0, 10, dt);
-    s.boostPunch = Math.max(0, s.boostPunch - dt * 2.4);
-    s.flash = Math.max(0, s.flash - dt * 3.2);
-    s.wobble = Math.max(0, s.wobble - dt * 1.7);
-    s.flicker = Math.max(0, s.flicker - dt);
-    s.bump = Math.max(0, s.bump - dt * 1.8);
-    s.throwT = Math.max(0, s.throwT - dt * 2.6);
-    s.hold = Math.max(0, s.hold - dt);
+    const td = dt > this._td ? dt : this._td;      // timers age by the full elapsed time (a hit 20 s ago must not still be flashing white)
+    s.boostPunch = Math.max(0, s.boostPunch - td * 2.4);
+    s.flash = Math.max(0, s.flash - td * 3.2);
+    s.wobble = Math.max(0, s.wobble - td * 1.7);
+    s.flicker = Math.max(0, s.flicker - td);
+    s.bump = Math.max(0, s.bump - td * 1.8);
+    s.throwT = Math.max(0, s.throwT - td * 2.6);
+    s.hold = Math.max(0, s.hold - td);
     s.idle += dt;
     s.airT = flying ? s.airT + dt : 0;
     const vy = k.vy ?? 0;
@@ -494,10 +502,13 @@ export class KartVisual {
     // ---- shader state
     const u = this.mat.userData.u;
     u.uTime.value = t;
-    u.uFlash.value = s.flash > 0 ? Math.min(1, s.flash) * (0.55 + 0.45 * Math.sin(t * 40)) : 0;
-    const inv = (k.invincible ?? 0) > 0 || (k.rocket ?? 0) > 0;
-    s.rainbow = damp(s.rainbow, inv ? 1 : 0, 8, dt);
-    u.uRainbow.value = s.rainbow;
+    u.uFlash.value = s.flash > 0 ? Math.min(1, s.flash) * (0.5 + 0.2 * Math.sin(t * 40)) : 0;      // peak 0.7: a hit whitens the kart but never erases its colours
+    // Prism Shield / Rocket Rider / star: a bounded iridescent (or fiery) shimmer; blinks during the last 1.5 s
+    const left = Math.max(k.invincible ?? 0, k.rocket ?? 0);
+    s.rainbow = damp(s.rainbow, left > 0 ? 1 : 0, 8, dt);
+    s.hot = damp(s.hot, (k.rocket ?? 0) > 0 ? 1 : 0, 10, dt);
+    u.uRainbow.value = s.rainbow * (left > 0 && left < 1.5 ? 0.65 + 0.35 * Math.sin(t * 22) : 1);
+    u.uHot.value = s.hot;
     u.uGlow.value = 1 + s.boostBlend * 0.8 + s.boostPunch * 0.8;
     // respawn / post-respawn flicker
     this.root.visible = !(s.flicker > 0 && Math.floor(t * 14) % 2 === 0);
@@ -625,7 +636,7 @@ export function attachKartVisual(kart, session) {
  */
 export function createKartShowcase(driverId, bodyId, opts = {}) {
   const fake = makeFakeKart(driverId, bodyId);
-  const vis = new KartVisual(driverId, bodyId, { kart: fake, quality: opts.quality ?? 'high', envMap: opts.envMap, paint: opts.paint });
+  const vis = new KartVisual(driverId, bodyId, { kart: fake, quality: opts.quality ?? 'high', envMap: opts.envMap, paint: opts.paint, trim: opts.trim ?? 0.72 });
   vis.deferred = false;
   const root = new THREE.Group();
   root.name = 'kartShowcase';

@@ -117,10 +117,10 @@ void main() {
   vec2 d = (uv - uCenter) * uAspect;           // aspect-corrected offset from the focal point
   float r = length(d);
   // ---- scene sample: radial speed blur (centre stays sharp) + chromatic aberration (grows toward the edges)
-  float mask = smoothstep(0.16, 0.75, r);
+  float mask = smoothstep(0.36, 1.0, r);                       // the middle of the frame (kart + road) never blurs
   vec2 dir = (uv - uCenter);
   vec3 col;
-  float ca = uChroma * (0.35 + r * r * 2.2);
+  float ca = uChroma * (0.35 + r * r * 1.4);
   if (uBlur > 0.0005) {
     col = vec3(0.0);
     float wsum = 0.0;
@@ -145,8 +145,8 @@ void main() {
     float h = hash11(lane + floor(uTime * 14.0) * 13.0);
     float fr = fract(ang * lanes);
     float spoke = step(0.84, h) * smoothstep(0.0, 0.2, fr) * (1.0 - smoothstep(0.55, 1.0, fr));
-    float len = smoothstep(0.42 + h * 0.16, 0.95, r);
-    col += mix(vec3(1.0, 0.97, 0.92), vec3(0.6, 0.9, 1.0), uBoost) * spoke * len * uLines * 0.9;
+    float len = smoothstep(0.5 + h * 0.16, 1.0, r);
+    col += mix(vec3(1.0, 0.97, 0.92), vec3(0.6, 0.9, 1.0), uBoost) * spoke * len * uLines * 0.75;
   }
   // ---- exposure, vignette, flash
   col *= uExposure;
