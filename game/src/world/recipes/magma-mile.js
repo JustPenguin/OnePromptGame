@@ -29,7 +29,7 @@ export function magmaMile(w) {
   const vol = { x: -30, z: -720, R: 600, H: 330, craterR: 95, craterDepth: 62 };
   const startLake = { x: -10, z: 430, rx: 340, rz: 105, level: -2.4 };
 
-  const cA = new THREE.Color('#6a5456'), cB = new THREE.Color('#8a7274'), cAsh = new THREE.Color('#b0a09c'), cRed = new THREE.Color('#9a4a34'), cCoal = new THREE.Color('#5c4846'), cFar = new THREE.Color('#9a3c22');
+  const cA = new THREE.Color('#5a4849'), cB = new THREE.Color('#766162'), cAsh = new THREE.Color('#a39391'), cRed = new THREE.Color('#924634'), cCoal = new THREE.Color('#463736'), cFar = new THREE.Color('#923822');
   const tmp = new THREE.Color();
 
   w.configure({
@@ -38,19 +38,21 @@ export function magmaMile(w) {
       sun: { azimuth: 118, elevation: 9, size: 0.06, glow: 1.9, color: '#ff7a3a' },
       clouds: { scale: 1.05, low: 0.46, high: 0.74, opacity: 0.92, color: '#6a3228', shade: '#120707', wind: [0.006, 0.002] },
     },
-    light: { hemi: { sky: '#9a4a38', ground: '#e8683a', intensity: 1.25 }, sun: { color: '#ff9a54', intensity: 3.2, extent: 76 }, fill: { color: '#ff6a2a', intensity: 0.8 } },
-    fog: { color: '#5a1c10', near: 80, far: 800 },
-    profile: { exposure: 1.1, bloomStrength: 0.95, bloomThreshold: 0.7, bloomRadius: 0.75, vignette: 0.42, saturation: 1.16, contrast: 1.08 },
+    // road readability: warm sun vs COOL dusk shadows (an all-orange fill flattened every form), less haze, bloom only on real fire
+    light: { hemi: { sky: '#5c4c7e', ground: '#a8502c', intensity: 1.05 }, sun: { color: '#ffa45a', intensity: 2.9, extent: 76 }, fill: { color: '#ff6a2a', intensity: 0.4 } },
+    fog: { color: '#4a160e', near: 130, far: 980 },
+    profile: { exposure: 1.0, bloomStrength: 0.72, bloomThreshold: 0.95, bloomRadius: 0.7, vignette: 0.44, saturation: 1.14, contrast: 1.14, envIntensity: 0.26 },
     road: {
-      texture: { base: '#4a3c40', light: '#6a5a5e', dark: '#33282c', wear: '#1c1416', centerColor: '#ffb04a', edgeColor: '#ffe8c0', glowEdge: '#ff5a1a', patches: 0.4, cracks: 1.0, rubber: 0.8 },
-      emissive: '#3a1a0e', emissiveIntensity: 0.22,
+      roughness: 1, specular: 0.2,
+      texture: { base: '#40363c', light: '#5c4e56', dark: '#2a2126', wear: '#171114', centerColor: '#ffb04a', edgeColor: '#ffe8c0', glowEdge: '#ff5a1a', patches: 0.4, cracks: 1.0, rubber: 0.8 },
+      emissive: '#3a1a0e', emissiveIntensity: 0.07,
       curb: { a: '#ff5a1a', b: '#2a2224' },
       shoulder: { ground: 'basalt', tint: '#c8a090' },
       fascia: { color: '#2a2224', depth: 1.6 },
       capColor: '#2a2224',
     },
     barriers: { type: 'wall', height: 1.2, thickness: 1.2, a: '#3a3032', b: '#4e4244', cap: '#6a5a5c', base: '#1c1618', stripe: 3.5, emissive: '#3a1204' },
-    start: { banner: 'MAGMA MILE', bg: '#c02a10', trim: '#ffd23f', structure: '#6a5a5c', pillar: '#2a2224', light: '#ffe0b0' },
+    start: { banner: 'MAGMA MILE', sub: 'STARLIGHT CUP · ROUND 2', bg: '#c02a10', trim: '#ffd23f', structure: '#6a5a5c', pillar: '#2a2224', light: '#ffe0b0' },
     edgeTrim: { glow: '#ff6a1a', lip: '#2a2224', lipTop: '#5a4a4c', depth: 2.8 },
     free: [{ s0: bridge.s0 - 14, s1: bridge.s1 + 14, fade: 24 }],
     terrain: {

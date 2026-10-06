@@ -42,7 +42,7 @@ export function starlightSpiral(w) {
     // the wall-less edge: a slim indigo lip + hull under the rainbow energy band (the band itself is the glow)
     edgeTrim: { lip: '#3a2c9a', lipTop: '#1a1450', girder: '#2a2278', glowStrip: false, depth: 1.9, reach: 2.2 },
     boost: { colorA: '#ff3dcb', colorB: '#22d3ff' },
-    start: { banner: 'STARLIGHT SPIRAL', bg: '#5a2aa8', trim: '#22d3ff', structure: '#8a90c0', pillar: '#3a3f7a', light: '#ffe6ff', pillarInset: 1.3 },
+    start: { banner: 'STARLIGHT SPIRAL', sub: 'STARLIGHT CUP · GRAND FINAL', bg: '#5a2aa8', trim: '#22d3ff', structure: '#8a90c0', pillar: '#3a3f7a', light: '#ffe6ff', pillarInset: 1.3 },
     ramp: { tex: { base: '#241a58', grain: false, stripeA: '#22d3ff', stripeB: '#10082a', chevron: '#ff3dcb', glow: 'rgba(34,211,255,1)' }, side: '#3a2c8a', lip: '#22d3ff', emissive: '#22d3ff', emissiveIntensity: 0.45 },
     terrain: null,
   });

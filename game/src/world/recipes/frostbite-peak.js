@@ -27,27 +27,30 @@ export function frostbitePeak(w) {
   const lakeLevel = tr.sampleAt(mid('V10>')).position.y - 3.4;
   const sLodge = -40;
 
-  const cSnowA = new THREE.Color('#dfe9ff'), cSnowB = new THREE.Color('#f7fbff'), cShade = new THREE.Color('#9fb6e8'), cRock = new THREE.Color('#566586'), cFar = new THREE.Color('#a8c0f0');
+  const cSnowA = new THREE.Color('#c6d6f4'), cSnowB = new THREE.Color('#e6efff'), cShade = new THREE.Color('#8aa4de'), cRock = new THREE.Color('#4a5878'), cFar = new THREE.Color('#8cabe6');
   const tmp = new THREE.Color();
 
   w.configure({
     sky: {
-      top: '#050c33', mid: '#16348a', horizon: '#7aa8ec', ground: '#a8c4f0', horizonBand: 0.12,
-      sun: { azimuth: 28, elevation: 20, size: 0.04, glow: 0.7, color: '#d8e4ff' },
+      top: '#050c33', mid: '#16348a', horizon: '#74a0e8', ground: '#7a9ede', horizonBand: 0.12,
+      sun: { azimuth: 28, elevation: 20, size: 0.02, glow: 0.22, color: '#d8e4ff' },
       stars: { density: 0.05, scale: 95 },
-      aurora: { colors: ['#38ffa6', '#7a6bff'], intensity: 1.05 },
+      aurora: { colors: ['#38ffa6', '#7a6bff'], intensity: 0.8 },
     },
-    light: { hemi: { sky: '#7fa4ee', ground: '#cfe0ff', intensity: 1.45 }, sun: { color: '#cfdcff', intensity: 2.5, extent: 74 }, fill: { color: '#8aa6ff', intensity: 0.45 } },
-    fog: { color: '#7fa6e6', near: 90, far: 760 },
-    profile: { exposure: 1.18, bloomStrength: 0.6, bloomThreshold: 0.72, bloomRadius: 0.7, vignette: 0.32, saturation: 1.1, contrast: 1.06 },
+    // road readability: a deeper blue-hour palette (snow stays bright but not clipped), far less haze, no sun/bloom glare
+    light: { hemi: { sky: '#6f93dc', ground: '#b6c8ee', intensity: 1.15 }, sun: { color: '#cfdcff', intensity: 2.3, extent: 74 }, fill: { color: '#8aa6ff', intensity: 0.4 } },
+    fog: { color: '#6f96dc', near: 150, far: 900 },
+    profile: { exposure: 0.95, bloomStrength: 0.34, bloomThreshold: 1.0, bloomRadius: 0.6, vignette: 0.36, saturation: 1.14, contrast: 1.15, envIntensity: 0.26 },
     road: {
-      texture: { base: '#3a4662', light: '#52607e', dark: '#283249', wear: '#1a2234', centerColor: '#ffb347', edgeColor: '#ffffff', patches: 0.3, cracks: 0.7 },
-      curb: { a: '#2bb5ff', b: '#ffffff' },
-      shoulder: { ground: 'snow', tint: '#f2f7ff' },
-      fascia: { color: '#a9bad8', depth: 1.0 },
+      roughness: 1, specular: 0.2,   // no sun/sky sheen on the tarmac: it is the darkest, most contrasty surface in the frame
+      texture: { base: '#262f48', light: '#3a4766', dark: '#182036', wear: '#10172a', centerColor: '#ffb347', edgeColor: '#ffffff', patches: 0.3, cracks: 0.7 },
+      curb: { a: '#ff4a38', b: '#ffffff' },
+      shoulder: { ground: 'snow', tint: '#d4e0f6' },
+      fascia: { color: '#8ea4cc', depth: 1.0 },
     },
-    barriers: { type: 'wall', height: 1.25, thickness: 1.35, a: '#bcdcff', b: '#eef7ff', cap: '#ffffff', base: '#7fa4d6', stripe: 2.3, emissive: '#101c30' },
-    start: { banner: 'FROSTBITE PEAK', bg: '#2b7fe8', trim: '#7ee8ff', pillar: '#8aa0cc' },
+    // blue/white alpine walls: they must separate from the snow behind them (pale-on-pale hid the road edge)
+    barriers: { type: 'wall', height: 1.25, thickness: 1.35, a: '#2f6fd0', b: '#e9f2ff', cap: '#ffffff', base: '#27498f', stripe: 2.3, emissive: '#0a1426' },
+    start: { banner: 'FROSTBITE PEAK', sub: 'BLOSSOM CUP · ROUND 3', bg: '#2b7fe8', trim: '#7ee8ff', pillar: '#8aa0cc' },
     terrain: {
       map: w.tex(groundTexture('snow')),
       uvMeters: 11, cell: 5, sink: 0.35, blend: 38, clearance: 3,

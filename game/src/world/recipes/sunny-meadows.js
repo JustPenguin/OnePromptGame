@@ -69,7 +69,7 @@ export function sunnyMeadows(w) {
       fascia: { color: '#8d8576', depth: 0.9 },
     },
     barriers: { type: 'fence', rail: '#fffdf4', post: '#8a5a32', cap: '#c08a52', skip: [bridge] },
-    start: { banner: 'SUNNY MEADOWS', bg: '#2f8be8', trim: '#ffd23f' },
+    start: { banner: 'SUNNY MEADOWS', sub: 'BLOSSOM CUP · ROUND 1', bg: '#2f8be8', trim: '#ffd23f' },
     free: [{ s0: bridge[0] - 4, s1: bridge[1] + 4, fade: 22 }],
     terrain: {
       map: w.tex(groundTexture('meadow')),
