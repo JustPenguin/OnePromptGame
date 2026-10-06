@@ -54,7 +54,7 @@ Screen API (`ui/screens/Screen.js`): `build()` -> root element, `stage` (backdro
 ## 4. Save schema (localStorage key `kartrush.save.v1`, `SAVE_VERSION = 2`)
 
 ```
-version, profile{name, favoriteDriver, favoriteKart, created, lastSpeedClass, lastCup, lastTrack, versus{laps,racers,items}, tutorialDone, nameSet, seen{controls,drift,item,welcome}}
+version, profile{name, favoriteDriver, favoriteKart, created, lastSpeedClass, lastCup, lastTrack, versus{laps,racers,items}, tutorialDone, nameSet, unlockAll, seen{controls,drift,item,welcome}}
 settings{quality, resolutionScale, postfx, cameraMode, cameraShake, fovBoost, masterVolume, musicVolume, sfxVolume, speedUnit, showMinimap, showLeaderboard, hudScale,
          assists{autoAccelerate,steeringAssist}, vibration, gamepadDeadzone, bindings|null, touchControls, touchScale, showFps, reducedMotion, reduceFlashes, largeText, highContrastHud}
 records[trackId]{ tt|race|lap : { [speedClass]: {time, laps, by:{driverId,bodyId}, date} } }
@@ -64,6 +64,7 @@ unlocks{drivers[], bodies[], cups[], speedClasses[]}       stats{races, wins, po
 achievements{id: timestamp}
 ```
 `profile.seen{controls,drift,item,welcome}` records which one-off coaching/welcome UI was already shown (Settings > Data > "Show tips again" resets it).
+`profile.unlockAll` (boolean, default false) is the player's **Unlock everything** switch (see section 5): sanitised as a strict boolean, kept by *Merge* import, carried by export/import, cleared by *Reset progress*.
 
 * **Load path**: `JSON.parse` -> `migrateBlob` (walk `MIGRATIONS[n]` from the stored `version` to `SAVE_VERSION`) -> `normalizeSave` (merge onto defaults, clamp ranges, enum-check, drop unknown keys, cap name length, rebuild unlocks so starter content can never be locked).
 * **Migrations**: `MIGRATIONS[1]` (baseline v1 -> v2) converts flat `records{bestTime,bestLap}` into per-class `race`/`lap` entries and ghost keys into `'track|class'`. A migrated or *newer-version* save is first copied to `kartrush.save.v1.bak`; unreadable JSON is backed up too and the game starts fresh with a toast. To add v3: bump `SAVE_VERSION`, add `MIGRATIONS[2](d)` that returns the upgraded blob, extend `normalizeSave`, add a case to `src/save/selftest.mjs`.
@@ -74,7 +75,7 @@ achievements{id: timestamp}
 
 ## 5. Unlocks and achievements (data tables)
 
-`src/modes/unlocks.js` `UNLOCK_RULES` (evaluated after every race and cup; toasts + results card):
+`src/modes/unlocks.js` `UNLOCK_RULES` (evaluated after every race and cup; shown as cards on the results screen / Grand Prix podium):
 
 | Unlock | Rule |
 |---|---|
@@ -89,7 +90,9 @@ achievements{id: timestamp}
 
 Starter set (`save/defaults.js`): drivers pip, rusty, bruno, hopper · karts classic, streak · cup blossom · classes rookie, pro.
 Grand Prix: points 15-12-10-9-8-7-6-5-4-3-2-1 (`modes/points.js`), grid after race 1 = standings, trophy = final place 1/2/3 (best per cup+class is kept).
-Achievements (`modes/achievements.js`, 13 of them) are shown on Records > Career and as toasts. `?unlockall=1` unlocks everything for review.
+Achievements (`modes/achievements.js`, 13 of them) are shown on Records > Career and, when earned, as a gold chip row *inside* the results layout (no overlay toast, so they can never cover the table or the NEW RECORD badge; the Grand Prix podium still uses toasts in its free top-centre area).
+
+**Unlock everything** (Settings > Data > Unlocks): a real player-facing switch, because query strings never reach the published page. A button opens an in-page confirm ("8 drivers, 4 karts, 2 cups and all 3 speed classes will be open right away...") and sets `profile.unlockAll`; "Back to normal" clears it. `modes/catalog.js` `allUnlocked(save)` (= `?unlockall=1` review flag OR `profile.unlockAll`) is the single check used by `isUnlocked` / `isCupUnlocked` / `isTrackUnlocked`, so every select screen, the Records collection and the Flow defaults follow it. The switch never writes into `save.unlocks`: earned progress and achievements (Full Garage ...) keep working underneath, and `evaluateUnlocks` stops *announcing* new unlocks while it is on. Normal progression is untouched when it is off. Tests: `src/save/selftest.mjs` (sanitise / round trip / merge / persist / reset) and `src/modes/selftest.mjs`.
 
 ## 6. App public API (unchanged contract, additive extensions)
 
@@ -119,7 +122,7 @@ npm run build && node scripts/serve.mjs --port=8105 &       # then playwright-cl
 node src/save/selftest.mjs                                  # save layer
 node src/modes/selftest.mjs                                 # modes: ghost gap sign, GP points/grid/trophies, unlocks, achievements, records, ghosts
 node scripts/check.mjs --track=all --laps=2                 # AI races (the UI wraps session.update only to collect stats)
-URL params (QA only):  ?mocktracks=1 (8 stand-in tracks)  ?unlockall=1  ?gpraces=2&gplaps=1 (short Grand Prix)  + the engine's ?quality= ?scale= ?autostart=1 ...
+URL params (QA only):  ?mocktracks=1 (8 stand-in tracks)  ?unlockall=1 (players use Settings > Data instead)  ?gpraces=2&gplaps=1 (short Grand Prix)  + the engine's ?quality= ?scale= ?autostart=1 ...
 ```
 Gamepad: override `navigator.getGamepads` in `eval` (standard mapping, d-pad = buttons 12-15, A=0, B=1, Start=9, LB/RB=4/5). Touch: dispatch `PointerEvent`s with `pointerType:'touch'` at `.tzone` and `.tbtn`.
 Storage-blocked path: `Object.defineProperty(window,'localStorage',{get(){throw new DOMException('x','SecurityError')}})` before load.
@@ -128,7 +131,10 @@ Storage-blocked path: `Object.defineProperty(window,'localStorage',{get(){throw 
 
 * **One focus model** (`nav.js`): `.is-focus` is the single visual for hover, d-pad, Tab and touch-selection; `data-nav` marks every stop; modals push their own scope. Arrow/WASD keys are swallowed while a menu is open so they never reach the game's `Input`.
 * **Screen scale**: `html` font-size = 16 px x `--ui-scale` (from viewport), all UI sizes are `rem`; the HUD uses `em` off `.hud` (x `settings.hudScale`). Layout class (`l-wide|l-portrait|l-compact`) is chosen in `UI.resize`.
-* **HUD CSS is scoped** under `.hud` at build time (`hudCss.js`) so its short class names cannot collide with menu classes.
+* **HUD CSS is scoped** under `.hud` at build time (`hudCss.js`) so its short class names cannot collide with menu classes (layout prefixes `.l-*`, `[data-rm]`, `.hc`, `.noflash` are kept in front).
+* **HUD layout contract (nothing can overlap)**: four reserved zones, and every widget, dynamic or not, flows *inside* its zone: `.zl` left column (item + count badge | position + coins (+ghost delta) | status-chip row | standings), `.zr` right column (lap / respawn / pause | timer | lap times | minimap + speedometer), `.zb` bottom-centre stack (coach card / nudge, rocket-start hint, skip pill, drift label + meter, fps; the drift row is always reserved), `.zt` top-centre stack (wrong-way, respawn ring, event toasts). Per layout: *wide* pins the position to the bottom-left and minimap + speedometer to the bottom-right; *portrait* stacks everything top-down in two ~11 em columns (touch buttons own the bottom 14 em, `.zb` sits above them via `--ts`); *compact* (phone landscape) puts speedometer and minimap side by side under the timer so the dial is never over the road. Status chips are icon-only on phones. The HUD root is a size container (`container: hud / size`): short windows, HUD size and large text trigger `@container hud (...)` rules in HUD em that drop the standings / lap times or shrink the instruments instead of colliding, and phone layouts cap the HUD size (touch: 100 %). The touch pad + buttons scale to the container width (`--tsz`, `cqw`) and re-fit on rotation. Transient full-width flourishes (countdown number, FINAL LAP / finish ribbons, intro card) are the only things that may sit over zones.
+* **HUD overlap detector**: `src/ui/hud/overlap.check.mjs` starts a real race, forces a worst-case dynamic state (4 chips, coins, item x3, 8th place, 3 lap rows, ghost, 3 events, wrong-way, respawn ring, coach card / pill, rocket hint, skip pill, drift label, fps) and reports every pair of intersecting element boxes and anything off-screen in 22 viewport / HUD-size scenarios (390x844, 844x390, 1280x720, 1920x1080, phones down to 320x568, tablets, hudScale 0.7-1.4, large text). `npm run build && node src/ui/hud/overlap.check.mjs [--only=p390] [--shots=A]` (screenshots land in `.qa/ov/`; exit code 1 on any overlap).
+* **Text fields** may claim Enter / Esc with `input._onEnter` / `input._onEsc` (the welcome dialog: Enter = "Let's race", Esc = "Skip"); otherwise Enter / Esc only finish editing. Soft keyboards that report an empty `KeyboardEvent.code` fall back to `key`.
 * **Reduced motion** (OS setting or `settings.reducedMotion`): transitions collapse, menu camera sway/particles stop, count-ups jump, wipes are skipped. **Reduce flashes** disables boost pulses, rainbow star edge, screen-burst and wrong-way blink.
 * The race clock, not UI frames, drives timed UI logic (coach) so it behaves under throttled frame rates and test fast-forward.
 * **Input hygiene**: Nav swallows menu keydowns (so they never reach the game's `Input`) but lets every keyup through (a key released during a pause must not stay "held"); a freshly opened screen/modal swallows gamepad buttons that are already down (Start opens the pause menu and must not instantly close it).
