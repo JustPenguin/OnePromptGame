@@ -20,19 +20,26 @@ export class RoadIndex {
     this.track = track;
     this.cell = cell;
     this.inv = 1 / cell;
-    const N = track.count;
-    this.map = new Map();
+    const N = track.count, inv = this.inv, bd = track.bounds;
+    // flat uniform grid (counting sort of the centreline samples into cells): no Map lookups / array allocations in the hot query path
+    this.gx0 = Math.floor(bd.minX * inv) - 4; this.gz0 = Math.floor(bd.minZ * inv) - 4;
+    this.gnx = Math.floor(bd.maxX * inv) + 5 - this.gx0 + 1; this.gnz = Math.floor(bd.maxZ * inv) + 5 - this.gz0 + 1;
+    const cells = this.gnx * this.gnz;
+    this.start = new Int32Array(cells + 1);
+    const cellOf = new Int32Array(N);
     for (let i = 0; i < N; i++) {
-      const k = this._key(Math.floor(track.pos[i * 3] * this.inv), Math.floor(track.pos[i * 3 + 2] * this.inv));
-      let a = this.map.get(k);
-      if (!a) this.map.set(k, (a = []));
-      a.push(i);
+      const c = (Math.floor(track.pos[i * 3 + 2] * inv) - this.gz0) * this.gnx + (Math.floor(track.pos[i * 3] * inv) - this.gx0);
+      cellOf[i] = c; this.start[c + 1]++;
     }
+    for (let c = 0; c < cells; c++) this.start[c + 1] += this.start[c];
+    this.items = new Int32Array(N);
+    const fill = this.start.slice(0, cells);
+    for (let i = 0; i < N; i++) this.items[fill[cellOf[i]]++] = i;
     this.free = new Float32Array(N); // 1 = road is on a structure here (not graded); smoothed
     this.out = { i: 0, t: 0, s: 0, dist: 1e9, lateral: 0, planeY: 0, cy: 0, hw: 8, sh: 6, free: 0, near: false };
     this.df = null;
+    this._segD = 0; this._segT = 0;
   }
-  _key(ix, iz) { return (ix + 8192) * 16384 + (iz + 8192); } // collision-free for |cell index| < 8192
 
   /** Mark s ranges [{s0,s1,fade}] as "free" (not graded): 1 inside, easing to 0 over `fade` metres outside. */
   setFreeSections(ranges) {
@@ -51,19 +58,34 @@ export class RoadIndex {
     }
   }
 
+  /** Squared plan distance from (x,z) to segment j (leaves the segment parameter in this._segT). */
+  _seg(j, x, z) {
+    const tr = this.track, P = tr.pos, N = tr.count, a = j * 3, b = ((j + 1) % N) * 3;
+    const abx = P[b] - P[a], abz = P[b + 2] - P[a + 2];
+    const t = Math.min(1, Math.max(0, ((x - P[a]) * abx + (z - P[a + 2]) * abz) / (abx * abx + abz * abz || 1)));
+    const qx = P[a] + abx * t - x, qz = P[a + 2] + abz * t - z;
+    this._segT = t;
+    return qx * qx + qz * qz;
+  }
+
   /** Nearest road under (x,z) in plan.  Returns the shared `out` object (do not keep). `near` is false when nothing is within ~70 m. */
   query(x, z, o = this.out) {
-    const tr = this.track, P = tr.pos, inv = this.inv;
-    const cx = Math.floor(x * inv), cz = Math.floor(z * inv);
+    const tr = this.track, P = tr.pos, inv = this.inv, st = this.start, items = this.items, gnx = this.gnx, gnz = this.gnz;
+    const cx = Math.floor(x * inv) - this.gx0, cz = Math.floor(z * inv) - this.gz0;
     let best = -1, bd = Infinity;
     for (let r = 1; r <= 3 && best < 0; r++) {
-      for (let dz = -r; dz <= r; dz++) for (let dx = -r; dx <= r; dx++) {
-        if (r > 1 && Math.max(Math.abs(dx), Math.abs(dz)) < r) continue; // ring only
-        const a = this.map.get(this._key(cx + dx, cz + dz));
-        if (!a) continue;
-        for (let k = 0; k < a.length; k++) {
-          const i = a[k], ex = x - P[i * 3], ez = z - P[i * 3 + 2], d2 = ex * ex + ez * ez;
-          if (d2 < bd) { bd = d2; best = i; }
+      for (let dz = -r; dz <= r; dz++) {
+        const zz = cz + dz;
+        if (zz < 0 || zz >= gnz) continue;
+        const step = (r > 1 && dz !== -r && dz !== r) ? 2 * r : 1;           // ring only: interior rows touch just the two end cells
+        for (let dx = -r; dx <= r; dx += step) {
+          const xx = cx + dx;
+          if (xx < 0 || xx >= gnx) continue;
+          const c = zz * gnx + xx;
+          for (let k = st[c], e = st[c + 1]; k < e; k++) {
+            const i = items[k], ex = x - P[i * 3], ez = z - P[i * 3 + 2], d2 = ex * ex + ez * ez;
+            if (d2 < bd) { bd = d2; best = i; }
+          }
         }
       }
     }
@@ -71,22 +93,27 @@ export class RoadIndex {
     // lower-road-wins at crossings: among samples on a DIFFERENT stretch (> 40 m of track away) within 6 m of the best, take the lowest
     const N = tr.count, sp = tr.spacing, d0 = Math.sqrt(bd), lim = (d0 + 6) * (d0 + 6);
     let pick = best, py = P[best * 3 + 1];
-    for (let dz = -1; dz <= 1; dz++) for (let dx = -1; dx <= 1; dx++) {
-      const a = this.map.get(this._key(cx + dx, cz + dz));
-      if (!a) continue;
-      for (let k = 0; k < a.length; k++) {
-        const i = a[k], ds = Math.abs(i - best), sep = Math.min(ds, N - ds) * sp;
-        if (sep < 40) continue;
-        const ex = x - P[i * 3], ez = z - P[i * 3 + 2];
-        if (ex * ex + ez * ez <= lim && P[i * 3 + 1] < py - 1) { pick = i; py = P[i * 3 + 1]; }
+    for (let dz = -1; dz <= 1; dz++) {
+      const zz = cz + dz;
+      if (zz < 0 || zz >= gnz) continue;
+      for (let dx = -1; dx <= 1; dx++) {
+        const xx = cx + dx;
+        if (xx < 0 || xx >= gnx) continue;
+        const c = zz * gnx + xx;
+        for (let k = st[c], e = st[c + 1]; k < e; k++) {
+          const i = items[k], ds = Math.abs(i - best), sep = Math.min(ds, N - ds) * sp;
+          if (sep < 40) continue;
+          const ex = x - P[i * 3], ez = z - P[i * 3 + 2];
+          if (ex * ex + ez * ez <= lim && P[i * 3 + 1] < py - 1) { pick = i; py = P[i * 3 + 1]; }
+        }
       }
     }
     best = pick;
     // refine on the neighbouring segments (same maths as track.project, in plan)
-    const j0 = (best - 1 + N) % N, j1 = best;
-    const seg = (j) => { const a = j * 3, b = ((j + 1) % N) * 3; const abx = P[b] - P[a], abz = P[b + 2] - P[a + 2]; const t = Math.min(1, Math.max(0, ((x - P[a]) * abx + (z - P[a + 2]) * abz) / (abx * abx + abz * abz || 1))); const qx = P[a] + abx * t - x, qz = P[a + 2] + abz * t - z; return [qx * qx + qz * qz, t]; };
-    const s0 = seg(j0), s1 = seg(j1);
-    const j = s0[0] < s1[0] ? j0 : j1, t = s0[0] < s1[0] ? s0[1] : s1[1];
+    const j0 = (best - 1 + N) % N;
+    const d0s = this._seg(j0, x, z), t0 = this._segT;
+    const d1s = this._seg(best, x, z), t1 = this._segT;
+    const j = d0s < d1s ? j0 : best, t = d0s < d1s ? t0 : t1;
     const j2 = (j + 1) % N, a = j * 3, b = j2 * 3;
     const lx = P[a] + (P[b] - P[a]) * t, ly = P[a + 1] + (P[b + 1] - P[a + 1]) * t, lz = P[a + 2] + (P[b + 2] - P[a + 2]) * t;
     const R = tr.right;
@@ -239,13 +266,15 @@ export class Terrain {
     const VX = nx + 1, VZ = nz + 1;
     const H = new Float32Array(VX * VZ);
     const C = new Uint8Array(VX * VZ); // 1 = deep inside the road corridor (cells fully inside are skipped)
+    const Dg = new Float32Array(VX * VZ), Rg = new Float32Array(VX * VZ);   // per-vertex plan distance to the road + reference height (reused for vertex colours)
     for (let j = 0; j < VZ; j++) for (let i = 0; i < VX; i++) {
-      const x = x0 + i * cell, z = z0 + j * cell;
-      H[j * VX + i] = this.heightAt(x, z);
+      const x = x0 + i * cell, z = z0 + j * cell, k = j * VX + i;
+      H[k] = this.heightAt(x, z);
       const q = this.road.out;
-      C[j * VX + i] = q.near && Math.abs(q.lateral) < q.hw + q.sh - 1.2 && q.free < 0.01 ? 1 : 0;
+      Dg[k] = this._ctx.dist; Rg[k] = this._ctx.refY;
+      C[k] = q.near && Math.abs(q.lateral) < q.hw + q.sh - 1.2 && q.free < 0.01 ? 1 : 0;
     }
-    this.H = H; this.C = C; this.VX = VX; this.VZ = VZ;
+    this.H = H; this.C = C; this.Dg = Dg; this.Rg = Rg; this.VX = VX; this.VZ = VZ;
     this.gridMs = (this.gridMs ?? 0) + performance.now() - tg;
   }
 
@@ -295,8 +324,9 @@ export class Terrain {
     const ox0 = x0 - K * oc, oz0 = z0 - K * oc;
     const onx = nx / ALIGN + 2 * K, onz = nz / ALIGN + 2 * K;
     const OX = onx + 1, OZ = onz + 1;
-    const OH = new Float32Array(OX * OZ);
-    for (let j = 0; j < OZ; j++) for (let i = 0; i < OX; i++) OH[j * OX + i] = this.heightAt(ox0 + i * oc, oz0 + j * oc);
+    const OH = new Float32Array(OX * OZ), OD = new Float32Array(OX * OZ), OR = new Float32Array(OX * OZ);
+    for (let j = 0; j < OZ; j++) for (let i = 0; i < OX; i++) { const k = j * OX + i; OH[k] = this.heightAt(ox0 + i * oc, oz0 + j * oc); OD[k] = this._ctx.dist; OR[k] = this._ctx.refY; }
+    this.OD = OD; this.OR = OR;
     const otile = 16;
     for (let tz = 0; tz < onz; tz += otile) for (let tx = 0; tx < onx; tx += otile) {
       const cx = Math.min(otile, onx - tx), cz = Math.min(otile, onz - tz);
@@ -321,7 +351,7 @@ export class Terrain {
     const drop = 40;
     per.forEach(([i, j], k) => {
       const x = x0 + i * cell, z = z0 + j * cell, y = H[j * VX + i];
-      this._vertexColor(x, z, y, 0.9, _tmpC);
+      this._colorFrom(this.Dg[j * VX + i], this.Rg[j * VX + i], x, z, y, 0.9, _tmpC);
       const o = k * 6;
       pos[o] = x; pos[o + 1] = y + 0.2; pos[o + 2] = z; pos[o + 3] = x; pos[o + 4] = y - drop; pos[o + 5] = z;
       col[o] = _tmpC.r * 0.85; col[o + 1] = _tmpC.g * 0.85; col[o + 2] = _tmpC.b * 0.85; col[o + 3] = _tmpC.r * 0.5; col[o + 4] = _tmpC.g * 0.5; col[o + 5] = _tmpC.b * 0.5;
@@ -335,6 +365,14 @@ export class Terrain {
     const m = new THREE.Mesh(g, new THREE.MeshLambertMaterial({ vertexColors: true, side: THREE.DoubleSide }));
     m.userData.skirt = true;
     this.group.add(m); this.skirt = m;
+  }
+
+  /** Vertex colour from precomputed per-vertex data (dist, refY): no road query. */
+  _colorFrom(dist, refY, x, z, y, ny, out) {
+    const cfg = this.cfg;
+    this._ctx.dist = dist; this._ctx.refY = refY; this._ctx.q = this.road.out;
+    if (cfg.color) cfg.color(x, z, y, ny, this._ctx, out); else out.set(cfg.base ?? '#5da13a');
+    return out;
   }
 
   _vertexColor(x, z, y, ny, out) {
@@ -361,7 +399,7 @@ export class Terrain {
       const il = 1 / Math.hypot(nx_, ny_, nz_);
       pos[p] = x; pos[p + 1] = y; pos[p + 2] = z;
       nrm[p] = nx_ * il; nrm[p + 1] = ny_ * il; nrm[p + 2] = nz_ * il;
-      this._vertexColor(x, z, y, nrm[p + 1], _tmpC);
+      this._colorFrom(this.Dg[gj * VX + gi], this.Rg[gj * VX + gi], x, z, y, nrm[p + 1], _tmpC);
       col[p] = _tmpC.r; col[p + 1] = _tmpC.g; col[p + 2] = _tmpC.b;
       uv[u++] = x * uvm; uv[u++] = z * uvm;
       p += 3;
@@ -401,7 +439,7 @@ export class Terrain {
       const nx_ = hl - hr, nz_ = hd - hu, ny_ = 2 * cell, il = 1 / Math.hypot(nx_, ny_, nz_);
       pos[p] = x; pos[p + 1] = y; pos[p + 2] = z;
       nrm[p] = nx_ * il; nrm[p + 1] = ny_ * il; nrm[p + 2] = nz_ * il;
-      this._vertexColor(x, z, y, nrm[p + 1], _tmpC);
+      this._colorFrom(this.OD[gj * OX + gi], this.OR[gj * OX + gi], x, z, y, nrm[p + 1], _tmpC);
       col[p] = _tmpC.r; col[p + 1] = _tmpC.g; col[p + 2] = _tmpC.b;
       uv[u++] = x * uvm; uv[u++] = z * uvm;
       p += 3;
