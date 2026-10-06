@@ -53,6 +53,7 @@ export class AudioManager {
     this._wrongWay = 0; this._wrongT = 0;
     this._bombT = new Map();
     this.shieldHum = null;
+    this._slowMo = false;             // photo-finish slow motion (engine EV.PHOTO_FINISH)
   }
 
   // ================================================================================================================ context
@@ -129,12 +130,27 @@ export class AudioManager {
     this.paused = paused;
     if (!this.ctx) return;
     const now = this.ctx.currentTime;
-    this.musicLP.frequency.setTargetAtTime(paused ? 650 : 18000, now, 0.08);
+    this._musicFilter(0.08);
     this.musicDuck.gain.setTargetAtTime(paused ? 0.55 : 1, now, 0.1);
     this.applySettings();
     if (paused) for (const e of this.engines.values()) e.voice.apply({ gain: 0 }, 0.02);
     if (paused) this.playerEngine?.voice.apply({ gain: 0 }, 0.02);
     this.sfx(paused ? 'uiPause' : 'uiResume', { ui: true });
+  }
+
+  /** Music muffle: paused > photo-finish slow motion > open. */
+  _musicFilter(tc = 0.1) {
+    if (!this.ctx) return;
+    this.musicLP.frequency.setTargetAtTime(this.paused ? 650 : this._slowMo ? 1400 : 18000, this.ctx.currentTime, tc);
+  }
+
+  /** Photo-finish slow motion: dive the music into a low-pass, drop the engine pitch, sting in / out. */
+  setSlowMo(on) {
+    on = !!on;
+    if (on === this._slowMo) return;
+    this._slowMo = on;
+    this.sfx(on ? 'slowMoIn' : 'slowMoOut');
+    this._musicFilter(on ? 0.12 : 0.25);
   }
 
   _pollState() {
@@ -246,6 +262,7 @@ export class AudioManager {
     this.playerEngine?.voice.stop(0.15); this.playerEngine = null;
     this.shieldHum?.stop?.(); this.shieldHum = null;
     this._lock = null; this._wrongWay = 0; this._bombT.clear();
+    if (this._slowMo) { this._slowMo = false; this._musicFilter(0.1); }
     const had = !!this.session;
     this.session = null; this._started = null; this.focus = null;
     if (had && !keepMusic && this.unlocked) this.playMusic('menu', { fade: 1.0 });
@@ -304,6 +321,8 @@ export class AudioManager {
     on(EV.RACE_RESULTS, () => A.playMusic('results', { fade: 1.2 }));
     on(EV.OVERTAKE, ({ kart }) => { if (A._mine(kart)) A.sfx('overtake'); });
     on(EV.WRONG_WAY, ({ kart, active }) => { if (A._mine(kart)) { A._wrongWay = active ? 1 : 0; A._wrongT = 0; } });
+    if (EV.DRAFT) on(EV.DRAFT, ({ kart, active }) => { if (active && A._mine(kart)) A.sfx('draftOn'); });          // slipstream (engine)
+    if (EV.PHOTO_FINISH) on(EV.PHOTO_FINISH, ({ active }) => A.setSlowMo(active));                                  // slow-motion finish (engine)
     // ---- items
     on(EV.ITEM_BOX, ({ kart, box }) => { A._rouletteIdx = 0; if (A._mine(kart)) A.sfx('itemBox'); else if (box && A._near(box.position, 60)) A.sfx('itemBox', { position: box.position, volume: 0.7 }); });
     on(EV.ITEM_ROULETTE, ({ kart, tick }) => { if (tick && A._mine(kart)) A.sfx('rouletteTick', { index: A._rouletteIdx++ }); });
@@ -371,10 +390,10 @@ export class AudioManager {
     E.voice.apply({
       rpm: E.model.rpm, gear: E.model.gear, throttle: clamp(thr + rocket, 0, 1),
       boost: rocket ? 1 : clamp(k.boost.timer / 0.35, 0, 1) * (k.boost.timer > 0 ? 1 : 0),
-      skid: drifting ? 0.55 + 0.15 * k.drift.level : clamp(Math.abs(k.slide) / 7, 0, 0.7) * (k.grounded ? 1 : 0) + (k.spin.timer > 0 ? 0.7 : 0),
-      squeal: drifting ? 0.5 + 0.2 * k.drift.level : k.spin.timer > 0 ? 0.6 : 0,
-      off, offKind: surf?.name, wind: clamp((ratio - 0.45) / 0.9, 0, 1), scrape: k.scraping && speed > 4 ? clamp(speed / 20, 0.2, 1) : 0,
-      gain: k.respawn.active ? 0.15 : 1, pitchLift: rocket ? 1.18 : 1,
+      skid: Math.max(drifting ? 0.55 + 0.15 * k.drift.level : clamp(Math.abs(k.slide) / 7, 0, 0.7) * (k.grounded ? 1 : 0) + (k.spin.timer > 0 ? 0.7 : 0), (k.skid ?? 0) * 0.85),
+      squeal: Math.max(drifting ? 0.5 + 0.2 * k.drift.level : k.spin.timer > 0 ? 0.6 : 0, (k.skid ?? 0) > 0.4 ? ((k.skid - 0.4) * 1.1) : 0),
+      off, offKind: surf?.name, wind: clamp((ratio - 0.45) / 0.9 + (k.draft?.active ? 0.22 : 0), 0, 1), scrape: k.scraping && speed > 4 ? clamp(speed / 20, 0.2, 1) : 0,
+      gain: k.respawn.active ? 0.15 : 1, pitchLift: rocket ? 1.18 : this._slowMo ? 0.74 : 1,
     });
   }
 

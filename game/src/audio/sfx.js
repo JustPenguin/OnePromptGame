@@ -66,6 +66,20 @@ export const SFX = {
     return 1.2;
   },
   overtake(ctx, out, t, o) { const v = vol(o); N(ctx, out, t, { color: 'white', ftype: 'bandpass', f: 700, f1: 2600, q: 1.1, dur: 0.3, vol: 0.26 * v, release: 0.12 }); T(ctx, out, t + 0.03, { type: 'sine', f: 900 * P(o), f1: 1400 * P(o), dur: 0.12, vol: 0.12 * v }); return 0.45; },
+  draftOn(ctx, out, t, o) { const v = vol(o); N(ctx, out, t, { color: 'pink', ftype: 'bandpass', f: 500, f1: 2400, q: 0.8, dur: 0.55, vol: 0.16 * v, attack: 0.16, release: 0.3 }); T(ctx, out, t, { type: 'sine', f: 140, f1: 230, dur: 0.4, vol: 0.07 * v, attack: 0.12, release: 0.2 }); return 0.9; },
+  slowMoIn(ctx, out, t, o) {
+    const v = vol(o);
+    T(ctx, out, t, { type: 'sine', f: 90, f1: 38, dur: 0.7, vol: 0.34 * v, release: 0.3 });
+    N(ctx, out, t, { color: 'pink', ftype: 'lowpass', f: 3600, f1: 260, q: 0.7, dur: 0.8, vol: 0.2 * v, release: 0.4 });
+    T(ctx, out, t + 0.02, { type: 'triangle', f: 440, f1: 150, dur: 0.6, vol: 0.09 * v, lp: 2000, release: 0.3 });
+    return 1.2;
+  },
+  slowMoOut(ctx, out, t, o) {
+    const v = vol(o);
+    N(ctx, out, t, { color: 'white', ftype: 'bandpass', f: 260, f1: 4200, q: 1, dur: 0.45, vol: 0.2 * v, attack: 0.05, release: 0.2 });
+    T(ctx, out, t, { type: 'sine', f: 60, f1: 160, dur: 0.3, vol: 0.18 * v, release: 0.12 });
+    return 0.7;
+  },
   wrongWay(ctx, out, t, o) { const v = vol(o); T(ctx, out, t, { type: 'square', f: 880, dur: 0.13, vol: 0.12 * v, lp: 3200, release: 0.04 }); T(ctx, out, t + 0.16, { type: 'square', f: 660, dur: 0.13, vol: 0.12 * v, lp: 3200, release: 0.04 }); return 0.35; },
 
   // ------------------------------------------------------------------ driving
@@ -268,6 +282,7 @@ export const SFX = {
 
 /** Mixing hints per sound: wet = reverb send, cd = cooldown (s), prio 0 (drop first) .. 2 (never dropped), pv = pitch variation */
 export const SFX_META = {
+  draftOn: { wet: 0.1, prio: 0, cd: 1.2 }, slowMoIn: { wet: 0.3, prio: 2, pv: 0 }, slowMoOut: { wet: 0.2, prio: 2, pv: 0 },
   explosion: { wet: 0.35, prio: 2 }, explosionSmall: { wet: 0.25, prio: 2 }, cometImpact: { wet: 0.45, prio: 2 }, cometLaunch: { wet: 0.2, prio: 2 }, launch: { wet: 0.25, prio: 2 },
   boost: { wet: 0.12, prio: 1, cd: 0.12 }, driftBoost: { wet: 0.12, prio: 1, cd: 0.1 }, padBoost: { wet: 0.1, prio: 1, cd: 0.15 }, startBoost: { wet: 0.2, prio: 2 },
   wallHit: { wet: 0.1, prio: 1, cd: 0.12 }, bump: { wet: 0.08, prio: 1, cd: 0.1 }, wallScrape: { prio: 0, cd: 0.05 }, land: { prio: 1, cd: 0.1 }, jump: { prio: 0, cd: 0.1 },
