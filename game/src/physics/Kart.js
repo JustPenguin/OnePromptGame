@@ -6,6 +6,7 @@ import { getDriver, getBody, resolveStats } from '../data/roster.js';
 import { TrackQuery } from '../track/SplineTrack.js';
 import { Surface } from '../track/surfaces.js';
 import { EV } from '../core/events.js';
+import { derivePhys, T, DRIFT_LEVEL_TIME } from './tuning.js';
 
 export class KartInput {
   constructor() {
@@ -33,6 +34,7 @@ export class Kart {
     this.body = getBody(o.bodyId);
     this.name = o.name ?? this.driver.name;
     this.stats = resolveStats(o.driverId, o.bodyId, o.speedClass);
+    this.phys = derivePhys(this.stats);   // per-kart physical values derived from stats (see physics/tuning.js)
     this.radius = 1.15;           // collision circle (metres, before scale)
     this.scale = 1;               // 1 normally; <1 while shrunk (visual + collision)
 
@@ -51,11 +53,13 @@ export class Kart {
     this.right = new THREE.Vector3(-1, 0, 0);
     this.up = new THREE.Vector3(0, 1, 0);
     this.groundNormal = new THREE.Vector3(0, 1, 0);
-    this.orientation = new THREE.Quaternion();   // chassis orientation (yaw + ground normal)
+    this.orientation = new THREE.Quaternion();   // chassis orientation (yaw + ground normal + airborne pitch)
     this.steerVisual = 0;         // smoothed steer -1..1, for wheel/driver animation
     this.spinAngle = 0;           // extra yaw while spinning out (already included in yaw)
-    this.pitch = 0;               // visual pitch (rad), + = nose up
+    this.pitch = 0;               // visual body pitch (rad), + = nose up: squat on acceleration, dive under braking (NOT in orientation)
     this.lean = 0;                // visual body roll (rad), + = roll to the right
+    this.slipAngle = 0;           // chassis (incl. drift angle, excl. spin) vs travel direction, rad (+ = nose left of travel)
+    this.skid = 0;                // 0..1 how hard the tyres are sliding right now (drifts, hard slides, impacts): drives smoke / skid marks
 
     // ---- surface ----
     this.query = new TrackQuery();
@@ -64,23 +68,32 @@ export class Kart {
     this.onRoad = true;
 
     // ---- drift / effects ----
-    this.drift = { dir: 0, charge: 0, level: 0, hop: 0, armed: false, angle: 0, held: false };
+    this.drift = { dir: 0, charge: 0, level: 0, hop: 0, armed: false, angle: 0, held: false, blend: 0, lastDir: 0 };
     this.boost = { timer: 0, duration: 0, strength: 0, source: null };
     this.spin = { timer: 0, duration: 0, dir: 1 };
     this.invincible = 0;          // seconds (shield / star)
     this.shrink = 0;              // seconds
     this.rocket = 0;              // seconds of rocket-rider auto-drive
-    this.stun = 0;                // seconds of "can't steer" (burnout)
+    this.stun = 0;                // seconds of "can't steer"
+    this.recover = 0;             // seconds left of the smooth hand-back of control after a spin-out (steering / throttle ramp back in)
+    this.burnout = 0;             // seconds of wheelspin after a too-early start: launch acceleration is cut (still steerable)
     this.ink = 0;                 // seconds the screen is splattered by an ink item (written by ItemSystem, read by HUD)
-    this.respawn = { active: false, t: 0, dur: 1.6, from: new THREE.Vector3(), to: new THREE.Vector3(), yaw: 0, reason: '' };
+    this.respawn = { active: false, t: 0, dur: T.respawnTime, from: new THREE.Vector3(), to: new THREE.Vector3(), yaw: 0, reason: '' };
     this.fallTimer = 0;
     this.stuckTimer = 0;
     this.coins = 0;
+    this.grace = 0;               // seconds of full invulnerability that is NOT a power-up (after a respawn)
+    this.hitGrace = 0;            // seconds after a spin-out / launch during which further spins and launches are ignored
+    this.blockReason = '';        // why the last blocked hit was blocked: 'shield' | 'rocket' | 'respawn' | 'finished' | 'grace' | 'recovering'
+    this.draft = { t: 0, active: false, bonus: 0, target: null };   // slipstream state (written by KartPhysics)
+    this.air = { trick: false, peak: 0 };   // landing-trick bookkeeping
+    this.scraping = false;        // pressed against a wall right now (EV.WALL_SCRAPE fires on changes)
 
     // ---- control ----
     this.input = new KartInput();  // written by Input (player) / AIManager (AI) each frame
     this.locked = true;            // RaceManager unlocks at GO
     this.autopilot = false;        // true while an AI/ghost controller drives this kart (finish cruise, rocket)
+    this.driftAssist = false;      // opt-in compatibility for controllers that steer with PLAIN sticks everywhere: inside a drift the stick is translated to the one that gives the same yaw rate (controllers that call physics.steerForYawRate are detected and never translated)
 
     // ---- race progress (written by RaceManager) ----
     this.race = {
@@ -98,6 +111,7 @@ export class Kart {
       wrongWayTimer: 0,
       lapStartTime: 0,
       progress: 0,      // 0..1 overall race completion
+      dnf: false,
     };
 
     // ---- item slot (written by ItemSystem) ----
@@ -108,14 +122,47 @@ export class Kart {
     this.root.name = `kart:${this.name}`;
     this.visual = null;              // set by vehicles/ (update(dt, kart, session), dispose())
     this.ext = {};                   // private per-system data: kart.ext.ai, kart.ext.items, kart.ext.vfx ...
+
+    // ---- engine-private bookkeeping (declared up front so every Kart has the same object shape) ----
+    this.lastSafeS = 0;
+    this._wallCool = 0;
+    this._wallT = 0;         // seconds of continuous wall contact
+    this._wallGap = 9;       // seconds since the last wall contact
+    this._bumpCool = 0;
+    this._pad = null;
+    this._offroad = false;
+    this._spinCount = 0;
+    this._respawnHold = 0;
+    this._assist = 0;        // steering-assist correction added to the input steer this frame
+    this._yawAware = false;  // a controller used steerForYawRate() since the last physics update
+    this._aware = false;     // ... latched for the current physics update
+    this._prevSpeed = 0;
   }
 
   get speedRatio() { return Math.max(0, this.speed) / this.stats.topSpeed; }
+  /** 0..1 progress toward the NEXT mini-turbo level while drifting (1 once the pink level is reached; 0 when not drifting). */
+  get driftProgress() {
+    const d = this.drift;
+    if (d.dir === 0) return 0;
+    if (d.level >= 3) return 1;
+    const lo = d.level === 0 ? 0 : DRIFT_LEVEL_TIME[d.level - 1], hi = DRIFT_LEVEL_TIME[d.level];
+    return Math.min(1, Math.max(0, (d.charge - lo) / (hi - lo)));
+  }
   get isBoosting() { return this.boost.timer > 0; }
   get isDrifting() { return this.drift.dir !== 0; }
   get isSpinning() { return this.spin.timer > 0; }
   /** True while hits (shells, hazards, rams) must be ignored. */
-  isInvulnerable() { return this.invincible > 0 || this.rocket > 0 || this.respawn.active || this.race.finished; }
+  isInvulnerable() { return this.invincible > 0 || this.rocket > 0 || this.respawn.active || this.race.finished || this.grace > 0; }
+
+  /** Why a hit would be ignored right now ('' = it would land). Spin-outs and launches also respect the post-hit grace. */
+  _blockedFor(strict) {
+    if (this.invincible > 0) return 'shield';
+    if (this.rocket > 0) return 'rocket';
+    if (this.respawn.active || this.grace > 0) return 'respawn';
+    if (this.race.finished) return 'finished';
+    if (strict && this.hitGrace > 0) return 'recovering';
+    return '';
+  }
 
   // ------------------------------------------------------------------ effects API (used by items, tracks, rules)
   /** Speed boost. strength = extra top-speed fraction (0.35 = +35%). Keeps the stronger/longer of overlapping boosts. */
@@ -127,20 +174,29 @@ export class Kart {
     this.events?.emit(EV.BOOST, { kart: this, source, strength, duration });
   }
 
-  /** Lose control and spin for `duration` seconds. Returns false if the kart is invulnerable. */
-  spinOut(duration = 1.3, cause = 'hit', dir = Math.random() < 0.5 ? -1 : 1) {
-    if (this.isInvulnerable()) return false;
+  /**
+   * Lose control and spin for `duration` seconds. Returns false if the hit was blocked (invulnerable, or still recovering from a
+   * previous hit: you can never be chain-spun) - then `kart.blockReason` says why.
+   */
+  spinOut(duration = 1.3, cause = 'hit', dir = ((this.id + this._spinCount) & 1) ? 1 : -1) {
+    const why = this._blockedFor(true);
+    if (why) { this.blockReason = why; return false; }
+    this._spinCount++;
     this.spin.timer = duration; this.spin.duration = duration; this.spin.dir = dir;
+    this.hitGrace = duration + T.hitGraceExtra;
     this.drift.dir !== 0 && this.cancelDrift();
     this.events?.emit(EV.SPIN_OUT, { kart: this, cause });
     return true;
   }
 
-  /** Knocked into the air (explosions). */
+  /** Knocked into the air (explosions). Same blocking rules as spinOut(). */
   launch(vy = 11, cause = 'explosion') {
-    if (this.isInvulnerable()) return false;
+    const why = this._blockedFor(true);
+    if (why) { this.blockReason = why; return false; }
+    this._spinCount++;
     this.vy = vy; this.grounded = false; this.speed *= 0.25; this.slide *= 0.25;
-    this.spin.timer = 1.7; this.spin.duration = 1.7; this.spin.dir = Math.random() < 0.5 ? -1 : 1;
+    this.spin.timer = 1.7; this.spin.duration = 1.7; this.spin.dir = ((this.id + this._spinCount) & 1) ? 1 : -1;
+    this.hitGrace = 1.7 + T.hitGraceExtra;
     this.cancelDrift();
     this.events?.emit(EV.LAUNCH, { kart: this, cause });
     return true;
@@ -152,7 +208,7 @@ export class Kart {
   }
 
   setInvincible(duration) { this.invincible = Math.max(this.invincible, duration); this.events?.emit(EV.INVINCIBLE, { kart: this, active: true }); }
-  shrinkFor(duration) { if (this.isInvulnerable()) return false; this.shrink = Math.max(this.shrink, duration); this.events?.emit(EV.SHRINK, { kart: this, active: true }); return true; }
+  shrinkFor(duration) { const why = this._blockedFor(false); if (why) { this.blockReason = why; return false; } this.shrink = Math.max(this.shrink, duration); this.events?.emit(EV.SHRINK, { kart: this, active: true }); return true; }
   setRocket(duration) { this.rocket = Math.max(this.rocket, duration); this.events?.emit(EV.ROCKET, { kart: this, active: true }); }
   addCoins(n = 1) { this.coins = Math.min(10, this.coins + n); this.events?.emit(EV.COIN, { kart: this, total: this.coins }); }
 
@@ -161,7 +217,11 @@ export class Kart {
     this.position.copy(position);
     this.heading = this.yaw = this.moveYaw = yaw;
     this.speed = speed; this.slide = 0; this.vy = 0; this.grounded = true; this.airTime = 0;
-    this.spin.timer = 0; this.spinAngle = 0; this.drift.angle = 0;
+    this.spin.timer = 0; this.spinAngle = 0;
+    this.cancelDrift();
+    this.drift.angle = 0; this.drift.hop = 0; this.drift.blend = 0; this.drift.lastDir = 0;
+    this.draft.t = 0; this.draft.bonus = 0; this.draft.target = null;
+    this.fallTimer = 0; this.stuckTimer = 0; this.scraping = false; this._wallT = 0; this._wallGap = 9;
     this.hint = -1;
     this.root.position.copy(position);
   }

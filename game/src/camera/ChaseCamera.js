@@ -1,118 +1,337 @@
 // Camera rig. OWNER: Agent A (engine).  Drives session.camera.
-// Modes: intro fly-over (race.phase === 'intro'), chase (default), finish orbit (player finished / results).
-// Reads: session.cameraTarget ?? session.player, session.race, session.settings (cameraMode, cameraShake, fovBoost),
-//        kart speed/boost/drift, events (hits add shake).
+//
+// States:   intro fly-over (race.phase === 'intro')  ->  chase / far / close (cycled with the camera key)
+//           ->  finish orbit (the followed kart has finished)  ->  spectate (session.cameraTarget = another kart)
+// Reads:    session.cameraTarget ?? session.player, session.race, session.settings (cameraMode, cameraShake, fovBoost,
+//           reducedMotion), kart speed / boost / drift / airborne state, and events (hits, landings, boosts add kicks).
+//
+// Design notes (see docs/engine.md):
+//  * the camera yaw chases the kart's travel direction with a speed-dependent lag, so corners swing the camera outside the
+//    turn (you see the kart's flank) and drifts swing it into the turn;
+//  * position is "focus - forward * dist + up * height" with a short positional smoothing, and the distance itself grows with
+//    speed and boosts, so the speed feel is explicit rather than an accident of lag;
+//  * everything is exponential damping with the real dt (the session clamps dt to 50 ms), so a slow tab never makes it jump;
+//  * the camera is kept above the road surface and inside the walls using track.project (never clips under terrain);
+//  * shake is deterministic smooth noise (no Math.random) so it reads as rumble, not static.
 import * as THREE from 'three';
 import { EV } from '../core/events.js';
-import { clamp, damp, dampAngle, lerp, wrapAngle } from '../core/math.js';
+import { clamp, damp, dampAngle, lerp, smoothstep, angleDiff } from '../core/math.js';
+import { TrackQuery } from '../track/SplineTrack.js';
+import { SURFACE_PROPS } from '../track/surfaces.js';
 
-const MODES = {
-  chase: { dist: 7.4, height: 3.3, look: 5.5, fov: 64 },
-  far: { dist: 11, height: 5.2, look: 7, fov: 62 },
-  close: { dist: 5, height: 2.3, look: 4.5, fov: 68 },
+// dist/height: metres behind/above the focus point; look: metres ahead of the kart to aim at; fov: base vertical FOV (deg)
+export const CAMERA_MODES = {
+  chase: { dist: 6.2, height: 2.85, look: 6.5, lookUp: 1.2, fov: 58, speedDist: 1.0, speedFov: 8 },
+  far: { dist: 9.6, height: 4.5, look: 8, lookUp: 1.2, fov: 56, speedDist: 1.6, speedFov: 7 },
+  close: { dist: 4.3, height: 2.0, look: 5, lookUp: 1.05, fov: 63, speedDist: 0.6, speedFov: 9 },
 };
 const MODE_ORDER = ['chase', 'far', 'close'];
+const UP = new THREE.Vector3(0, 1, 0);
 
 export class ChaseCamera {
   constructor(session) {
     this.session = session;
     this.camera = session.camera;
     this.mode = session.settings?.cameraMode ?? 'chase';
+    this._seenSetting = session.settings?.cameraMode;   // last value of settings.cameraMode we looked at (only a CHANGE overrides the key-cycled mode)
     this.yaw = 0;
     this.pos = new THREE.Vector3();
     this.look = new THREE.Vector3();
-    this.fov = 64;
+    this.focus = new THREE.Vector3();
+    this.fov = 60;
     this.shake = 0;
+    this.roll = 0;
+    this.rough = 0;         // 0..1 off-road rattle amount
     this.lookBackBlend = 0;
+    this.boostKick = 0;     // 0..1, decays: FOV punch + pull-back after a boost
+    this.dip = 0;           // metres the camera sinks after a hard landing
+    this.orbit = 0;         // finish-orbit angle
+    this.settle = 0;        // seconds left of "gentle catch-up" after the intro is skipped / the target changes
+    this.time = 0;
     this._init = false;
+    this._wasIntro = false;
+    this._followed = null;
+    this._finishT = 0;
+    this.autoSpectate = true;   // after the player's finish orbit, follow the other karts home (turn off to stay on the player)
+    this._manual = false;       // the player cycled the target themselves: stop auto-selecting
+    this._hint = -1;
+    this._q = new TrackQuery();
+    this._smp = null;       // TrackSample scratch, created from the track on first use
     this._tmp = new THREE.Vector3();
     this._tmp2 = new THREE.Vector3();
-    this._smp = null;
+    this._tmp3 = new THREE.Vector3();
+    this._a = new THREE.Vector3(); this._b = new THREE.Vector3(); this._c = new THREE.Vector3();
+    this._la = new THREE.Vector3(); this._lb = new THREE.Vector3(); this._lc = new THREE.Vector3();
+    this.fovKick = 0;       // legacy field (kept for anything that peeks at it)
+    this._frame = { fov: 0, dist: 1, height: 1 };
+
     const on = (t, f) => session.on(t, f);
-    on(EV.WALL_HIT, ({ kart, impact }) => { if (kart === this.target) this.addShake(clamp(impact / 25, 0.1, 0.5)); });
-    on(EV.BUMP, ({ a, b, impact }) => { if (a === this.target || b === this.target) this.addShake(clamp(impact / 30, 0.1, 0.35)); });
-    on(EV.LAND, ({ kart, impact }) => { if (kart === this.target) this.addShake(clamp(impact / 40, 0.1, 0.3)); });
-    on(EV.ITEM_HIT, ({ victim }) => { if (victim === this.target) this.addShake(0.6); });
-    on(EV.BOOST, ({ kart, source }) => { if (kart === this.target) { this.fovKick = source === 'drift' ? 6 : 12; this.addShake(0.12); } });
-    this.fovKick = 0;
+    on(EV.WALL_HIT, ({ kart, impact }) => { if (kart === this.target) this.addShake(clamp(impact / 28, 0.12, 0.55)); });
+    on(EV.BUMP, ({ a, b, impact }) => { if (a === this.target || b === this.target) this.addShake(clamp(impact / 32, 0.1, 0.4)); });
+    on(EV.LAND, ({ kart, impact }) => { if (kart === this.target) { this.addShake(clamp(impact / 45, 0.08, 0.3)); this.dip = Math.min(0.55, this.dip + impact * 0.018); } });
+    on(EV.ITEM_HIT, ({ victim }) => { if (victim === this.target) this.addShake(0.65); });
+    on(EV.SPIN_OUT, ({ kart }) => { if (kart === this.target) this.addShake(0.4); });
+    on(EV.LAUNCH, ({ kart }) => { if (kart === this.target) this.addShake(0.6); });
+    on(EV.RESPAWN_DONE, ({ kart }) => { if (kart === this.target) this.settle = 0.8; });
+    on(EV.BOOST, ({ kart, source, strength }) => {
+      if (kart !== this.target) return;
+      const k = source === 'drift' ? 0.55 : source === 'trick' ? 0.6 : source === 'pad' ? 0.85 : 1;
+      this.boostKick = Math.max(this.boostKick, k * clamp(strength / 0.38, 0.5, 1.2));
+      this.addShake(0.1 + 0.08 * k);
+    });
   }
 
+  /**
+   * Aspect-aware framing: FOV is vertical, so a portrait phone (aspect ~0.46) would see a sliver of the world. Below ~1.35 we widen the
+   * vertical FOV (up to +20 deg) and pull back / up a little; on ultra-wide screens we trim it so the horizontal FOV stays sane.
+   */
+  framing() {
+    const a = this.camera.aspect;
+    const f = this._frame;
+    if (!(a > 0)) { f.fov = 0; f.dist = 1; f.height = 1; return f; }
+    const t = clamp((1.35 - a) / 0.85, 0, 1);
+    const wide = clamp((a - 2.1) / 0.8, 0, 1);
+    f.fov = t * 20 - wide * 6; f.dist = 1 + 0.28 * t; f.height = 1 + 0.2 * t;
+    return f;
+  }
+
+  /** The kart being followed: session.cameraTarget (spectating) or the player. */
   get target() { return this.session.cameraTarget ?? this.session.player ?? this.session.karts[0]; }
-  addShake(v) { if (this.session.settings?.cameraShake !== false) this.shake = Math.min(1, this.shake + v); }
+  get reduced() { return !!this.session.settings?.reducedMotion; }
+  addShake(v) { if (this.session.settings?.cameraShake !== false && !this.reduced) this.shake = Math.min(1, this.shake + v); }
   cycleMode() { this.mode = MODE_ORDER[(MODE_ORDER.indexOf(this.mode) + 1) % MODE_ORDER.length]; return this.mode; }
+  setMode(m) { if (CAMERA_MODES[m]) { this.mode = m; } return this.mode; }
+  /** Jump straight to the chase pose of the current target (after teleports / debug moves). */
+  snapToTarget() { this._init = false; }
 
   update(dt) {
-    const s = this.session, cam = this.camera, k = this.target;
+    const s = this.session, k = this.target;
     if (!k) return;
+    this.time += dt;
+    // settings can change live (settings screen) - follow them unless the player cycled the mode with the key since
+    const wanted = s.settings?.cameraMode;
+    if (wanted !== this._seenSetting) { this._seenSetting = wanted; if (wanted && CAMERA_MODES[wanted]) this.mode = wanted; }
+    const cfg = CAMERA_MODES[this.mode] ?? CAMERA_MODES.chase;
     const phase = s.race?.phase;
-    const cfg = MODES[this.mode] ?? MODES.chase;
-    this.fovKick = damp(this.fovKick, 0, 4, dt);
-    let targetFov = cfg.fov;
+    this.boostKick = damp(this.boostKick, 0, 2.2, dt);
+    this.dip = damp(this.dip, 0, 7, dt);
+    this.shake = Math.max(0, this.shake - dt * 1.9);
+    if (this.settle > 0) this.settle = Math.max(0, this.settle - dt);
 
-    if (phase === 'intro') {
-      this.updateIntro(dt);
-      return;
+    if (phase === 'intro') { this.updateIntro(dt, k, cfg); this._wasIntro = true; return; }
+    if (this._wasIntro) {
+      // intro ended (or was skipped): continue from wherever the camera is, no snap, with a gentle catch-up
+      this._wasIntro = false;
+      this.yaw = k.heading;
+      this.focus.copy(k.position);
+      this.settle = 0.9;
+      this._init = true;
     }
-    if (!this._init) { this._init = true; this.yaw = k.yaw; this.snap(k, cfg); }
+    if (this._followed !== k) { this._followed = k; this._finishT = 0; this._hint = -1; if (this._init) this.settle = 0.7; }   // a new target may be anywhere on the circuit: forget the old projection hint
+    if (!this._init) { this._init = true; this.yaw = k.heading; this.focus.copy(k.position); this.snap(k, cfg); }
 
     const finished = k.race.finished && (phase === 'finishing' || phase === 'results');
-    const lookBack = !!k.input.lookBack && !finished;
-    this.lookBackBlend = damp(this.lookBackBlend, lookBack ? 1 : 0, 12, dt);
-    // camera yaw follows heading (with drift swing) but lags a little for a sense of speed
-    const swing = k.drift.dir !== 0 ? -k.drift.dir * 0.0 + k.drift.angle * 0.5 : 0;
-    const targetYaw = k.heading + swing + this.lookBackBlend * Math.PI + (finished ? performance.now() * 0.0004 : 0);
-    this.yaw = dampAngle(this.yaw, targetYaw, finished ? 3 : 7.5, dt);
-    const dist = cfg.dist * (finished ? 1.5 : 1);
-    const height = cfg.height * (finished ? 0.8 : 1);
+    if (finished) this.updateFinish(dt, k, cfg);
+    else this.updateChase(dt, k, cfg);
+    this.applyClearance(dt, k);
+    this.applyShakeAndRoll(dt, k);
+  }
+
+  // ------------------------------------------------------------------ chase
+  updateChase(dt, k, cfg) {
+    const s = this.session, cam = this.camera;
+    const reduced = this.reduced;
+    const ratio = clamp(k.speed / k.stats.topSpeed, 0, 1.45);
+    const lookBack = !!k.input.lookBack && !k.race.finished;
+    this.lookBackBlend = damp(this.lookBackBlend, lookBack ? 1 : 0, 11, dt);
+
+    // yaw: travel direction (plus a bit of the steered heading so it reacts the instant you steer), swung into a drift
+    const d = k.drift;
+    const base = k.moveYaw + angleDiff(k.heading, k.moveYaw) * 0.6;
+    const swing = d.dir !== 0 ? d.angle * 0.45 : 0;
+    const respawning = k.respawn.active;
+    const targetYaw = (respawning ? k.respawn.yaw : base + swing) + this.lookBackBlend * Math.PI;
+    // faster follow when crawling (so reversing / turning on the spot feels tight), looser at speed
+    const rate = (this.settle > 0 ? 3.2 : lerp(6.6, 4.6, smoothstep(0.3, 1.1, ratio))) * (respawning ? 0.6 : 1);
+    this.yaw = dampAngle(this.yaw, targetYaw, rate, dt);
+
+    // distance / height: speed pulls the camera back, a boost pulls it back further for a moment
+    const air = !k.grounded ? clamp(k.airTime * 2, 0, 1) : 0;
+    const small = 1 - clamp((k.scale - 0.55) / 0.45, 0, 1);                   // 1 while shrunk: come closer so the tiny kart stays readable
+    const fr = this.framing();
+    const dist = (cfg.dist + cfg.speedDist * smoothstep(0, 1.1, ratio) + (reduced ? 0 : this.boostKick * 1.25) + air * 0.4) * (1 - 0.3 * small) * fr.dist;
+    const height = (cfg.height + air * 0.5 - (d.dir !== 0 ? 0.12 : 0)) * (1 - 0.2 * small) * fr.height - this.dip;
+
+    // focus: horizontal rigid, vertical smoothed (jumps & landings feel soft, slopes stay glued)
+    const f = this.focus;
+    f.x = k.position.x; f.z = k.position.z;
+    f.y = damp(f.y, k.position.y, k.grounded ? 12 : 4.5, dt);
     const fx = Math.sin(this.yaw), fz = Math.cos(this.yaw);
-    const desired = this._tmp.set(k.position.x - fx * dist, k.position.y + height, k.position.z - fz * dist);
-    // keep the camera above the road surface
-    const lag = 1 - Math.exp(-(finished ? 4 : 11) * dt);
+    const desired = this._tmp.set(f.x - fx * dist, f.y + height, f.z - fz * dist);
+    const lag = 1 - Math.exp(-(this.settle > 0 ? 4 : 24) * dt);
     this.pos.lerp(desired, lag);
-    const lookAt = this._tmp2.set(k.position.x + fx * cfg.look * (1 - this.lookBackBlend * 2), k.position.y + 1.3, k.position.z + fz * cfg.look * (1 - this.lookBackBlend * 2));
-    this.look.lerp(lookAt, 1 - Math.exp(-14 * dt));
+    const lb = 1 - this.lookBackBlend * 1.7;                                    // look-back: aim at the kart behind us
+    const aim = this._tmp2.set(f.x + fx * cfg.look * lb, f.y + cfg.lookUp, f.z + fz * cfg.look * lb);
+    this.look.lerp(aim, 1 - Math.exp(-(this.settle > 0 ? 5 : 18) * dt));
 
-    // FOV: speed + boost kick
-    if (s.settings?.fovBoost !== false) targetFov += clamp(k.speed / k.stats.topSpeed, 0, 1.4) * 12 + this.fovKick;
-    this.fov = damp(this.fov, targetFov, 6, dt);
-
+    // FOV: speed + boost kick + a touch in drifts
+    let fov = cfg.fov + fr.fov;
+    if (s.settings?.fovBoost !== false && !reduced) fov += Math.pow(clamp(ratio, 0, 1.4), 1.5) * cfg.speedFov + this.boostKick * 9 + (d.dir !== 0 ? 1.5 : 0) + (k.draft.bonus / 0.06) * 2;
+    fov -= (1 - clamp(this.session.timeScale ?? 1, 0.35, 1)) * 7;          // photo finish: a longer lens compresses the dead heat
+    this.fov = damp(this.fov, fov, 5, dt);
+    this.fovKick = this.boostKick * 9;
     cam.position.copy(this.pos);
-    if (this.shake > 0.001) {
-      const a = this.shake * this.shake * 0.35;
-      cam.position.x += (Math.random() - 0.5) * a; cam.position.y += (Math.random() - 0.5) * a; cam.position.z += (Math.random() - 0.5) * a;
-      this.shake = Math.max(0, this.shake - dt * 2.2);
+  }
+
+  // ------------------------------------------------------------------ finish: orbit the kart that crossed the line
+  updateFinish(dt, k, cfg) {
+    this._finishT += dt;
+    this.orbit += dt * 0.5;
+    const f = this.focus;
+    f.x = damp(f.x, k.position.x, 8, dt); f.z = damp(f.z, k.position.z, 8, dt); f.y = damp(f.y, k.position.y, 6, dt);
+    // ease from the chase yaw into a slow orbit
+    const e = smoothstep(0, 1.2, this._finishT);
+    const yaw = this.yaw + this.orbit * e;
+    const fr = this.framing();
+    const dist = lerp(cfg.dist, cfg.dist * 1.55, e) * fr.dist;
+    const h = lerp(cfg.height, cfg.height * 0.8, e) * fr.height;
+    const fx = Math.sin(yaw), fz = Math.cos(yaw);
+    const desired = this._tmp.set(f.x - fx * dist, f.y + h, f.z - fz * dist);
+    this.pos.lerp(desired, 1 - Math.exp(-5 * dt));
+    this.look.lerp(this._tmp2.set(f.x, f.y + 0.9, f.z), 1 - Math.exp(-9 * dt));
+    this.fov = damp(this.fov, cfg.fov + fr.fov - 2, 4, dt);
+    this.camera.position.copy(this.pos);
+    // left / right cycles through the other karts while the race wraps up
+    const inp = this.session.app?.input;
+    if (inp && (inp.pressed('left') || inp.pressed('right'))) { this._manual = true; this.cycleTarget(inp.pressed('right') ? 1 : -1); return; }
+    // then spectate: the best-placed kart still racing, the next one as each finishes, finally back to the player
+    if (this.autoSpectate && !this._manual) {
+      const s = this.session, player = s.player;
+      const hold = k === player ? 5 : 2.5;
+      if (this._finishT > hold) {
+        const next = (s.race?.order ?? s.karts).find((o) => o !== player && !o.race.finished);
+        if (next) s.cameraTarget = next;
+        else if (k !== player) s.cameraTarget = null;
+      }
     }
-    cam.up.set(0, 1, 0);
+  }
+
+  /** Spectate the next / previous kart (by race position). Sets session.cameraTarget. */
+  cycleTarget(dir = 1) {
+    const order = this.session.race?.order ?? this.session.karts;
+    if (!order.length) return null;
+    const cur = order.indexOf(this.target);
+    const next = order[(cur + dir + order.length) % order.length];
+    this.session.cameraTarget = next === this.session.player ? null : next;
+    return this.target;
+  }
+
+  // ------------------------------------------------------------------ clearance: stay above the road, inside the walls
+  applyClearance(dt, k) {
+    const track = this.session.track;
+    if (!track?.project) return;
+    const p = this.pos;
+    const q = track.project(p, this._q, this._hint);
+    this._hint = q.index;
+    const minY = q.height + 0.85;
+    if (p.y < minY) p.y = minY;
+    // keep the camera inside the corridor walls - only where the projection is really this stretch of road (hairpin / switchback
+    // tracks run neighbouring roads close together: a far-away projection must never drag the camera sideways)
+    if (q.wall && q.dist < q.halfWidth + q.shoulder + 10) {
+      const limit = q.halfWidth + q.shoulder - 0.8;
+      const over = Math.abs(q.lateral) - limit;
+      if (over > 0) {
+        const side = q.lateral >= 0 ? 1 : -1;
+        const push = Math.min(over, 4);
+        p.x -= q.right.x * side * push; p.z -= q.right.z * side * push;
+      }
+    }
+    this.camera.position.copy(p);
+  }
+
+  // ------------------------------------------------------------------ shake, roll, aim
+  applyShakeAndRoll(dt, k) {
+    const cam = this.camera, t = this.time;
+    if (this.shake > 0.002) {
+      const a = this.shake * this.shake * 0.5;
+      cam.position.x += (Math.sin(t * 53.1) + Math.sin(t * 31.7 + 1.3)) * 0.5 * a;
+      cam.position.y += (Math.sin(t * 47.9 + 2.1) + Math.sin(t * 27.3 + 0.4)) * 0.5 * a;
+      cam.position.z += (Math.sin(t * 41.3 + 4.2) + Math.sin(t * 23.9 + 3.3)) * 0.5 * a;
+    }
+    // off-road rattle: a fine, fast tremble that scales with speed (not part of the hit shake, so it never builds up)
+    const offroad = k.grounded && k.speed > 6 && SURFACE_PROPS[k.surface]?.offroad;
+    this.rough = damp(this.rough, offroad && !this.reduced && this.session.settings?.cameraShake !== false ? clamp(k.speed / k.stats.topSpeed, 0, 1) : 0, 7, dt);
+    if (this.rough > 0.01) {
+      const r = this.rough * 0.045;
+      cam.position.y += (Math.sin(t * 83.7) + Math.sin(t * 61.3 + 1.1)) * 0.5 * r;
+      cam.position.x += Math.sin(t * 71.9 + 2.3) * r * 0.5;
+    }
+    // a hair of roll into corners and drifts (never for reduced motion)
+    const rollT = this.reduced || this.session.settings?.cameraShake === false ? 0 : -(k.steerVisual * 0.018 + k.drift.dir * 0.016) * clamp(k.speed / k.stats.topSpeed, 0, 1) + (this.shake > 0.002 ? Math.sin(t * 37.7) * this.shake * 0.02 : 0);
+    this.roll = damp(this.roll, rollT, 6, dt);
+    cam.up.copy(UP);
     cam.lookAt(this.look);
-    if (Math.abs(cam.fov - this.fov) > 0.01) { cam.fov = this.fov; cam.updateProjectionMatrix(); }
+    if (Math.abs(this.roll) > 1e-4) {
+      // rotate the up vector about the view axis
+      const axis = this._tmp3.copy(this.look).sub(cam.position).normalize();
+      cam.up.applyAxisAngle(axis, this.roll);
+      cam.lookAt(this.look);
+    }
+    if (Math.abs(cam.fov - this.fov) > 0.005) { cam.fov = this.fov; cam.updateProjectionMatrix(); }
   }
 
   snap(k, cfg) {
     const fx = Math.sin(this.yaw), fz = Math.cos(this.yaw);
-    this.pos.set(k.position.x - fx * cfg.dist, k.position.y + cfg.height, k.position.z - fz * cfg.dist);
-    this.look.set(k.position.x + fx * cfg.look, k.position.y + 1.3, k.position.z + fz * cfg.look);
+    const fr = this.framing();
+    this.focus.copy(k.position);
+    this.pos.set(k.position.x - fx * cfg.dist * fr.dist, k.position.y + cfg.height * fr.height, k.position.z - fz * cfg.dist * fr.dist);
+    this.look.set(k.position.x + fx * cfg.look, k.position.y + cfg.lookUp, k.position.z + fz * cfg.look);
+    this.fov = cfg.fov + fr.fov;
+    this.camera.position.copy(this.pos);
   }
 
-  /** Baseline intro: a sweeping crane shot that ends right behind the pole-position kart. */
-  updateIntro(dt) {
-    const s = this.session, cam = this.camera, track = s.track, race = s.race;
-    const k = this.target;
+  // ------------------------------------------------------------------ intro: a crane shot over the grid that lands exactly on the chase pose
+  /**
+   * Quadratic-Bezier fly-through of three track-relative keyframes (all expressed around the player's grid slot so it works on
+   * any course): high and wide on the left of the pack looking down the course, then down beside the pack, then the exact
+   * chase pose behind the player's kart.  The last keyframe is computed with the same numbers the chase camera uses at standstill.
+   */
+  updateIntro(dt, k, cfg) {
+    const s = this.session, cam = this.camera, race = s.race, track = s.track;
     const u = clamp(race.phaseTime / Math.max(0.01, race.introDuration), 0, 1);
-    const e = u * u * (3 - 2 * u);
-    this._smp ??= new (track.sampleAt(0).constructor)();
-    const startS = 40 - 120 * e;                       // sweep from ahead of the line back to the grid
-    const smp = track.sampleAt(startS, this._smp);
-    const side = lerp(26, 0, e);
-    const heightUp = lerp(22, 3.3, e);
-    cam.position.copy(smp.position).addScaledVector(smp.right, side).addScaledVector(smp.tangent, lerp(-20, -7.4, e));
-    cam.position.y += heightUp;
-    this.look.copy(k.position).addScaledVector(smp.tangent, lerp(30, 5.5, e));
-    this.look.y += 1.3;
-    cam.up.set(0, 1, 0);
+    const e = u * u * u * (u * (u * 6 - 15) + 10);               // smootherstep: zero velocity at both ends
+    this._smp ??= track.sampleAt(0);
+    const smp = track.sampleAt(k.query.s, this._smp);
+    const T = this._a.copy(smp.tangent).setY(0).normalize();     // flatten so "ahead" is horizontal
+    const R = this._b.set(-T.z, 0, T.x);                         // right-hand vector (horizontal): right(yaw) = (-cos, 0, sin)
+    const P = k.position;
+    const fx = Math.sin(k.heading), fz = Math.cos(k.heading);
+    // keyframe positions (camera) and aim points
+    const c0 = this._c.copy(P).addScaledVector(R, -30).addScaledVector(T, -34); c0.y += 34;
+    const c1 = this._tmp.copy(P).addScaledVector(R, -13).addScaledVector(T, -21); c1.y += 11;
+    const fr = this.framing();
+    const c2 = this._tmp2.set(P.x - fx * cfg.dist * fr.dist, P.y + cfg.height * fr.height, P.z - fz * cfg.dist * fr.dist);
+    // the aim point first sweeps along the REAL circuit ahead of the grid (so curvy courses show their first corners), then settles on the pack
+    const sP = k.query.s;
+    const a0 = track.pointAt(sP + 210, 0, this._la, 2.5);
+    const a1 = track.pointAt(sP + 34, 0, this._lb, 1.2);
+    const a2 = this._lc.set(P.x + fx * cfg.look, P.y + cfg.lookUp, P.z + fz * cfg.look);
+    bezier3(this.pos, c0, c1, c2, e);
+    bezier3(this.look, a0, a1, a2, e);
+    cam.position.copy(this.pos);
+    this.fov = lerp(44 + fr.fov * 0.6, cfg.fov + fr.fov, smoothstep(0, 1, e));
+    cam.up.copy(UP);
     cam.lookAt(this.look);
-    cam.fov = lerp(48, 64, e); cam.updateProjectionMatrix();
-    this.pos.copy(cam.position);
+    if (Math.abs(cam.fov - this.fov) > 0.005) { cam.fov = this.fov; cam.updateProjectionMatrix(); }
     this.yaw = k.heading;
+    this.focus.copy(P);
     this._init = false;
   }
+}
+
+/** Quadratic Bezier that passes through `mid` at t = 0.5 (control point derived from the three keyframes). */
+function bezier3(out, p0, mid, p2, t) {
+  const cx = 2 * mid.x - 0.5 * (p0.x + p2.x), cy = 2 * mid.y - 0.5 * (p0.y + p2.y), cz = 2 * mid.z - 0.5 * (p0.z + p2.z);
+  const a = (1 - t) * (1 - t), b = 2 * (1 - t) * t, c = t * t;
+  return out.set(a * p0.x + b * cx + c * p2.x, a * p0.y + b * cy + c * p2.y, a * p0.z + b * cz + c * p2.z);
 }
