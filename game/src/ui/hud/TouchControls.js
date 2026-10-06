@@ -105,7 +105,7 @@ export class TouchControls {
     const auto = !!st.assists?.autoAccelerate;
     const lay = auto ? BTN_LAYOUT.auto : BTN_LAYOUT.manual;
     const compact = document.getElementById('ui-root')?.classList.contains('l-compact');
-    this.root.style.fontSize = `${(st.touchScale ?? 1) * (compact ? 0.86 : 1)}em`;
+    this.root.style.setProperty('--tsz', String((st.touchScale ?? 1) * (compact ? 0.86 : 1)));   // font-size comes from hudCss (.touchc), which also shrinks the pad + buttons to fit narrow screens
     for (const [id, el] of Object.entries(this.btns)) {
       const l = lay[id];
       el.style.display = l ? '' : 'none';

@@ -86,6 +86,28 @@ await ok('export -> import round trip (compressed + checksum + tamper detection)
   assert.equal(crc32(new TextEncoder().encode('123456789')), 'cbf43926');
 });
 
+await ok('profile.unlockAll ("Unlock everything"): off by default, sanitised, survives save / reload / export, cleared by reset, kept on merge', async () => {
+  const d = defaultSave();
+  assert.equal(d.profile.unlockAll, false);
+  assert.equal(normalizeSave(d).profile.unlockAll, false);
+  assert.equal(normalizeSave({ profile: { unlockAll: 'yes' } }).profile.unlockAll, false, 'only a real boolean counts');
+  assert.equal(normalizeSave({ profile: { unlockAll: 1 } }).profile.unlockAll, false);
+  assert.equal(normalizeSave({ version: 1, profile: { name: 'Old' } }).profile.unlockAll, false, 'older saves simply have it off');
+  d.profile.unlockAll = true;
+  assert.equal(normalizeSave(d).profile.unlockAll, true);
+  assert.equal((await decodeSave(await encodeSave(d))).data.profile.unlockAll, true, 'export / import round trip');
+  const mine = defaultSave(); mine.profile.unlockAll = true;
+  assert.equal(mergeSaves(mine, defaultSave()).profile.unlockAll, true, 'merge keeps the current profile');
+  assert.equal(mergeSaves(defaultSave(), d).profile.unlockAll, false, 'an imported switch does not flip the current one on a merge');
+  window.localStorage = fakeStorage();
+  const st = new Save();
+  const profileRef = st.profile;
+  st.profile.unlockAll = true; st.commit(true);
+  assert.equal(new Save().profile.unlockAll, true, 'persisted');
+  st.reset();
+  assert.equal(st.profile, profileRef); assert.equal(st.profile.unlockAll, false, 'reset progress also switches it off');
+});
+
 await ok('merge keeps best records, unions unlocks, max stats', () => {
   const a = defaultSave(), b = defaultSave();
   a.records.t = { tt: { pro: { time: 60, laps: 3, by: null, date: 1 } } };

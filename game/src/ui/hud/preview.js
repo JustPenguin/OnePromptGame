@@ -18,7 +18,7 @@ export const previewCss = /* css */ `
 .hudprev .kartmock::before{left:-10%;} .hudprev .kartmock::after{right:-10%;}
 .hudprev-inner{position:absolute;left:0;top:0;transform-origin:0 0;z-index:2;pointer-events:none;}
 .hudprev .hud{position:absolute;inset:0;}
-.hudprev .hud .hz{transition:none;}
+.hudprev .hud .zl,.hudprev .hud .zr{transition:none;}
 .hudprev .tag{position:absolute;left:50%;transform:translateX(-50%);top:.4rem;z-index:3;font-size:.6rem;letter-spacing:.14em;text-transform:uppercase;font-weight:900;padding:.15rem .5rem;border-radius:99px;background:rgba(0,0,0,.5);color:#dfe6ff;}
 .l-portrait .hudprev{width:auto;height:15rem;} .l-portrait .hudprev .tag{display:none;} .l-compact .hudprev{display:none;}
 `;
@@ -44,12 +44,8 @@ export class HudPreview {
     this.board = h('div', { class: 'board' }, rows);
 
     this.hud = h('div', { class: `hud preview` },
-      h('div', { class: 'hz tl' }, this.item.el),
-      h('div', { class: 'hz ml' }, this.board),
-      h('div', { class: 'hz bl' }, this.posEl),
-      h('div', { class: 'hz tr' }, h('div', { class: 'trrow' }, this.lapbox), this.timerEl),
-      h('div', { class: 'hz mr' }, this.mini.el),
-      h('div', { class: 'hz br' }, this.speedo.el));
+      h('div', { class: 'zl' }, this.item.el, h('div', { class: 'zl-mid' }, this.posEl), h('div', { class: 'status' }), this.board),
+      h('div', { class: 'zr' }, h('div', { class: 'trrow' }, this.lapbox), this.timerEl, h('div', { class: 'zr-inst' }, this.mini.el, this.speedo.el)));
     this.inner = h('div', { class: 'hudprev-inner' }, this.hud);
     this.el = h('div', { class: 'hudprev', 'aria-label': 'HUD preview', role: 'img' }, h('div', { class: 'kartmock' }), this.inner, h('span', { class: 'tag' }, 'Preview'));
     this._onResize = () => this.layout();

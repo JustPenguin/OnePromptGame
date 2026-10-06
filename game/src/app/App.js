@@ -216,8 +216,7 @@ export class App {
       this.input.enabled = false;
       this.audio?.playMusic?.('results');
       this.ui.hud?.hide?.();
-      this.ui.reset('results', { summary, standings }, 'fade');
-      (summary.achievements ?? []).forEach((a, i) => setTimeout(() => this.ui.toast({ title: 'Achievement unlocked', text: a.name, kind: 'unlock', icon: a.icon, ms: 4200 }), 1400 + i * 900));
+      this.ui.reset('results', { summary, standings }, 'fade');   // achievements are listed in the results layout itself (never as an overlay)
     }, RESULTS_DELAY_MS);
   }
 

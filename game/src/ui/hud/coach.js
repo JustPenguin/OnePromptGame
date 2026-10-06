@@ -16,10 +16,10 @@ export class Coach {
     this.cardOn = !this.seen.controls;
     this.card = h('div', { class: 'coach glass' });
     this.pill = h('div', { class: 'coachpill hint' });
-    this.el = h('div', { class: 'hz bc coachwrap' }, this.card, this.pill);
+    this.el = h('div', { class: 'coachwrap' }, this.card, this.pill);   // lives in the HUD's bottom-centre stack (.zb)
     this.pillTimer = 0; this.itemSince = null; this.driftTried = false;
     this.card.style.display = this.cardOn ? '' : 'none';
-    this.pill.style.opacity = '0';
+    this.pill.style.display = 'none';
     this.render();
   }
 
@@ -46,7 +46,8 @@ export class Coach {
   /** Show a one-line nudge for a few seconds. */
   nudge(node) {
     this.pill.replaceChildren(icon('tip'), node);
-    this.pill.style.opacity = '1';
+    this.pill.style.display = '';
+    this.hud.root.classList.add('tip');
     replay(this.pill, 'show');
     this.pillTimer = 5.5;
   }
@@ -70,7 +71,7 @@ export class Coach {
       this.card.classList.toggle('fade', rt > 4.8);
     }
     if (phase !== 'racing' || me.race.finished) { if (this.pillTimer > 0) this.pillTimer = 0.01; }
-    if (this.pillTimer > 0) { this.pillTimer -= dt; if (this.pillTimer <= 0) this.pill.style.opacity = '0'; }
+    if (this.pillTimer > 0) { this.pillTimer -= dt; if (this.pillTimer <= 0) { this.pill.style.display = 'none'; this.hud.root.classList.remove('tip'); } }
     if (phase !== 'racing' || this.pillTimer > 0 || this.cardOn) return;
     // contextual nudges (each at most once per profile)
     if (!this.seen.drift && !this.driftTried && rt > 9 && me.speed > 12) {
@@ -93,15 +94,14 @@ export class Coach {
 }
 
 export const coachCss = `
-.coachwrap{bottom:calc(max(var(--pad),var(--sab)) + .2em);gap:.6em;pointer-events:none;}
-.coach{padding:.6em 1.1em .8em;border-radius:1em;max-width:min(34em,92vw);transition:opacity .6s;animation:rise .6s var(--ease-out) both .2s;}
+.coachwrap{display:flex;flex-direction:column;align-items:center;gap:.6em;pointer-events:none;max-width:100%;}
+.coach{padding:.6em 1.1em .8em;border-radius:1em;max-width:34em;transition:opacity .6s;animation:rise .6s var(--ease-out) both .2s;}
 .coach.fade{opacity:0;}
 .coach .ch{display:flex;align-items:center;gap:.5em;font-size:.95em;letter-spacing:.08em;text-transform:uppercase;color:#ffd23f;margin-bottom:.45em;}
 .coach .crow{display:flex;gap:1.1em;align-items:flex-start;justify-content:center;flex-wrap:wrap;}
 .coach .cc{display:flex;flex-direction:column;align-items:center;gap:.35em;min-width:5.4em;}
 .coach .cc > span{font-family:var(--font-ui);font-weight:900;font-size:.62em;letter-spacing:.08em;text-transform:uppercase;color:#dfe6ff;text-align:center;}
 .coach .cgl{display:flex;gap:.2em;align-items:center;min-height:1.7em;} .coach .cg{display:inline-flex;gap:.2em;} .coach .cgl b{font-size:1em;letter-spacing:.06em;}
-.coachpill{font-size:.78em;max-width:min(40em,92vw);text-align:center;justify-content:center;opacity:0;transition:opacity .35s;}
-.l-compact .coach{display:none!important;} .l-compact .coachwrap{bottom:calc(max(var(--pad),var(--sab)) + 7.2em);} .l-portrait .coachwrap{bottom:calc(max(var(--pad),var(--sab)) + 15em);}
-.l-portrait .coach .crow{gap:.6em;} .l-portrait .coach .cc{min-width:4.2em;}
+.coachpill{font-size:.78em;max-width:100%;text-align:center;justify-content:center;white-space:normal;}
+.coachpill.show{animation:fade-in .35s ease both;}
 `;

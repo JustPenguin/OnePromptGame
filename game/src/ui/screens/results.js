@@ -29,6 +29,7 @@ export const resultsCss = /* css */ `
 .res-badges .chip{font-size:.9rem;padding:.3rem .9rem;}
 .badge-new{animation:badge-pop .7s var(--ease-spring) both;animation-delay:calc(var(--i,0) * 160ms + 500ms);}
 @keyframes badge-pop{from{opacity:0;transform:scale(.3) rotate(-8deg)}to{opacity:1;transform:none}}
+.res-ach{display:flex;flex-direction:column;gap:.35rem;} .res-ach .ak{display:flex;align-items:center;gap:.45rem;font-family:var(--font-ui);font-weight:900;font-size:.74rem;letter-spacing:.16em;text-transform:uppercase;color:#ffe27a;}
 .res-stats{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:.5rem;}
 .res-stats .rs{padding:.45rem .6rem;border-radius:.7rem;background:rgba(255,255,255,.07);}
 .res-stats .rs b{display:block;font-family:var(--font-display);font-size:1.2rem;font-weight:400;}
@@ -92,6 +93,13 @@ export class ResultsScreen extends Screen {
     if (s.mode === 'timetrial' && ghost && s.finished) badges.append(h('span', { class: `chip badge-new ${s.time < ghost.time ? 'gn' : 'rd'}`, style: { '--i': bi++ } }, icon('ghost'), s.time < ghost.time ? `Ghost beaten by ${(ghost.time - s.time).toFixed(3)}s` : `Ghost wins by ${(s.time - ghost.time).toFixed(3)}s`));
     if (s.mode === 'timetrial' && s.ghost) badges.append(h('span', { class: 'chip gn badge-new', style: { '--i': bi++ } }, icon('ghost'), 'Ghost saved'));
 
+    // achievements live IN the layout (an overlay toast used to cover the table and the NEW RECORD badge); they pop in after the badges
+    const ach = s.achievements ?? [];
+    this._achAt = ach.length ? 500 + bi * 160 + 120 : -1;
+    const achRow = ach.length ? h('div', { class: 'res-ach', role: 'status' },
+      h('div', { class: 'ak badge-new', style: { '--i': bi } }, icon('trophy'), ach.length === 1 ? 'Achievement unlocked' : `${ach.length} achievements unlocked`),
+      h('div', { class: 'res-badges' }, ach.map((a, i) => h('span', { class: 'chip gd badge-new', style: { '--i': bi + 1 + i }, title: a.desc ?? a.name }, icon(a.icon ?? 'star'), a.name)))) : null;
+
     const st = s.stats;
     const stats = st ? h('div', { class: 'res-stats' },
       [['Top speed', `${Math.round(st.topSpeed * 3.6)} km/h`], ['Drifting', `${st.driftSeconds.toFixed(1)} s`], ['Overtakes', String(st.overtakes)], ['Boosts', String(st.boosts)]]
@@ -135,9 +143,16 @@ export class ResultsScreen extends Screen {
       h('div', { class: 'res-left' },
         h('div', { class: 'kicker' }, `${def.name} · ${{ grandprix: 'Grand Prix', timetrial: 'Time Trial', versus: 'Versus Race' }[s.mode] ?? 'Race'}`),
         this._headline(s, ps),
-        times, badges, stats, unlocks, h('div', { class: 'res-actions' }, acts)),
+        times, badges, achRow, stats, unlocks, h('div', { class: 'res-actions' }, acts)),
       s.racers <= 1 ? null : h('div', { class: 'res-right' }, h('div', { class: 'panel res-table' }, h('div', { class: 'th' }, h('span', {}, '#'), h('span', {}), h('span', {}, 'Racer'), h('span', { style: { textAlign: 'right' } }, 'Time'), h('span', { style: { textAlign: 'right' } }, 'Gap')), rows)));
   }
+
+  onShow() {
+    super.onShow?.();
+    if (this._achAt >= 0) this._achTimer = setTimeout(() => this.ui.sfx('unlock'), this._achAt);
+  }
+
+  destroy() { clearTimeout(this._achTimer); super.destroy?.(); }
 
   /** Big headline: your place (races) or your time (solo Time Trial, where "1st" means nothing). */
   _headline(s, ps) {

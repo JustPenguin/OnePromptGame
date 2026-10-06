@@ -26,9 +26,12 @@ export const getCup = (id) => getCups().find((c) => c.id === id) ?? null;
 /** Everything unlocked (debug / review aid): ?unlockall=1 */
 export const UNLOCK_ALL = param('unlockall') !== null && !['0', 'false', 'off'].includes(param('unlockall'));
 
-export function isCupUnlocked(save, cupId) { return UNLOCK_ALL || save.data.unlocks.cups.includes(cupId) || cupId === 'exhibition'; }
+/** True when everything is selectable: the ?unlockall=1 review flag, or the player's own Settings > Data > "Unlock everything" switch (saved in the profile). */
+export const allUnlocked = (save) => UNLOCK_ALL || save?.data?.profile?.unlockAll === true;
+
+export function isCupUnlocked(save, cupId) { return allUnlocked(save) || save.data.unlocks.cups.includes(cupId) || cupId === 'exhibition'; }
 export function isTrackUnlocked(save, trackId) {
-  if (UNLOCK_ALL) return true;
+  if (allUnlocked(save)) return true;
   const cup = cupOfTrack(trackId);
   return !cup || isCupUnlocked(save, cup.id);
 }

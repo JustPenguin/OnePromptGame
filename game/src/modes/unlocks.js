@@ -5,7 +5,7 @@
 //   when.type 'stat'    -> save.stats[stat] >= gte
 //   when.type 'trophy'  -> some Grand Prix result (cup '*' = any, cls '*' = any) at least `min` (bronze < silver < gold)
 //   when.type 'records' -> number of record entries (time-trial + race) >= gte
-import { UNLOCK_ALL, getCup } from './catalog.js';
+import { allUnlocked, getCup } from './catalog.js';
 import { getDriver, getBody, SPEED_CLASSES } from '../data/roster.js';
 
 export const UNLOCK_RULES = [
@@ -26,7 +26,7 @@ export const unlockKey = (kind) => KIND_KEY[kind];
 export const ruleFor = (kind, target) => UNLOCK_RULES.find((r) => r.kind === kind && r.target === target) ?? null;
 
 export function isUnlocked(save, kind, id) {
-  if (UNLOCK_ALL) return true;
+  if (allUnlocked(save)) return true;
   return save.data.unlocks[KIND_KEY[kind]]?.includes(id) ?? false;
 }
 
@@ -60,7 +60,7 @@ export function hintFor(save, kind, id) {
 
 /**
  * Apply every rule whose condition is now met.  Mutates save.data.unlocks and commits.
- * @returns {{kind:string,target:string,rule:object}[]} the NEW unlocks (for toasts / the results screen)
+ * @returns {{kind:string,target:string,rule:object}[]} the NEW unlocks (for the results screen; empty while profile.unlockAll is on)
  */
 export function evaluateUnlocks(save) {
   const fresh = [];
@@ -70,7 +70,8 @@ export function evaluateUnlocks(save) {
     if (progress(rule, save.data).done) { list.push(rule.target); fresh.push({ kind: rule.kind, target: rule.target, rule }); }
   }
   if (fresh.length) save.commit(true);
-  return fresh;
+  // with "Unlock everything" on, earned unlocks are still recorded (progress, Full Garage) but nothing is announced as new
+  return save.data.profile?.unlockAll === true ? [] : fresh;
 }
 
 /** Display name for an unlock entry ({kind, target}). */
