@@ -42,7 +42,7 @@ function renderPixels(driverId, bodyId, kind, px, opts) {
   const R = getSharedRenderer();
   if (!R || R.contextLost || !R.renderToPixels || !getSharedEnvironment()) return null;
   const { scene, camera } = getStudio();
-  const show = createKartShowcase(driverId, bodyId, { pose: 'idle', quality: 'high', paint: opts.paint });
+  const show = createKartShowcase(driverId, bodyId, { pose: 'idle', quality: 'high', paint: opts.paint, trim: 1 });
   const vis = show.visual;
   vis.s.blinkT = 999; vis.s.blinkLeft = 0;
   if (opts.expression && EXPR[opts.expression] !== undefined) vis.react(EXPR[opts.expression], 99);

@@ -28,6 +28,7 @@ uniform float uPaintOn;
 uniform vec3 uPaintFrom;
 uniform vec3 uPaintTo;
 uniform float uPaintLum;
+uniform float uTrim;
 `;
 // Custom paint: vertices whose colour has the driver's primary chromaticity (and carry the clearcoat/paint mask) are re-coloured to
 // uPaintTo, keeping the baked ambient occlusion (luminance ratio); stripes / chrome / rubber of other hues are untouched.
@@ -46,6 +47,7 @@ if ( uPaintOn > 0.5 ) {
 `;
 const FRAG_FINAL = /* glsl */`
 {
+  outgoingLight *= uTrim;      // per-kart exposure trim (menu showcases sit under strong stage lights)
   vec3 kv = normalize( vViewPosition );
   float kfr = pow( 1.0 - saturate( dot( normal, kv ) ), 3.0 );
   // gentle sky-coloured rim keeps silhouettes readable against any backdrop (less on bare metal)
@@ -88,6 +90,7 @@ export function createKartMaterial(o = {}) {
     uPaintFrom: { value: new THREE.Color(1, 1, 1) },
     uPaintTo: { value: new THREE.Color(1, 1, 1) },
     uPaintLum: { value: 1 },
+    uTrim: { value: 1 },
   };
   mat.userData.u = u;
   mat.userData.kartMaterial = true;

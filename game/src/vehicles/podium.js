@@ -94,7 +94,7 @@ export function createPodiumScene(top3, opts = {}) {
     root.add(trim);
     // the kart + driver
     const driverId = entry.driverId, bodyId = entry.bodyId;
-    const show = createKartShowcase(driverId, bodyId, { pose: 'cheer', quality: opts.quality ?? 'high' });
+    const show = createKartShowcase(driverId, bodyId, { pose: 'cheer', quality: opts.quality ?? 'high', trim: 0.9 });
     show.root.position.set(B.x, B.h + 0.06, 0.1);
     show.root.rotation.y = B.yaw;
     show.react('happy');

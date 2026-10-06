@@ -3,7 +3,7 @@
 //   attachKartVisual(kart, session)  builds kart.visual = { root, update(dt, kart, session), dispose(), ... } and adds it under
 //                                    kart.root (positioned/oriented by physics; the model faces +Z, origin on the ground under the kart's centre).
 //   createKartShowcase(driverId, bodyId, opts) -> { root, update(dt), dispose(), setPose(name), setPaint(color), ... }   for menu turntables / podium.
-//   opts: { pose, quality, envMap, paint }   (paint = optional custom paint colour, e.g. '#ff3d9a')
+//   opts: { pose, quality, envMap, paint, trim }   (paint = optional custom paint colour, e.g. '#ff3d9a'; trim = exposure trim, default 0.72 for menu stages)
 // Each kart is ONE SkinnedMesh (rigid-bound bones, one patched PBR material, see kartMaterial.js) + one face-decal mesh = 2 draw calls.
 // Animation is procedural, driven every frame by kart fields (speed, steerVisual, lean, drift, boost, spin, grounded, race...) and by
 // session events, and is allocation-free.  The pose solve is deferred to render time (`flush()`), so fast headless simulation
@@ -185,6 +185,7 @@ export class KartVisual {
     this.matHigh = null; this.matStd = null; this.matGhost = null;
     this.driverPrimary = new THREE.Color(A.driver.colors.primary);
     this.paint = opts.paint ? new THREE.Color(opts.paint) : null;
+    this.trim = opts.trim ?? 1;
     this.mat = this._pickMaterial();
     this._syncPaint();
     this.mesh = new THREE.SkinnedMesh(A.geometry, this.mat);
@@ -210,6 +211,7 @@ export class KartVisual {
     });
     if (st.emissive) { fm.emissive = new THREE.Color(1, 1, 1); fm.emissiveMap = this.faceTex; fm.emissiveIntensity = 1.7; }
     this.faceMat = fm;
+    if (this.trim !== 1) fm.color.setScalar(this.trim);
     const h = A.drv.head;
     this.face = new THREE.Mesh(A.faceGeo, fm);
     this.face.name = 'face';
@@ -280,8 +282,11 @@ export class KartVisual {
     this.paint = color == null ? null : new THREE.Color(color);
     this._syncPaint();
   }
+  /** Exposure trim of the whole kart (1 = as lit; < 1 darkens): menu showcases use ~0.72 so paint colours pop under the stage lights. */
+  setTrim(t) { this.trim = t; this._syncPaint(); if (this.faceMat) this.faceMat.color.setScalar(t); }
   _syncPaint() {
     const u = this.mat?.userData?.u; if (!u) return;
+    u.uTrim.value = this.trim;
     const p = this.paint, f = this.driverPrimary;
     u.uPaintOn.value = p ? 1 : 0;
     if (p) { u.uPaintFrom.value.copy(f); u.uPaintTo.value.copy(p); u.uPaintLum.value = Math.max(0.02, 0.2126 * f.r + 0.7152 * f.g + 0.0722 * f.b); }
@@ -631,7 +636,7 @@ export function attachKartVisual(kart, session) {
  */
 export function createKartShowcase(driverId, bodyId, opts = {}) {
   const fake = makeFakeKart(driverId, bodyId);
-  const vis = new KartVisual(driverId, bodyId, { kart: fake, quality: opts.quality ?? 'high', envMap: opts.envMap, paint: opts.paint });
+  const vis = new KartVisual(driverId, bodyId, { kart: fake, quality: opts.quality ?? 'high', envMap: opts.envMap, paint: opts.paint, trim: opts.trim ?? 0.72 });
   vis.deferred = false;
   const root = new THREE.Group();
   root.name = 'kartShowcase';
