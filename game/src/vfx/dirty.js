@@ -29,8 +29,9 @@ export class DirtyRange {
     const n = this.phi - this.plo + 1;
     for (let k = 0; k < this.attrs.length; k++) {
       const a = this.attrs[k][0], size = this.attrs[k][1];
-      a.clearUpdateRanges();
-      a.addUpdateRange(this.plo * size, n * size);
+      const r = a.updateRanges;
+      if (r.length === 1) { r[0].start = this.plo * size; r[0].count = n * size; }     // reuse the range object (addUpdateRange allocates one per call)
+      else { a.clearUpdateRanges(); a.addUpdateRange(this.plo * size, n * size); }
       a.needsUpdate = true;
     }
   }

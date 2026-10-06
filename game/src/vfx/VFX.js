@@ -36,6 +36,10 @@ const _q = new THREE.Quaternion(), _qq = new THREE.Quaternion(), _exq = new THRE
 const _Z = new THREE.Vector3(0, 0, 1), _X = new THREE.Vector3(1, 0, 0), _ed = new THREE.Vector3(), _dw = new THREE.Vector3();
 const _qp = new THREE.Quaternion().setFromAxisAngle(_X, 0.07), _qb = new THREE.Quaternion();
 const _white = [1, 1, 1];
+const R = Object.freeze({ SM0: 0, SM1: 1, SP0: 2, SP1: 3, DU0: 4, DU1: 5, SCR: 6, FL0: 7, FL1: 8, FS0: 9, FS1: 10, INV: 11, DR: 12 });   // emission accumulator slots
+// constant colours used in per-frame paths (never allocate array literals there)
+const SMOKE_ICE = [0.8, 0.92, 1], SMOKE_ROAD = [0.9, 0.9, 0.93], SMOKE_ROCKET = [0.22, 0.2, 0.2], SMOKE_BOOST = [0.62, 0.7, 0.78];
+const SPLASH_C = [0.7, 0.88, 1], DUST_C = [0.7, 0.62, 0.48];
 
 const SURF_FX = (() => {
   const t = [];
@@ -114,10 +118,11 @@ export class VFX {
   cnt(x) { const n = Math.floor(x); return n + (this.rng() < x - n ? 1 : 0); }
   st(k) {
     let s = k.ext.vfx;
-    if (!s) s = k.ext.vfx = { skidL: this.skids.slot(k.id * 2), skidR: this.skids.slot(k.id * 2 + 1), flame: 0, boostLevel: 0, boostSrc: '', boostT: 0, scrape: false, burnout: 0, lastLand: 0, shield: 0, starPhase: this.rng() };
+    if (!s) s = k.ext.vfx = { acc: new Float64Array(16), skidL: this.skids.slot(k.id * 2), skidR: this.skids.slot(k.id * 2 + 1), flame: 0, boostLevel: 0, boostSrc: '', boostT: 0, scrape: false, burnout: 0, lastLand: 0, shield: 0, starPhase: this.rng() };
     return s;
   }
-  rate(st, key, perSec, dt) { const a = (st[key] ?? 0) + perSec * this.pm * dt; const n = a | 0; st[key] = a - n; return n > 6 ? 6 : n; }
+  /** Emission accumulator `slot` (0..15) of a kart's state: how many particles to spawn this step at `perSec` (typed array: no boxing / allocation). */
+  rate(st, slot, perSec, dt) { const acc = st.acc; const a = acc[slot] + perSec * this.pm * dt; const n = a | 0; acc[slot] = a - n; return n > 6 ? 6 : n; }
 
   // ------------------------------------------------------------------------------------------ particle shorthands
   /** additive spark / streak */
@@ -162,35 +167,42 @@ export class VFX {
 
   // ------------------------------------------------------------------------------------------ one-shot effects (public)
   /** @param {string} name  @param {THREE.Vector3} position  @param {object} [opts] */
-  spawn(name, position, opts = {}) {
+  spawn(name, position, opts) {
     if (!position) return;
+    opts = opts ?? {};
     const x = position.x, y = position.y, z = position.z;
+    if (x + y + z - (x + y + z) !== 0) return;                 // NaN / Infinity position: ignore (it would poison the HDR chain)
+    // every option is normalised ONCE here: colours may be '#hex' strings, numbers, THREE.Color or [r,g,b]; numbers must be finite
+    const col = opts.color != null ? this._rgb(opts.color) : undefined;
+    const sc = Number.isFinite(opts.scale) ? opts.scale : 1;
     switch (name) {
-      case 'explosion': this._explosion(x, y, z, opts.scale ?? 1, opts.color); break;
-      case 'sparkle': this._sparkle(x, y, z, opts.color ?? null, opts.count ?? 22); break;
+      case 'explosion': this._explosion(x, y, z, sc, col); break;
+      case 'sparkle': this._sparkle(x, y, z, col ?? null, Number.isFinite(opts.count) ? opts.count : 22); break;
       case 'smoke': for (let i = this.cnt(8); i-- > 0;) this.puff(x + this.sr() * 0.3, y + 0.2, z + this.sr() * 0.3, this.sr() * 1.2, 1 + this.r() * 1.5, this.sr() * 1.2, 1.0 + this.r() * 0.8, 0.5, 2.2, [0.5, 0.5, 0.54], 0.4, this.pf()); break;
       case 'hitStars': this._hitStars(x, y, z); break;
-      case 'boostBurst': this._boostBurst(x, y, z, opts.color ?? CYAN, opts.dir ?? null, opts.scale ?? 1); break;
-      case 'pickup': this._pickup(x, y, z, opts.color ?? CYAN); break;
-      case 'confetti': this._confetti(x, y, z, opts.count ?? 110); break;
-      case 'splash': this._splash(x, y, z, opts.color ?? [0.7, 0.88, 1], opts.scale ?? 1); break;
-      case 'dust': this._dustBurst(x, y, z, opts.color ?? [0.7, 0.62, 0.48], opts.scale ?? 1); break;
-      case 'ring': this.ring(x, y, z, 0.3, (opts.radius ?? 3) * 2, 0.5, opts.color ? this._rgb(opts.color) : CYAN); break;
+      case 'boostBurst': this._boostBurst(x, y, z, col ?? CYAN, opts.dir ?? null, sc); break;
+      case 'pickup': this._pickup(x, y, z, col ?? CYAN); break;
+      case 'confetti': this._confetti(x, y, z, Number.isFinite(opts.count) ? opts.count : 110); break;
+      case 'splash': this._splash(x, y, z, col ?? SPLASH_C, sc); break;
+      case 'dust': this._dustBurst(x, y, z, col ?? DUST_C, sc); break;
+      case 'ring': this.ring(x, y, z, 0.3, (Number.isFinite(opts.radius) ? opts.radius : 3) * 2, 0.5, col ?? CYAN); break;
       case 'respawn': this._respawnPop(x, y, z); break;
-      case 'shockwave': this._shockwave(x, y, z, opts.scale ?? 1); break;
+      case 'shockwave': this._shockwave(x, y, z, sc); break;
       default: break; // unknown names are a silent no-op by contract
     }
   }
 
   /** Anchored variant: positions come from the kart (head / exhausts / wheels). */
-  spawnForKart(kart, name, opts = {}) {
+  spawnForKart(kart, name, opts) {
+    if (!kart) return;
+    opts = opts ?? {};
     const vis = kart.visual;
     switch (name) {
       case 'emote': this.emote(kart, opts.kind ?? 'shock', opts.duration ?? 1.4); return;
       case 'hitStars': if (vis?.mountWorld) { vis.mountWorld('head', _a, kart); this._hitStars(_a.x, _a.y + 0.55, _a.z); return; } break;
       case 'boostBurst': {
         if (vis?.mountWorld) {
-          for (const m of ['exhaustL', 'exhaustR']) { vis.mountWorld(m, _a, kart); this._boostBurst(_a.x, _a.y, _a.z, opts.color ?? CYAN, kart.forward, 0.7); }
+          for (const m of ['exhaustL', 'exhaustR']) { vis.mountWorld(m, _a, kart); this._boostBurst(_a.x, _a.y, _a.z, opts.color != null ? this._rgb(opts.color) : CYAN, kart.forward, 0.7); }
           return;
         }
         break;
@@ -205,10 +217,11 @@ export class VFX {
     this.spawn(name, kart.position, opts);
   }
 
+  /** Any colour spelling -> a finite [r, g, b] (linear): '#hex' / css strings, numbers, THREE.Color, arrays; anything else = white. */
   _rgb(c) {
-    if (Array.isArray(c)) return c;
-    if (typeof c === 'string' || typeof c === 'number') { const k = new THREE.Color(c); return [k.r, k.g, k.b]; }
-    if (c?.isColor) return [c.r, c.g, c.b];
+    if (Array.isArray(c)) return c.length >= 3 && Number.isFinite(c[0] + c[1] + c[2]) ? c : WHITE;
+    if (typeof c === 'string' || typeof c === 'number') { const k = new THREE.Color(c); return Number.isFinite(k.r + k.g + k.b) ? [k.r, k.g, k.b] : WHITE; }
+    if (c?.isColor) return Number.isFinite(c.r + c.g + c.b) ? [c.r, c.g, c.b] : WHITE;
     return WHITE;
   }
 
@@ -263,6 +276,18 @@ export class VFX {
       this.star(x, y, z, Math.cos(a) * sp, 2.5 + this.r() * 2.5, Math.sin(a) * sp, 0.7 + this.r() * 0.3, 0.32, GOLD, 2.4, SPR.STAR5, 11);
     }
     for (let i = this.cnt(10); i-- > 0;) { const a = this.r() * 6.283; this.spark(x, y, z, Math.cos(a) * 7, 2 + this.r() * 5, Math.sin(a) * 7, 0.35, 0.06, WHITE, 2.5, 12, 0.6, 0.02); }
+  }
+
+  /** electric crackle over one kart (shock item victims) */
+  _zap(k) {
+    if (!k?.position) return;
+    const sc = k.scale ?? 1;
+    for (let i = this.cnt(16); i-- > 0;) {
+      const a = this.r() * 6.283, e = this.sr() * 0.9, sp = 3 + this.r() * 6;
+      this.spark(k.position.x + Math.cos(a) * 0.6 * sc, k.position.y + (0.3 + this.r() * 1.2) * sc, k.position.z + Math.sin(a) * 0.6 * sc, Math.cos(a) * Math.cos(e) * sp, Math.sin(e) * sp + 1.5, Math.sin(a) * Math.cos(e) * sp, 0.2 + this.r() * 0.25, 0.09 + this.r() * 0.06, this.r() < 0.5 ? CYAN : WHITE, 3, 6, 1.2, 0.04);
+    }
+    this.glow(k.position.x, k.position.y + 0.8 * sc, k.position.z, 0.6 * sc, 3.2 * sc, CYAN, 0.8, 0.2);
+    this.emote(k, 'shock', 1.1);
   }
 
   _boostBurst(x, y, z, c, dir, scale) {
@@ -423,6 +448,13 @@ export class VFX {
     });
     on(EV.INVINCIBLE, ({ kart, active }) => { if (active) { _a.copy(kart.position); this._sparkle(_a.x, _a.y + 0.8, _a.z, null, 26); } });
     if (EV.DRAFT) on(EV.DRAFT, ({ kart, active }) => { this.st(kart).draft = !!active; });
+    // storm / zap style items (Agent D): a screen flash + shock ring at the caster and electric sparks on every victim
+    if (EV.ITEM_SHOCK) on(EV.ITEM_SHOCK, ({ kart, victims }) => {
+      const r = session.app?.renderer;
+      r?.flash?.(0.75, 0.9, 1, 0.5);
+      if (kart) { _a.copy(kart.position); this.ring(_a.x, _a.y, _a.z, 0.5, 16, 0.55, CYAN, 0.9, 2); this.ringBB(_a.x, _a.y + 0.9, _a.z, 0.6, 8, 0.4, WHITE, 0.7, 2); }
+      if (Array.isArray(victims)) for (let i = 0; i < victims.length; i++) this._zap(victims[i]);
+    });
   }
 
   // ------------------------------------------------------------------------------------------ per-frame
@@ -483,7 +515,8 @@ export class VFX {
   }
 
   _shadow(k, S) {
-    if (k.visual?.ghost) return;     // translucent time-trial ghosts cast no blob shadow
+    const vr = k.visual;
+    if (vr && (vr.ghost || vr.root.visible === false)) return;     // translucent ghosts and blinking (post-respawn) karts cast no blob shadow
     const hq = this.q?.shadows;
     const h = k.grounded ? 0 : Math.max(0, k.position.y - (k.query?.height ?? k.position.y));
     const a = clamp((hq ? 0.5 : 0.62) - h * 0.12, 0, 0.7) * (k.respawn?.active ? 0 : 1);
@@ -525,10 +558,10 @@ export class VFX {
       const ice = k.surface === Surface.ICE;
       for (let w = 0; w < 2; w++) {
         const P = w ? _b : _a;
-        const n = this.rate(st, w ? 'sm1' : 'sm0', perSec, dt);
+        const n = this.rate(st, w ? R.SM1 : R.SM0, perSec, dt);
         for (let i = 0; i < n; i++) {
           this.puff(P.x + this.sr() * 0.12, P.y + 0.1, P.z + this.sr() * 0.12, -ux * (0.8 + this.r() * 1.4) + this.sr() * 0.5, 0.7 + this.r() * 1.0, -uz * (0.8 + this.r() * 1.4) + this.sr() * 0.5,
-            0.6 + this.r() * 0.5, 0.35 * sc, (1.2 + this.r() * 0.8) * sc, ice ? [0.8, 0.92, 1] : [0.9, 0.9, 0.93], clamp(0.2 + slip * 0.03, 0.2, 0.42), this.pf(), 1.7, -0.25);
+            0.6 + this.r() * 0.5, 0.35 * sc, (1.2 + this.r() * 0.8) * sc, ice ? SMOKE_ICE : SMOKE_ROAD, clamp(0.2 + slip * 0.03, 0.2, 0.42), this.pf(), 1.7, -0.25);
         }
       }
     }
@@ -539,7 +572,7 @@ export class VFX {
       const perSec = L === 0 ? 10 : 44 + L * 30;
       for (let w = 0; w < 2; w++) {
         const P = w ? _b : _a;
-        const n = this.rate(st, w ? 'sp1' : 'sp0', perSec, dt);
+        const n = this.rate(st, w ? R.SP1 : R.SP0, perSec, dt);
         for (let i = 0; i < n; i++) {
           const sp = 2.5 + this.r() * 5.5;
           this.spark(P.x, P.y + 0.08, P.z, mvx * 0.35 - ux * sp * 0.5 + this.sr() * 2.4 + (w ? -1 : 1) * 1.0 * dr.dir, 2 + this.r() * 4.5, mvz * 0.35 - uz * sp * 0.5 + this.sr() * 2.4,
@@ -556,7 +589,7 @@ export class VFX {
       const base = (10 + speed * 1.3) * (k.onRoad ? 0.5 : 1);
       for (let w = 0; w < 2; w++) {
         const P = w ? _b : _a;
-        const n = this.rate(st, w ? 'du1' : 'du0', base, dt);
+        const n = this.rate(st, w ? R.DU1 : R.DU0, base, dt);
         for (let i = 0; i < n; i++) {
           const s = fx.size * sc;
           if (fx.drop && this.r() < 0.55) {
@@ -573,7 +606,7 @@ export class VFX {
     // ---- wall scrape sparks along the side that faces the wall
     if (st.scrape) {
       const side = (k.query?.lateral ?? 0) >= 0 ? -1 : 1; // kart-right is -x in model space
-      const n = this.rate(st, 'scr', 55, dt);
+      const n = this.rate(st, R.SCR, 55, dt);
       for (let i = 0; i < n; i++) {
         _d.copy(k.position).addScaledVector(k.right, -side * 0.95 * sc).addScaledVector(k.forward, (this.r() - 0.5) * 1.6 * sc); _d.y += 0.3 + this.r() * 0.35;
         this.spark(_d.x, _d.y, _d.z, -ux * (3 + this.r() * 6) + this.sr() * 2.2, 1 + this.r() * 3.5, -uz * (3 + this.r() * 6) + this.sr() * 2.2, 0.2 + this.r() * 0.3, 0.06 + this.r() * 0.05, this.r() < 0.4 ? WHITE : GOLD, 3, 14, 0.6, 0.022);
@@ -622,19 +655,19 @@ export class VFX {
       vis.mountWorld(m ? 'exhaustR' : 'exhaustL', _a, k);
       this.flames.add(_a, _q, w * sc, len * sc * inten, inten, c[0], c[1], c[2], m * 2.1 + k.id);
       // trailing flame sparks + a little smoke
-      const n = this.rate(st, m ? 'fl1' : 'fl0', 80, dt) ;
+      const n = this.rate(st, m ? R.FL1 : R.FL0, 80, dt);
       for (let i = 0; i < n; i++) {
         const sp = 7 + this.r() * 8 + Math.abs(k.speed) * 0.2;
         this.spark(_a.x + _dw.x * 0.2, _a.y + _dw.y * 0.2 + this.sr() * 0.08, _a.z + _dw.z * 0.2, _dw.x * sp + this.sr() * 1.3, _dw.y * sp + this.sr() * 1.1, _dw.z * sp + this.sr() * 1.3, 0.18 + this.r() * 0.22, 0.13 * sc + this.r() * 0.08, c, 3.2, -0.5, 1.6, 0.03, this.r() < 0.5 ? SPR.FLAME : SPR.DOT);
       }
-      if (this.rate(st, m ? 'fs1' : 'fs0', 14, dt) > 0) this.puff(_a.x, _a.y, _a.z, _dw.x * 4, 0.5 + _dw.y * 3, _dw.z * 4, 0.7, 0.25, 1.1, src === 'rocket' ? [0.22, 0.2, 0.2] : [0.62, 0.7, 0.78], src === 'rocket' ? 0.55 : 0.22, this.pf(), 2.2, -0.3);
+      if (this.rate(st, m ? R.FS1 : R.FS0, 14, dt) > 0) this.puff(_a.x, _a.y, _a.z, _dw.x * 4, 0.5 + _dw.y * 3, _dw.z * 4, 0.7, 0.25, 1.1, src === 'rocket' ? SMOKE_ROCKET : SMOKE_BOOST, src === 'rocket' ? 0.55 : 0.22, this.pf(), 2.2, -0.3);
     }
   }
 
   /** invincibility sparkle trail, slipstream streaks */
   _status(k, st, dt, T) {
     if (k.invincible > 0.05) {
-      const n = this.rate(st, 'inv', 48, dt);
+      const n = this.rate(st, R.INV, 48, dt);
       for (let i = 0; i < n; i++) {
         const c = rainbow((T * 0.8 + this.r() * 0.35) % 1, _rb);
         _d.copy(k.position).addScaledVector(k.right, this.sr() * 0.9).addScaledVector(k.forward, this.sr() * 1.3); _d.y += 0.15 + this.r() * 1.5;
@@ -642,7 +675,7 @@ export class VFX {
       }
     }
     if (st.draft && k.speed > 10) {
-      const n = this.rate(st, 'dr', 30, dt);
+      const n = this.rate(st, R.DR, 30, dt);
       for (let i = 0; i < n; i++) {
         _d.copy(k.position).addScaledVector(k.right, this.sr() * 1.6).addScaledVector(k.forward, 1 + this.r() * 3); _d.y += 0.3 + this.r() * 1.2;
         this.spark(_d.x, _d.y, _d.z, -k.forward.x * (12 + this.r() * 8), 0, -k.forward.z * (12 + this.r() * 8), 0.22, 0.05, WHITE, 1.2, 0, 0, 0.1);

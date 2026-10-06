@@ -147,6 +147,7 @@ export class ParticleLayer {
     this.high = 0;
     this.dirty = new DirtyRange(this.mesh, STRIDE_LIST.map(([n, sz]) => [this.attrs[n], sz]));
     this.spawned = 0;
+    this.dropped = 0;       // particles rejected by the finite-argument guard (should stay 0)
   }
 
   /** Resize the live capacity (quality changes); existing particles are dropped. */
@@ -158,6 +159,9 @@ export class ParticleLayer {
    * frame (sprite index), drag (1/s), gravity (m/s^2, positive pulls down), stretch (streak length per m/s), rot0 / rotSpeed (rad), fadeIn (0..1 of life), mode.
    */
   spawn(x, y, z, vx, vy, vz, life, s0, s1, r0, g0, b0, a0, r1, g1, b1, a1, frame, drag, grav, stretch, rot0, rotSpeed, fadeIn, mode) {
+    // one NaN / Infinity / undefined in any argument would turn into a black (or white) smear across the HDR bloom chain: drop the particle
+    const sum = x + y + z + vx + vy + vz + life + s0 + s1 + r0 + g0 + b0 + a0 + r1 + g1 + b1 + a1 + frame + drag + grav + stretch + rot0 + rotSpeed + fadeIn + mode;
+    if (sum - sum !== 0 || !(life > 0)) { this.dropped++; return; }
     const i = this.head;
     this.head = (i + 1) % this.capacity;
     if (i > this.high) this.high = i;

@@ -70,18 +70,20 @@ export function getKartAssets(driverId, bodyId) {
 // Background LOD builder: one lower-detail geometry per timer tick so loading and rendering never hitch.
 const lodQueue = [];
 let lodTimer = 0;
+// (one build per idle slot: a few ms each, never inside a frame; falls back to a plain timer where requestIdleCallback is missing)
+const schedule = (fn) => (typeof requestIdleCallback === 'function' ? requestIdleCallback(fn, { timeout: 900 }) : setTimeout(fn, 150));
 function pumpLods() {
   lodTimer = 0;
   const item = lodQueue.shift();
   if (!item) return;
   if (!item[0].disposed) getKartLod(item[0], item[1]);
-  if (lodQueue.length) lodTimer = setTimeout(pumpLods, 20);
+  if (lodQueue.length) lodTimer = schedule(pumpLods);
 }
 function queueLods(assets) {
   if (assets.lodsQueued) return;
   assets.lodsQueued = true;
   lodQueue.push([assets, 1], [assets, 2]);
-  if (!lodTimer) lodTimer = setTimeout(pumpLods, 60);
+  if (!lodTimer) lodTimer = schedule(pumpLods);
 }
 
 /** Geometry for LOD level `lod` (built lazily, same bone indices as LOD0). */
@@ -216,6 +218,7 @@ export class KartVisual {
     this.face.renderOrder = 2;
     this.bones[this.i.head].add(this.face);
     this.faceFrame = FACE.OPEN;
+    this._ff = { boosting: false, spinning: false, finished: false, place: 1, dr: null, spN: 0, flying: false, cheer: 0, slump: 0 };   // reused argument bag for _face()
 
     // ---- dizzy stars (shown while spinning / stunned)
     const sg = new THREE.BufferGeometry();
@@ -355,8 +358,11 @@ export class KartVisual {
     else if (lod === 1) { if (d < 20) lod = 0; else if (d > 62) lod = 2; }
     else if (d < 50) lod = 1;
     if (lod !== this.lod) {
+      // lower LODs are built in the background (queueLods); until one exists the kart simply keeps its current geometry
+      const g = lod === 0 ? this.assets.geometry : this.assets.lods[lod];
+      if (!g) return;
       this.lod = lod;
-      this.mesh.geometry = lod === 0 ? this.assets.geometry : getKartLod(this.assets, lod);
+      this.mesh.geometry = g;
       this.face.visible = lod < 2;
     }
   }
@@ -439,11 +445,11 @@ export class KartVisual {
     const roll = this.tilt.rotation.z, pit = s.pitchS;
     const droop = grounded ? 0 : 0.06;
     const W = this.assets.body.wheels;
-    const wy = (x, z, y0) => y0 - x * Math.sin(roll) - z * Math.sin(pit) - droop;
-    this._wheel(I.wheelFL, I.steerFL, spinF + pit, steerAng, roll, W.FL.x, W.FL.z, W.FL.y, wy);
-    this._wheel(I.wheelFR, I.steerFR, spinF + pit, steerAng, roll, -W.FL.x, W.FL.z, W.FL.y, wy);
-    this._wheel(I.wheelRL, -1, s.spin + burn + pit, 0, roll, W.RL.x, W.RL.z, W.RL.y, wy);
-    this._wheel(I.wheelRR, -1, s.spin + burn + pit, 0, roll, -W.RL.x, W.RL.z, W.RL.y, wy);
+    const sinR = Math.sin(roll), sinP = Math.sin(pit);
+    this._wheel(I.wheelFL, I.steerFL, spinF + pit, steerAng, roll, W.FL.x, W.FL.z, sinR, sinP, droop);
+    this._wheel(I.wheelFR, I.steerFR, spinF + pit, steerAng, roll, -W.FL.x, W.FL.z, sinR, sinP, droop);
+    this._wheel(I.wheelRL, -1, s.spin + burn + pit, 0, roll, W.RL.x, W.RL.z, sinR, sinP, droop);
+    this._wheel(I.wheelRR, -1, s.spin + burn + pit, 0, roll, -W.RL.x, W.RL.z, sinR, sinP, droop);
 
     // ---- steering wheel
     if (I.steerWheel >= 0) {
@@ -481,7 +487,9 @@ export class KartVisual {
     this._secondary(dt, k, spN, boosting, grounded);
 
     // ---- face expression
-    this._face(dt, k, { boosting, spinning, finished, place, dr, spN, flying, cheer, slump });
+    const ff = this._ff;
+    ff.boosting = boosting; ff.spinning = spinning; ff.finished = finished; ff.place = place; ff.dr = dr; ff.spN = spN; ff.flying = flying; ff.cheer = cheer; ff.slump = slump;
+    this._face(dt, k, ff);
 
     // ---- shader state
     const u = this.mat.userData.u;
@@ -506,13 +514,13 @@ export class KartVisual {
     }
   }
 
-  _wheel(wi, si, spin, steerAng, roll, x, z, y0, wy) {
+  _wheel(wi, si, spin, steerAng, roll, x, z, sinR, sinP, droop) {
     const B = this.bones;
     if (si >= 0) this._setBone(si, 0, steerAng, 0);
     this._setBone(wi, spin, 0, -roll);
     B[wi].position.y = si >= 0 ? 0 : this.restPos[wi].y;
     // vertical compensation so the contact patch stays on the ground when the body rolls/pitches
-    const dy = wy(x, z, 0);
+    const dy = -x * sinR - z * sinP - droop;
     if (si >= 0) B[si].position.y = this.restPos[si].y + dy; else B[wi].position.y = this.restPos[wi].y + dy;
   }
 
