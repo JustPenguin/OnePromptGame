@@ -23,9 +23,15 @@ const damp = (a, b, k, dt) => a + (b - a) * (1 - Math.exp(-k * dt));
 const _v2 = new THREE.Vector2();
 
 const DEFAULT_PROFILE = Object.freeze({
-  exposure: 1, bloomStrength: 0.4, bloomThreshold: 1.05, bloomRadius: 0.55, bloomKnee: 0.4,
-  vignette: 0.38, saturation: 1.08, contrast: 1.06, chroma: 0.0016, grain: 0.004, envIntensity: 0.45,
-  tonemap: 0.2,   // 0 = Khronos Neutral (hue-preserving, saturated) .. 1 = ACES filmic (contrasty, desaturates highlights)
+  exposure: 1, bloomStrength: 0.3, bloomThreshold: 1.1, bloomRadius: 0.5, bloomKnee: 0.3,
+  vignette: 0.3, saturation: 1.06, contrast: 1.05, chroma: 0.0012, grain: 0.003, envIntensity: 0.45,
+  tonemap: 0.15,  // 0 = Khronos Neutral (hue-preserving, saturated) .. 1 = ACES filmic (contrasty, desaturates highlights)
+});
+// Safe ranges enforced on every setEnvironmentProfile() (per-track looks are tuned by different people): low bloom thresholds turn every
+// sun-lit surface into haze, big radii / strengths wash the road out, extreme exposure clips the paint.  Inside these ranges anything goes.
+const PROFILE_LIMITS = Object.freeze({
+  exposure: [0.85, 1.2], bloomStrength: [0, 0.6], bloomThreshold: [1.0, 4], bloomRadius: [0.2, 0.65], bloomKnee: [0.1, 0.5],
+  vignette: [0, 0.45], saturation: [0.9, 1.2], contrast: [0.97, 1.1], chroma: [0, 0.003], grain: [0, 0.01], envIntensity: [0.1, 1.2], tonemap: [0, 1],
 });
 
 export class GameRenderer {
@@ -54,7 +60,7 @@ export class GameRenderer {
     this.sessionEnv = null;
     this._envSession = null;
     // per-frame state
-    this._fx = { exposure: 1, bloom: 0.5, threshold: 1, knee: 0.5, radius: 0.6, vignette: 0.35, sat: 1.08, contrast: 1.06, chroma: 0.0015, blur: 0, lines: 0, boost: 0, grain: 0.004, flash: { r: 1, g: 1, b: 1, a: 0 }, center: { x: 0.5, y: 0.47 }, time: 0, bloomOn: true };
+    this._fx = { exposure: 1, bloom: 0.5, threshold: 1, knee: 0.5, radius: 0.6, vignette: 0.35, sat: 1.08, contrast: 1.06, chroma: 0.0012, blur: 0, lines: 0, boost: 0, grain: 0.004, flash: { r: 1, g: 1, b: 1, a: 0 }, center: { x: 0.5, y: 0.47 }, time: 0, bloomOn: true };
     this._flash = { r: 1, g: 1, b: 1, a: 0 };
     this._fxSpeed = 0; this._fxBoost = 0;
     this._last = 0; this._ema = 16.7; this._slowT = 0; this._fastT = 0;
@@ -104,7 +110,14 @@ export class GameRenderer {
   }
 
   setEnvironmentProfile(p) {
-    this.profile = { ...this.profile, ...p };
+    const q = { ...this.profile };
+    for (const key in p) {
+      const v = p[key];
+      if (typeof v !== 'number' || !Number.isFinite(v)) continue;
+      const L = PROFILE_LIMITS[key];
+      q[key] = L ? clamp(v, L[0], L[1]) : v;
+    }
+    this.profile = q;
     this.renderer.toneMappingExposure = this.profile.exposure ?? 1;
     this.renderer.toneMapping = (this.profile.tonemap ?? 0.2) < 0.5 ? THREE.NeutralToneMapping : THREE.ACESFilmicToneMapping;
     if (this._envSession) this._envSession.scene.environmentIntensity = this.profile.envIntensity ?? 0.45;
@@ -113,7 +126,8 @@ export class GameRenderer {
   /** Brief additive screen flash (explosions, hits). amount ~0..1 */
   flash(r = 1, g = 1, b = 1, amount = 0.5) {
     const f = this._flash;
-    if (amount > f.a) { f.r = r; f.g = g; f.b = b; f.a = Math.min(1.2, amount); }
+    amount = Math.min(0.5, amount);       // (an additive tint: capped so even a point-blank explosion never whites the frame out)
+    if (amount > f.a) { f.r = r; f.g = g; f.b = b; f.a = amount; }
   }
 
   // ------------------------------------------------------------------------------------------ environment per session
@@ -221,14 +235,15 @@ export class GameRenderer {
     this._fxBoost = damp(this._fxBoost, boost, boost > this._fxBoost ? 10 : 3.2, dt);
     const m = reduced ? 0 : lvl;
     const sp = this._fxSpeed, bo = this._fxBoost;
-    fx.blur = m * (clamp((sp - 0.72) * 0.11, 0, 0.04) + bo * 0.055);
+    // the road and karts must stay crisp: a light edge-only radial blur, mild fringing; the sense of speed comes from the speed lines + the camera FOV
+    fx.blur = m * (clamp((sp - 0.85) * 0.06, 0, 0.012) + bo * 0.02);
     fx.lines = m * (bo * 0.95 + clamp((sp - 0.95) * 1.2, 0, 0.3));
     fx.boost = bo;
-    fx.chroma = (p.chroma ?? 0.0016) * (0.8 + m * (sp * 0.8 + bo * 2.6));
-    fx.vignette += m * bo * 0.12;
+    fx.chroma = (p.chroma ?? 0.0012) * (0.8 + m * (sp * 0.3 + bo * 0.9));
+    fx.vignette += m * bo * 0.06;
     // decaying flash
     const f = this._flash;
-    f.a = Math.max(0, f.a - dt * 4.2);
+    f.a = Math.max(0, f.a - dt * 5.5);
     fx.flash.r = f.r; fx.flash.g = f.g; fx.flash.b = f.b; fx.flash.a = f.a;
   }
 
