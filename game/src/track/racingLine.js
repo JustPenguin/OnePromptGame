@@ -72,8 +72,7 @@ export function buildRacingLine(track) {
     }
   }
   const offset = new Float32Array(N);
-  const sc = globalThis.__RL_SCALE ?? 1;                    // experiment hook: scale the line's deviation from the centreline
-  for (let i = 0; i < N; i++) offset[i] = off[i] * sc;
+  for (let i = 0; i < N; i++) offset[i] = off[i];
 
   // ---- line curvature (Menger, from the actual line positions) ------------------------------------------------------------------------------------
   const lx = new Float64Array(N), lz = new Float64Array(N);
@@ -208,7 +207,6 @@ function solveMinCurvature(N, px, pz, rx, rz, lim) {
         if ((state[j] > 0 && g > 2e-3) || (state[j] < 0 && g < -2e-3)) { state[j] = 0; changed++; }      // hysteresis: only release when clearly wanted
       }
     }
-    if (globalThis.__RL_DEBUG) console.log('iter', iter, 'changed', changed, 'max|o|', o.reduce((a, v) => Math.max(a, Math.abs(v)), 0).toFixed(2), 'pinned', state.reduce((a, v) => a + (v ? 1 : 0), 0));
     if (changed < Math.max(3, M / 600)) break;
   }
   const out = new Float64Array(N);

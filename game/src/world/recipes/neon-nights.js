@@ -42,16 +42,18 @@ export function neonNights(w) {
     },
     light: { hemi: { sky: '#4a4aa8', ground: '#6a2a8a', intensity: 0.8 }, sun: { color: '#8aa4ff', intensity: 1.6, extent: 64 }, fill: { color: '#ff3dcb', intensity: 0.35 } },
     fog: { color: '#2a0e55', near: 70, far: 760 },
-    profile: { exposure: 1.1, bloomStrength: 1.0, bloomThreshold: 0.62, bloomRadius: 0.85, vignette: 0.38, saturation: 1.18, contrast: 1.08 },
+    // bloom only on the really bright things (windows, signs, neon); a low threshold + wide radius smeared the road pale
+    profile: { exposure: 1.04, bloomStrength: 0.78, bloomThreshold: 0.8, bloomRadius: 0.75, vignette: 0.42, saturation: 1.16, contrast: 1.13, envIntensity: 0.2 },
     road: {
+      specular: 0.4,
       texture: { base: '#2c2f44', light: '#4a4f6e', dark: '#1c1e2e', wear: '#10121f', centerColor: '#ffd23f', edgeColor: '#f2f6ff', glowEdge: '#22d3ff', patches: 0.5, cracks: 0.5, rubber: 0.8 },
-      wet: { colors: ['#ff3dcb', '#22d3ff', '#ffb347'], strength: 0.9, puddles: 0.5, roughness: 0.5 },
-      curb: { a: '#ff3dcb', b: '#22d3ff', emissive: '#ffffff', emissiveIntensity: 0.55 },
+      wet: { colors: ['#ff3dcb', '#22d3ff', '#7a5cff'], strength: 0.5, puddles: 0.34, roughness: 0.6 },
+      curb: { a: '#ff3dcb', b: '#22d3ff', emissive: '#ffffff', emissiveIntensity: 0.42 },
       shoulder: { ground: 'neutral', tint: '#3a3d66' },
       fascia: { color: '#3a3f66', depth: 1.4 },
     },
     barriers: { type: 'jersey', concrete: '#353a5c', top: '#4a5078', strip: '#22d3ff', height: 1.05 },
-    start: { banner: 'NEON NIGHTS', bg: '#7a1ab8', trim: '#ff3dcb', structure: '#8a90c0', pillar: '#4a5078', light: '#ffe6ff', height: 8.6 },
+    start: { banner: 'NEON NIGHTS', sub: 'STARLIGHT CUP · ROUND 1', bg: '#7a1ab8', trim: '#ff3dcb', structure: '#8a90c0', pillar: '#4a5078', light: '#ffe6ff', height: 8.6 },
     ramp: { tex: { base: '#2e3350', grain: false, stripeA: '#ff3dcb', stripeB: '#10132a', chevron: '#22d3ff', glow: 'rgba(255,61,203,1)' }, side: '#3a4166', lip: '#ff3dcb', emissive: '#ff3dcb', emissiveIntensity: 0.35 },
     free: gapRanges,
     terrain: {
@@ -168,7 +170,7 @@ export function neonNights(w) {
       pools.push({ x: pp.x, y: pp.y, z: pp.z, r: smp.halfWidth * 0.95, color: warm, ux: smp.up.x, uy: smp.up.y, uz: smp.up.z });
     }
     createBillboards(w, halos, { name: 'lamp-halos', intensity: 0.85, fadeFar: 360 });
-    createLightPools(w, pools, { intensity: 0.5 });
+    createLightPools(w, pools, { intensity: 0.2 });
   }
 
   // ---- hover traffic: streams of tiny lights gliding along sky lanes ------------------------------------------------------------------------

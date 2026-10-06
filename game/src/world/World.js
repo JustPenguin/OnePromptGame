@@ -127,7 +127,7 @@ export class World {
     { const sz = buildSurfaceZones(this, c.zones ?? {}); if (sz) this.group.add(sz); }
     if (c.edgeTrim !== false) { const oe = buildOpenEdgeTrim(this, c.edgeTrim ?? {}); if (oe) this.group.add(oe); }
     if (c.signs !== false) { const signs = buildCornerSigns(this, c.signs ?? {}); if (signs) this.group.add(signs); }
-    if (c.start !== false) this.group.add(buildStartLine(this, { sub: this.def.name?.toUpperCase(), ...c.start }));
+    if (c.start !== false) this.group.add(buildStartLine(this, { sub: this.def.cup ? `${String(this.def.cup).toUpperCase()} CUP` : '', ...c.start }));
     lap('features');
     let inst = 0;
     for (const l of this.layers) { l.build(); inst += l.chunks.reduce((a, m) => a + m.userData.full, 0); }
@@ -147,14 +147,17 @@ export class World {
   _buildRoadSurface() {
     const tr = this.track, rc = this.cfg.road;
     const roadTex = this.tex(rc.textureKind === 'cosmic' ? cosmicRoadTexture(rc.texture ?? {}) : roadTexture(rc.texture ?? {}));
-    const roadMat = new THREE.MeshStandardMaterial({ map: roadTex, roughness: rc.roughness ?? 0.88, metalness: rc.metalness ?? 0 });
+    // MeshPhysicalMaterial only for `specularIntensity`: it caps the GRAZING-angle Fresnel of the tarmac, so a low sun / bright sky can no
+    // longer paint a pale sheen over the road that is far from the camera (the road must stay the darkest, most contrasty surface)
+    const roadMat = new THREE.MeshPhysicalMaterial({ map: roadTex, roughness: rc.roughness ?? 0.88, metalness: rc.metalness ?? 0, specularIntensity: rc.specular ?? 0.55 });
     if (rc.emissive) { roadMat.emissive = toColor(rc.emissive); roadMat.emissiveMap = roadTex; roadMat.emissiveIntensity = rc.emissiveIntensity ?? 0.2; }
     if (rc.wet) wetRoad(roadMat, this.timeUniform, rc.wet);
     const cu = { a: '#e5413a', b: '#f8f6ee', width: 0.95, ...(rc.curb ?? {}) };
     let curbMat = null;
     if (cu.width > 0) {
       curbMat = new THREE.MeshStandardMaterial({ map: this.tex(curbTexture({ a: cu.a, b: cu.b })), roughness: 0.7, metalness: 0 });
-      if (cu.emissive) { curbMat.emissive = toColor(cu.emissive); curbMat.emissiveIntensity = cu.emissiveIntensity ?? 0.6; }
+      // the stripes glow in their OWN colours (a flat white emissive washed the whole kerb to pale pastel under bloom)
+      if (cu.emissive) { curbMat.emissive = toColor(cu.emissive); if (cu.emissiveMap !== false) curbMat.emissiveMap = curbMat.map; curbMat.emissiveIntensity = cu.emissiveIntensity ?? 0.6; }
     }
     const sh = { ground: 'grass', tint: '#ffffff', tile: 10, ...(rc.shoulder ?? {}) };
     let shMat = null;

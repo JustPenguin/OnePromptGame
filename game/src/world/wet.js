@@ -9,7 +9,7 @@ export function wetRoad(material, time, o = {}) {
   const c1 = toColor(o.colors?.[0] ?? '#ff3dcb'), c2 = toColor(o.colors?.[1] ?? '#22d3ff'), c3 = toColor(o.colors?.[2] ?? '#ffd9a0');
   material.roughness = o.roughness ?? 0.42;
   material.metalness = o.metalness ?? 0.0;
-  material.customProgramCacheKey = () => 'wet-road-v1';
+  material.customProgramCacheKey = () => 'wet-road-v2';
   material.onBeforeCompile = (shader) => {
     shader.uniforms.uWTime = time;
     shader.uniforms.uWetA = { value: c1 }; shader.uniforms.uWetB = { value: c2 }; shader.uniforms.uWetC = { value: c3 };
@@ -34,7 +34,8 @@ export function wetRoad(material, time, o = {}) {
           vec3 refl = uWetA * smoothstep( 0.18, 0.6, st ) + uWetB * smoothstep( 0.18, 0.6, st2 ) + uWetC * smoothstep( 0.32, 0.7, wn( wp * 0.045 + 9.0 ) ) * 0.35;
           float ripple = 0.0;
           if ( uWetK.w > 0.5 ) { vec2 q = wp * 3.0; vec2 g = fract( q ) - 0.5; vec2 id = floor( q ); float ph = wh( id ); float r = length( g ); float tt = fract( uWTime * 0.7 + ph ); ripple = smoothstep( 0.04, 0.0, abs( r - tt * 0.5 ) ) * ( 1.0 - tt ) * step( 0.92, wh( id + 3.3 ) ) * pud; }
-          totalEmissiveRadiance += refl * ( 0.05 + 0.95 * fres ) * ( 0.05 + 0.95 * pud ) * uWetK.x * 0.55;
+          // only puddles + glossy streaks mirror the neon; the dry asphalt between them stays dark (a uniform sheen washed the whole road pale)
+          totalEmissiveRadiance += refl * ( 0.03 + 0.97 * fres ) * ( 0.02 + 0.98 * pud ) * uWetK.x * 0.5;
           totalEmissiveRadiance += vec3( 0.6, 0.75, 1.0 ) * ripple * 0.5;
         }`);
   };

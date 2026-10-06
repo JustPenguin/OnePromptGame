@@ -51,7 +51,7 @@ export function spookyHollow(w) {
         { type: 'ironfence', ranges: [graveR], bar: '#12141c', stone: '#4a505e', stoneTop: '#6a7080', height: 1.9 },
       ],
     },
-    start: { banner: 'SPOOKY HOLLOW', bg: '#5a2aa8', trim: '#8bff6a', structure: '#4a506a', pillar: '#2a2e40', light: '#d8ffd0' },
+    start: { banner: 'SPOOKY HOLLOW', sub: 'STARLIGHT CUP · ROUND 3', bg: '#5a2aa8', trim: '#8bff6a', structure: '#4a506a', pillar: '#2a2e40', light: '#d8ffd0' },
     free: [{ s0: bridge[0] - 4, s1: bridge[1] + 4, fade: 18 }],
     terrain: {
       map: w.tex(groundTexture('moss', { base: '#d0d8d0', dark: '#a0aaa0', light: '#f0f8f0' })),

@@ -44,7 +44,7 @@ export function cactusCanyon(w) {
       capColor: '#a2623d',
     },
     barriers: { type: 'wall', height: 1.15, thickness: 1.1, a: '#d4814a', b: '#efb97f', cap: '#f7dcae', base: '#8c5a3a', stripe: 3 },
-    start: { banner: 'CACTUS CANYON', bg: '#e8742a', trim: '#27c3b4' },
+    start: { banner: 'CACTUS CANYON', sub: 'BLOSSOM CUP · ROUND 2', bg: '#e8742a', trim: '#27c3b4' },
     ramp: { tex: { base: '#8a5a34', grain: true, stripeA: '#ffd23f', stripeB: '#2a1c12', chevron: '#fff0c8' }, side: '#a8794c', lip: '#ffd23f' },
     free: [{ s0: gap.s0 - 3, s1: gap.s1 + 3, fade: 4 }],
     terrain: {

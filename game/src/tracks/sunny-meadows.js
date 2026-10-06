@@ -33,6 +33,7 @@ export const sunnyMeadows = {
   },
   zones: [
     { type: 'boost', at: 'T>', offset: 120, length: 14, lateral: 0, width: 6 },
+    { type: 'boost', at: 'D>', offset: 100, length: 14, lateral: 2, width: 6 },   // the downhill run to the sunflower chicane
   ],
   // coin trails (data only: the item system draws/collects track.coins); `arch` lifts the middle of a line (air coins over jumps), `weave` is a sine slalom
   coinLines: [

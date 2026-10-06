@@ -56,7 +56,7 @@ export function harborHeights(w) {
       capColor: '#8a8a92', capDepth: 4,
     },
     barriers: { type: 'rail', rail: '#f4f6fb', post: '#2a8ac8', height: 0.95, lowerRail: true },
-    start: { banner: 'HARBOR HEIGHTS', bg: '#18b8b0', trim: '#ffd23f' },
+    start: { banner: 'HARBOR HEIGHTS', sub: 'BLOSSOM CUP · ROUND 4', bg: '#18b8b0', trim: '#ffd23f' },
     ramp: { tex: { base: '#6a7488', grain: false, stripeA: '#ff9a3a', stripeB: '#1b2230', chevron: '#ffffff' }, side: '#8892a8', lip: '#ff9a3a', metalness: 0.2 },
     free: [{ s0: gap.s0 - 4, s1: gap.s1 + 4, fade: 5 }],
     terrain: {
