@@ -4,19 +4,19 @@
 import { clamp } from '../core/math.js';
 
 export const ITEM_TABLE = {
-  boost:  { type: 'boost',  count: 1, w: [5, 9, 12, 12, 8] },
+  boost:  { type: 'boost',  count: 1, w: [9, 11, 13, 13, 9] },
   boost3: { type: 'boost',  count: 3, w: [0, 2, 6, 11, 13] },
-  peel:   { type: 'peel',   count: 1, w: [18, 14, 8, 3, 0] },
-  peel3:  { type: 'peel',   count: 3, w: [6, 8, 4, 0, 0] },
-  orb:    { type: 'orb',    count: 1, w: [14, 13, 9, 4, 0] },
-  orb3:   { type: 'orb',    count: 3, w: [2, 6, 6, 3, 0] },
-  seeker: { type: 'seeker', count: 1, w: [2, 12, 17, 14, 7] },
-  bomb:   { type: 'bomb',   count: 1, w: [14, 12, 8, 4, 0] },
-  comet:  { type: 'comet',  count: 1, w: [0, 0, 0, 4, 9] },     // gated below: back of the pack only
-  shock:  { type: 'shock',  count: 1, w: [7, 10, 6, 0, 0] },    // leader-ish only
-  shield: { type: 'shield', count: 1, w: [4, 8, 10, 8, 4] },
-  rocket: { type: 'rocket', count: 1, w: [0, 2, 7, 15, 22] },
-  ink:    { type: 'ink',    count: 1, w: [0, 4, 8, 6, 2] },
+  peel:   { type: 'peel',   count: 1, w: [13, 11, 7, 3, 0] },
+  peel3:  { type: 'peel',   count: 3, w: [3, 5, 3, 0, 0] },
+  orb:    { type: 'orb',    count: 1, w: [10, 10, 7, 3, 0] },
+  orb3:   { type: 'orb',    count: 3, w: [1, 3, 3, 2, 0] },
+  seeker: { type: 'seeker', count: 1, w: [1, 7, 11, 10, 5] },
+  bomb:   { type: 'bomb',   count: 1, w: [9, 8, 5, 3, 0] },
+  comet:  { type: 'comet',  count: 1, w: [0, 0, 0, 2, 4] },     // gated below: back of the pack only
+  shock:  { type: 'shock',  count: 1, w: [0, 0, 0, 2, 3] },     // rare comeback tool (back half only, see gates)
+  shield: { type: 'shield', count: 1, w: [3, 5, 6, 5, 3] },
+  rocket: { type: 'rocket', count: 1, w: [0, 1, 4, 8, 12] },
+  ink:    { type: 'ink',    count: 1, w: [0, 2, 5, 4, 1] },
 };
 const KEYS = Object.keys(ITEM_TABLE);
 
@@ -44,7 +44,7 @@ export function rollItem(kart, ctx) {
     let w = weightAt(ent.w, u);
     // gates
     if (ent.type === 'comet' && (n < 4 || place < Math.ceil(n * 0.55) || place <= 3 || ctx.cometActive || kart.ext.items?.cometCooldown > 0)) w = 0;
-    if (ent.type === 'shock' && n < 3) w = 0;
+    if (ent.type === 'shock' && (n < 4 || ctx.zapRecent || place <= Math.ceil(n * 0.6))) w = 0;
     if ((ent.type === 'seeker' || ent.type === 'ink') && place <= 1) w = ent.type === 'seeker' ? w * 0.2 : 0;
     if (ent.type === 'rocket' && place <= 2 && n > 2) w *= 0.3;
     if (ent.type === last) w *= 0.2;               // no immediate repeats

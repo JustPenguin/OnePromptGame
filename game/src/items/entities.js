@@ -123,6 +123,8 @@ export class OrbEntity extends Entity {
       const dx = tgt.position.x - owner.position.x, dz = tgt.position.z - owner.position.z, l = Math.hypot(dx, dz) || 1;
       this.dir.x = this.dir.x * 0.6 + (dx / l) * 0.4; this.dir.z = this.dir.z * 0.6 + (dz / l) * 0.4; this.dir.normalize();
     }
+    const aimErr = sys.kartState(owner).aimErr;          // AI drivers: skill-dependent miss, in metres at ~35 m
+    if (aimErr) { const a = aimErr / 35, c = Math.cos(a), s = Math.sin(a), dx = this.dir.x, dz = this.dir.z; this.dir.x = dx * c - dz * s; this.dir.z = dx * s + dz * c; }
     this.position.copy(owner.position).addScaledVector(this.dir, 2.3 * owner.scale); this.position.y += 0.75;
     this.trail = new Ribbon(12); sys.group.add(this.trail.mesh);
     this.group.position.copy(this.position);

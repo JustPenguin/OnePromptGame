@@ -1,7 +1,12 @@
 // AI item use: humans don't spam items, they wait for the moment.  Each AI sits on a fresh item for a class-dependent
-// reaction time, then applies simple situational rules (straight ahead for boosts, a kart lined up for throws, a threat
-// for shields, a chaser for drops).  Uses itemSystem.useItem(kart, backward) directly (never fakes input.item).
+// reaction time, then looks for a good opportunity a few times a second (straight ahead for boosts, a kart lined up for
+// throws, a threat for shields, a chaser for drops).  Attacks are rationed: every opportunity is taken only with a
+// probability, a driver that just fired holds the next shot back (fireCool), forward shots carry a skill-dependent aim
+// error, and only a long-held item is used "because it is there".
+// Uses itemSystem.useItem(kart, backward) directly (never fakes input.item).
 import { clamp, lerp } from '../core/math.js';
+
+const ATTACK = new Set(['peel', 'orb', 'seeker', 'bomb', 'comet', 'ink', 'shock']);
 
 export class AIItems {
   constructor(driver) {
@@ -9,7 +14,9 @@ export class AIItems {
     this.session = driver.session;
     this.serial = -1;
     this.delay = 1;
-    this.cool = 0;
+    this.cool = 0;               // pause between two uses of a stack
+    this.fireCd = 0;             // pause between two attacks (class fireCool)
+    this.think = 0;              // next opportunity check
     this.lastSpinT = -99;
     this.used = 0;
   }
@@ -17,6 +24,7 @@ export class AIItems {
   update(dt, headErr) {
     const d = this.d, k = d.k, it = k.item, items = this.session.items;
     if (k.spin.timer > 0) this.lastSpinT = this.session.time;
+    if (this.fireCd > 0) this.fireCd -= dt;
     if (!items || !it.type || it.roulette.active || k.locked || k.respawn.active || k.race.finished || k.rocket > 0) return;
     const st = k.ext.items;
     if (!st) return;
@@ -24,30 +32,48 @@ export class AIItems {
       this.serial = st.serial;
       const [lo, hi] = d.T.itemDelay;
       this.delay = lerp(lo, hi, this.session.random() * this.session.random() * 1.0 + 0.0);
+      this.think = 0;
     }
     if (this.cool > 0) { this.cool -= dt; return; }
     const jumpBoost = it.type === 'boost' && this.jumpNeedsBoost();
     if (st.heldTime < this.delay && !jumpBoost) return;
+    // opportunities are looked for a few times a second, not every frame
+    this.think -= dt;
+    if (this.think > 0 && !jumpBoost) return;
+    this.think = 0.28 + this.session.random() * 0.22;
     const r = this.decide(it.type, it, st);
-    if (r) {
-      if (items.useItem(k, r.back)) {
-        this.used++;
-        this.cool = 0.6 + this.session.random() * 1.1 + (it.count > 0 ? 0.8 : 0);
+    if (!r) return;
+    const attack = ATTACK.has(it.type);
+    const rnd = () => this.session.random();
+    if (attack && !r.urgent) {
+      if (this.fireCd > 0) return;                                                    // fired recently: hold the next one back
+      const fireP = clamp(0.22 + 0.3 * d.persona.aggression, 0.15, 0.75);
+      if (rnd() > fireP) return;                                                      // not every opportunity is taken
+    }
+    // a forward shot is never perfect: sloppy drivers miss by metres, masters by centimetres
+    if (attack && !r.back) st.aimErr = (rnd() * 2 - 1) * lerp(5.5, 0.8, d.skill);
+    if (items.useItem(k, r.back)) {
+      this.used++;
+      this.cool = 0.6 + rnd() * 1.1 + (it.count > 0 ? 0.8 : 0);
+      if (attack) {
+        const [lo, hi] = d.T.fireCool ?? [12, 26];
+        this.fireCd = lerp(lo, hi, rnd());
+        if (it.count > 0) this.fireCd = Math.max(this.fireCd, 7);                     // keep the rest of a stack for later
       }
     }
+    st.aimErr = 0;
   }
 
-  /** @returns {{back:boolean}|null} */
+  /** @returns {{back:boolean, urgent?:boolean}|null}  urgent = use-it-or-lose-it (ignores the fire cool-down and the odds) */
   decide(type, it, st) {
-    const d = this.d, k = d.k, near = d.near, T = d.T, items = this.session.items;
+    const d = this.d, k = d.k, near = d.near, items = this.session.items;
     const s = k.query.s, v = k.speed, top = k.stats.topSpeed, place = k.race.place, n = this.session.karts.length;
     const aggr = d.persona.aggression, held = st.heldTime;
-    const rnd = () => this.session.random();
     const bendA = Math.abs(d.bend(s + 6, s + 58));
     const straight = bendA < 0.22;
     const front = near.ahead && near.aheadDs < 70 ? near.ahead : null;
-    const lined = front && Math.abs(near.aheadDl) < 3.2 && near.aheadDs > 5;
-    const chaser = near.behind && near.behindDs > -26 && Math.abs(near.behindDl) < 5.5 ? near.behind : null;
+    const lined = front && Math.abs(near.aheadDl) < 2.6 && near.aheadDs > 5;
+    const chaser = near.behind && near.behindDs > -22 && Math.abs(near.behindDl) < 5 ? near.behind : null;
     const skill = d.skill;
     switch (type) {
       case 'boost': {
@@ -61,54 +87,57 @@ export class AIItems {
         return null;
       }
       case 'peel': {
-        if (lined && near.aheadDs < 26 && rnd() < 0.5 + aggr * 0.4) return { back: false };
-        if (chaser && (it.count > 1 || near.behindDs > -16 || aggr > 0.8) && (held > 1.0 || aggr > 0.6)) return { back: true };
-        if (held > 24 && straight) return { back: true };
+        if (lined && near.aheadDs < 20) return { back: false };
+        if (chaser && (it.count > 1 || near.behindDs > -14 || aggr > 0.8) && (held > 1.5 || aggr > 0.6)) return { back: true };
+        if (held > 22 && straight) return { back: true, urgent: true };
         return null;
       }
       case 'orb': {
-        if (lined && near.aheadDs < 52) return { back: false };
-        if (chaser && near.behindDs > -30 && Math.abs(near.behindDl) < 4 && (aggr > 0.45 || held > 6)) return { back: true };
-        if (held > 22 && front) return { back: false };
+        if (lined && near.aheadDs < 42) return { back: false };
+        if (chaser && near.behindDs > -26 && Math.abs(near.behindDl) < 3.5 && (aggr > 0.55 || held > 8)) return { back: true };
+        if (held > 22 && front) return { back: false, urgent: true };
         return null;
       }
       case 'seeker': {
-        if (place > 1 && front) { if (held > 0.2 + (1 - skill) * 2 || near.aheadDs < 80) return { back: false }; }
-        if (place === 1 && chaser && near.behindDs > -34) return { back: true };
-        if (held > 7 && place > 1) return { back: false };
-        if (held > 14 && chaser) return { back: true };
+        if (place > 1 && front && near.aheadDs < 75 && held > 1.2 + (1 - skill) * 3) return { back: false };
+        if (place === 1 && chaser && near.behindDs > -30 && held > 1.5) return { back: true };
+        if (held > 12 && place > 1 && front) return { back: false, urgent: true };
+        if (held > 18 && chaser) return { back: true, urgent: true };
         return null;
       }
       case 'bomb': {
-        if (lined && near.aheadDs > 8 && near.aheadDs < 40 && rnd() < 0.55 + aggr * 0.3) return { back: false };
-        if (chaser && near.behindDs > -20) return { back: true };
-        if (held > 20) return { back: true };
+        if (lined && near.aheadDs > 10 && near.aheadDs < 34) return { back: false };
+        if (chaser && near.behindDs > -18 && held > 1.2) return { back: true };
+        if (held > 20) return { back: true, urgent: true };
         return null;
       }
       case 'comet': {
         if (items.cometActive || !items.cometTarget(k)) return null;
-        return { back: false };
+        if (held > 2 + (1 - skill) * 4) return { back: false };
+        return null;
       }
       case 'shock': {
-        let close = 0;
-        for (const o of this.session.karts) { if (o !== k && !o.race.finished && Math.abs(this.session.track.deltaS(s, o.query.s)) < 90) close++; }
-        if (close >= 2 || (place <= 3 && chaser) || held > 9) return { back: false };
+        // Storm Zap shrinks every kart AHEAD of the driver: worth it when a few of them are within reach
+        let ahead = 0;
+        for (const o of this.session.karts) { if (o !== k && !o.race.finished && o.race.place < place && Math.abs(this.session.track.deltaS(s, o.query.s)) < 150) ahead++; }
+        if (ahead >= 2 && held > 1.5) return { back: false };
+        if (held > 14 && ahead >= 1) return { back: false, urgent: true };
         return null;
       }
       case 'shield': {
         const threatened = st.incoming && st.incoming.dist < 48;
-        const crowded = near.ahead && near.aheadDs < 7 && aggr > 0.5;
         const hazard = this.hazardAhead(items, s);
-        if (threatened || crowded || hazard || held > 9) return { back: false };
+        if (threatened || hazard) return { back: false };
+        if (held > 12) return { back: false };
         return null;
       }
       case 'rocket': {
-        if (place >= 2 || held > 5) return { back: false };
+        if ((place >= 3 && held > 1.5) || held > 8) return { back: false };
         return null;
       }
       case 'ink': {
-        if (place > 1 && near.ahead) return { back: false };
-        if (held > 10) return { back: false };
+        if (place > 1 && near.ahead && near.aheadDs < 60 && held > 2) return { back: false };
+        if (held > 14) return { back: false, urgent: true };
         return null;
       }
       default: return { back: false };

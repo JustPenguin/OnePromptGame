@@ -29,10 +29,13 @@ import { HeldVisuals, ShieldBubble, RocketPack } from './held.js';
 import { PeelEntity, OrbEntity, SeekerEntity, BombEntity, CometEntity } from './entities.js';
 
 export const ROULETTE_TIME = 1.7;
-export const SHIELD_TIME = 7;
-export const ROCKET_TIME = 6;
-export const ZAP_TIME = 6;
-export const INK_TIME = 5;
+export const SHIELD_TIME = 5.5;
+export const ROCKET_TIME = 4.5;
+export const ZAP_TIME = 4.5;
+export const INK_TIME = 4;
+const ZAP_REACH = 4;             // Storm Zap hits at most this many karts directly ahead of the user
+const ZAP_COOLDOWN = 35;         // seconds between two Storm Zaps in a race (rollItem stops handing it out meanwhile)
+const HIT_GRACE = 2.4;            // seconds after recovering from a hit during which no further item hit lands (no chain-stacking)
 const MAX_ENTITIES = 48;
 const GRAVITY = 32;
 
@@ -68,7 +71,7 @@ export class ItemSystem {
   // ------------------------------------------------------------------ helpers
   rand() { return this.session.random(); }
   kartState(k) {
-    return (k.ext.items ??= { prevUse: false, grace: 0, shieldT: 0, zapT: 0, bubble: null, rocketPack: null, held: null, incoming: null, lastGiven: null, heldTime: 0, pending: null, rouletteIdx: 0, rouletteNext: 0, cometCooldown: 0 });
+    return (k.ext.items ??= { prevUse: false, grace: 0, shieldT: 0, zapT: 0, bubble: null, rocketPack: null, held: null, incoming: null, lastGiven: null, heldTime: 0, pending: null, rouletteIdx: 0, rouletteNext: 0, cometCooldown: 0, aimErr: 0 });
   }
   /** Karts best-first (RaceManager keeps this sorted; fall back to our own sort). */
   order() {
@@ -136,6 +139,8 @@ export class ItemSystem {
       out.copy(tgt.position).addScaledVector(tgt.velocity, T);
       out.x += (this.rand() - 0.5) * 1.2; out.z += (this.rand() - 0.5) * 1.2;
     } else track.pointAt(q.s + d, clamp(q.lateral, -3, 3), out, 0);
+    const err = this.kartState(kart).aimErr;
+    if (err) { out.x += -Math.cos(kart.heading) * err; out.z += Math.sin(kart.heading) * err; }     // AI drivers miss by a skill-dependent distance
     track.project(out, this._aimQ, -1);
     out.y = this._aimQ.height;
     out.T = T;
@@ -199,7 +204,7 @@ export class ItemSystem {
       if (ok) victim.spin.dir = this.rand() < 0.5 ? -1 : 1;     // Kart.launch picks its spin direction with Math.random()
     } else ok = victim.spinOut(effect.dur ?? 1.3, type, this.rand() < 0.5 ? -1 : 1);
     if (!ok) { this.events.emit(EV.ITEM_BLOCKED, { victim, type }); this.fx.blast(point, 2.2, 0xb06bff, 0.3); return 'blocked'; }
-    st.grace = (effect.kind === 'launch' ? 1.7 : effect.dur ?? 1.3) + 0.9;
+    st.grace = (effect.kind === 'launch' ? 1.7 : effect.dur ?? 1.3) + HIT_GRACE;
     if (victim.coins > 0) { victim.coins -= 1; this.events.emit(EV.COIN, { kart: victim, total: victim.coins, lost: true }); }
     this.events.emit(EV.ITEM_HIT, { victim, attacker, type, point: point.clone ? point.clone() : point });   // VFX draws the hit stars
     return 'hit';
@@ -231,6 +236,7 @@ export class ItemSystem {
     const p = s.player;
     return {
       racers: s.karts.length, order: this.order(), cometActive: !!this.cometActive, random: () => s.random(),
+      zapRecent: this.lastZapT !== undefined && this.t - this.lastZapT < ZAP_COOLDOWN,
       rubber: cls.rubber ?? 0.8, behindBy: p && kart !== p ? p.race.distance - kart.race.distance : 0,
     };
   }
@@ -431,12 +437,17 @@ const USE = {
   shock(k) {
     const victims = [];
     const eye = new THREE.Vector3();
-    for (const v of this.session.karts) {
+    const order = this.order(), me = order.indexOf(k);
+    for (let j = 0; j < order.length; j++) {
+      const v = order[j];
       if (v === k || v.race.finished || v.respawn.active) continue;
+      if (me >= 0 && order.length > 3 && (j > me || j < me - ZAP_REACH)) continue;   // a comeback tool: it only slows the few karts directly AHEAD of the user
+      if (v.shrink > 1 || this.kartState(v).grace > 0.5) continue;       // no stacking on a kart that is already shrunk / still reeling
       if (!v.shrinkFor(ZAP_TIME)) { this.events.emit(EV.ITEM_BLOCKED, { victim: v, type: 'shock' }); this.fx.blast(v.position, 2.5, 0xb06bff, 0.3); continue; }
       const st = this.kartState(v);
       st.zapT = ZAP_TIME;
-      v.speed *= 0.6;
+      st.grace = Math.max(st.grace, 1.2);
+      v.speed *= 0.65;
       victims.push(v);
       this.events.emit(EV.ITEM_HIT, { victim: v, attacker: k, type: 'shock', point: v.position.clone() });
       eye.set(v.position.x + (this.rand() - 0.5) * 5, v.position.y + 55, v.position.z + (this.rand() - 0.5) * 5);
@@ -444,6 +455,7 @@ const USE = {
       this.fx.ring(v.position, 0xfff2a0, 0.6, 5.5, 0.5);
     }
     this.fx.ring(k.position, 0xffe23a, 1, 9, 0.6);
+    this.lastZapT = this.t;
     this.events.emit(EV.ITEM_SHOCK, { kart: k, victims });
   },
   shield(k) {
@@ -469,7 +481,7 @@ const USE = {
       this.events.emit(EV.ITEM_HIT, { victim: v, attacker: k, type: 'ink', point: v.position.clone() });
       n++;
     };
-    for (let j = 0; j < i; j++) hit(order[j]);
+    for (let j = Math.max(0, i - 3); j < i; j++) hit(order[j]);
     if (n === 0) for (let j = i + 1; j < Math.min(order.length, i + 3); j++) hit(order[j]);   // leading: splat the pursuers instead
   },
 };
