@@ -51,7 +51,9 @@ if (args.menus) {
     let t = 0;
     for (const s of at) {
       await page.evaluate((dt) => window.__kart.advance(dt), Math.max(0.1, s - t)); t = s;
-      await page.evaluate(() => { window.__kart.app.ui?.update?.(0.016, window.__kart.session); window.__kart.render(); });
+      // the renderer's hit flash decays by wall-clock time, so in this frozen harness a flash set during advance() would stay at full
+      // strength; clear it like the real game would have by now
+      await page.evaluate(() => { const r = window.__kart.app.renderer; if (r?._flash) r._flash.a = 0; window.__kart.app.ui?.update?.(0.016, window.__kart.session); window.__kart.render(); });
       await page.waitForTimeout(150);
       const f = `${trackId}-${String(s).padStart(3, '0')}.png`;
       await page.screenshot({ path: resolve(outDir, f) });
