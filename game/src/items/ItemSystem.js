@@ -25,7 +25,7 @@ import { createItemResources } from './itemMeshes.js';
 import { disposeRibbonMaterial } from './Ribbon.js';
 import { ItemFX } from './ItemFX.js';
 import { ItemBoxField, CoinField } from './boxes.js';
-import { HeldVisuals, ShieldBubble, RocketPack } from './held.js';
+import { HeldVisuals } from './held.js';
 import { PeelEntity, OrbEntity, SeekerEntity, BombEntity, CometEntity } from './entities.js';
 
 export const ROULETTE_TIME = 1.7;
@@ -71,7 +71,7 @@ export class ItemSystem {
   // ------------------------------------------------------------------ helpers
   rand() { return this.session.random(); }
   kartState(k) {
-    return (k.ext.items ??= { prevUse: false, grace: 0, shieldT: 0, zapT: 0, bubble: null, rocketPack: null, held: null, incoming: null, lastGiven: null, heldTime: 0, pending: null, rouletteIdx: 0, rouletteNext: 0, cometCooldown: 0, aimErr: 0 });
+    return (k.ext.items ??= { prevUse: false, grace: 0, shieldT: 0, zapT: 0, shield: 0, rocketOn: false, held: null, incoming: null, lastGiven: null, heldTime: 0, pending: null, rouletteIdx: 0, rouletteNext: 0, cometCooldown: 0, aimErr: 0 });
   }
   /** Karts best-first (RaceManager keeps this sorted; fall back to our own sort). */
   order() {
@@ -284,10 +284,9 @@ export class ItemSystem {
 
   onRocket(kart, active) {
     const st = this.kartState(kart);
-    if (active) {
-      if (!st.rocketPack) st.rocketPack = new RocketPack(this, kart);
-    } else if (st.rocketPack) {
-      st.rocketPack.dispose(); st.rocketPack = null;
+    if (active) st.rocketOn = true;           // (the rocket exhaust / shimmer is drawn by the VFX system from kart.rocket / kart.invincible)
+    else if (st.rocketOn) {
+      st.rocketOn = false;
       kart.setInvincible(1.3);
       this.events.emit(EV.ITEM_END, { kart, type: 'rocket' });
     }
@@ -338,13 +337,11 @@ export class ItemSystem {
 
       // ---- timed effects
       if (st.shieldT > 0) {
-        st.shieldT -= dt;
-        if (!st.bubble) st.bubble = new ShieldBubble(this, k);
-        st.bubble.update(dt, st.shieldT);
+        st.shieldT -= dt; st.shield = st.shieldT;       // `shield` (seconds left) is what the VFX system's shield bubble reads
         // speed bonus without EV.BOOST spam / boost-timer exploits: keep a small boost floor alive (physics treats it as a boost)
         const b = k.boost;
         if (b.timer < 0.12) { b.timer = 0.12; b.strength = Math.max(b.strength, 0.13); b.source = 'shield'; b.duration = Math.max(b.duration, 0.12); }
-        if (st.shieldT <= 0) { st.shieldT = 0; st.bubble.dispose(); st.bubble = null; this.events.emit(EV.ITEM_END, { kart: k, type: 'shield' }); }
+        if (st.shieldT <= 0) { st.shieldT = 0; st.shield = 0; this.events.emit(EV.ITEM_END, { kart: k, type: 'shield' }); }
       }
       if (st.zapT > 0) {
         st.zapT -= dt;
@@ -352,7 +349,6 @@ export class ItemSystem {
         const cap = k.stats.topSpeed * (0.78 + 0.22 * (1 - u) * (1 - u));
         if (k.speed > cap) k.speed = damp(k.speed, cap, 5, dt);
       }
-      if (st.rocketPack) st.rocketPack.update(dt, k.rocket);
 
       this.held.sync(k, st, dt, t);
     }
@@ -372,7 +368,7 @@ export class ItemSystem {
     const byType = {};
     for (const e of this.entities) byType[e.type] = (byType[e.type] ?? 0) + 1;
     let held = 0, shields = 0, packs = 0;
-    for (const k of this.session.karts) { const st = k.ext.items; if (st?.held) held++; if (st?.bubble) shields++; if (st?.rocketPack) packs++; }
+    for (const k of this.session.karts) { const st = k.ext.items; if (st?.held) held++; if (st?.shieldT > 0) shields++; if (k.rocket > 0) packs++; }
     return {
       entities: this.entities.length, byType, held, shields, rocketPacks: packs, cometActive: !!this.cometActive,
       boxesActive: this.boxes.filter((b) => b.active).length, boxes: this.boxes.length, coins: this.coinField.coins.length, coinsActive: this.coinField.coins.filter((c) => c.active).length,
@@ -400,8 +396,6 @@ export class ItemSystem {
     for (const k of this.session.karts) {
       const st = k.ext.items; if (!st) continue;
       this.held.clear(st);
-      st.bubble?.dispose(); st.bubble = null;
-      st.rocketPack?.dispose(); st.rocketPack = null;
     }
     this.boxField.dispose(); this.coinField.dispose(); this.held.dispose(); this.fx.dispose();
     this.res.dispose(); this.tex.dispose(); disposeRibbonMaterial();

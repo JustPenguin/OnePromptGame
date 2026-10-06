@@ -1,7 +1,7 @@
 // Held-item visuals + kart attachments.
 //  - HeldVisuals: peels trail behind the kart on a springy chain, orbs orbit it, a bomb dangles, a rocket rides on the
 //    back, a comet hovers overhead.  They double as a shield (see ItemSystem.consumeGuard) so the visual matters.
-//  - ShieldBubble / RocketPack: attached to kart.root while Prism Shield / Rocket Rider are active.
+//  (The Prism Shield bubble and the Rocket Rider exhaust are drawn by the VFX system: it reads kart.ext.items.shield / kart.rocket / kart.invincible.)
 import * as THREE from 'three';
 import { damp } from '../core/math.js';
 
@@ -92,75 +92,4 @@ export class HeldVisuals {
   }
 
   dispose() { this.group.removeFromParent(); }
-}
-
-// ---------------------------------------------------------------------------------------------------------------------
-const SHIELD_VS = `varying vec3 vN; varying vec3 vV; varying vec3 vP;
-void main(){ vec4 mv = modelViewMatrix * vec4(position, 1.0); vN = normalize(normalMatrix * normal); vV = normalize(-mv.xyz); vP = position; gl_Position = projectionMatrix * mv; }`;
-const SHIELD_FS = `uniform float uTime; uniform float uAlpha; varying vec3 vN; varying vec3 vV; varying vec3 vP;
-vec3 hsv2rgb(vec3 c){ vec4 K = vec4(1.0, 2.0/3.0, 1.0/3.0, 3.0); vec3 p = abs(fract(c.xxx + K.xyz) * 6.0 - K.www); return c.z * mix(K.xxx, clamp(p - K.xxx, 0.0, 1.0), c.y); }
-void main(){
-  float f = pow(1.0 - abs(dot(normalize(vN), normalize(vV))), 2.2);
-  float hue = fract(vP.y * 0.32 + vP.x * 0.22 - vP.z * 0.18 + uTime * 0.4);
-  vec3 col = hsv2rgb(vec3(hue, 0.78, 1.0));
-  float facets = 0.5 + 0.5 * sin(vP.x * 9.0) * sin(vP.y * 9.0 + uTime * 2.0) * sin(vP.z * 9.0);
-  float a = (0.12 + 0.95 * f) * uAlpha * (0.72 + 0.28 * facets);
-  gl_FragColor = vec4(col * (1.0 + f * 1.9), a);
-}`;
-
-export class ShieldBubble {
-  constructor(sys, kart) {
-    this.kart = kart;
-    this.mat = new THREE.ShaderMaterial({
-      uniforms: { uTime: { value: 0 }, uAlpha: { value: 0 } }, vertexShader: SHIELD_VS, fragmentShader: SHIELD_FS,
-      transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, side: THREE.FrontSide, toneMapped: false, fog: false,
-    });
-    this.geo = new THREE.IcosahedronGeometry(1, 3);
-    this.mesh = new THREE.Mesh(this.geo, this.mat);
-    this.mesh.scale.set(1.45, 1.2, 2.05); this.mesh.position.set(0, 0.85, 0);
-    this.mesh.renderOrder = 7; this.mesh.frustumCulled = false;
-    kart.root.add(this.mesh);
-    this.age = 0;
-  }
-  update(dt, remaining) {
-    this.age += dt;
-    const ramp = Math.min(1, this.age / 0.25);
-    let a = ramp;
-    if (remaining < 1.8) a *= 0.55 + 0.45 * Math.sin(this.age * 28);       // about to expire: flicker
-    this.mat.uniforms.uTime.value += dt; this.mat.uniforms.uAlpha.value = a;
-    const pulse = 1 + 0.025 * Math.sin(this.age * 9) + (1 - ramp) * 0.5;
-    this.mesh.scale.set(1.45 * pulse, 1.2 * pulse, 2.05 * pulse);
-  }
-  dispose() { this.mesh.removeFromParent(); this.geo.dispose(); this.mat.dispose(); }
-}
-
-export class RocketPack {
-  constructor(sys, kart) {
-    this.kart = kart; this.sys = sys;
-    this.group = new THREE.Group(); this.group.name = 'rocket-pack';
-    const body = new THREE.Mesh(sys.res.geo.seeker, sys.res.mats.body);
-    body.scale.setScalar(1.75); body.position.set(0, 1.0, -0.9);
-    this.group.add(body);
-    this.flame = new THREE.Mesh(sys.res.geo.flame, sys.res.mats.flame.clone());
-    this.flame.position.set(0, 1.0, -0.9 - 1.15); this.flame.scale.set(2.4, 2.4, 3.2);
-    this.group.add(this.flame);
-    this.core = new THREE.Mesh(sys.res.geo.flame, sys.res.mats.flame.clone()); this.core.material.color.set(0xfff4c0);
-    this.core.position.copy(this.flame.position); this.core.scale.set(1.2, 1.2, 2.2);
-    this.group.add(this.core);
-    this.glow = sys.res.sprite(sys.res.tex.glow, 0xffa04a, 4, 0.9); this.glow.position.set(0, 1.0, -2.3);
-    this.group.add(this.glow);
-    this.group.scale.setScalar(0.01);
-    kart.root.add(this.group);
-    this.age = 0;
-  }
-  update(dt, remaining) {
-    this.age += dt;
-    const grow = Math.min(1, this.age / 0.3);
-    const shrink = Math.min(1, remaining / 0.4);
-    this.group.scale.setScalar(Math.max(0.001, grow * shrink));
-    const fl = 0.75 + 0.25 * Math.sin(this.age * 55) + 0.15 * Math.random();
-    this.flame.scale.set(2.4 * fl, 2.4 * fl, 3.2 * fl); this.core.scale.set(1.2 * fl, 1.2 * fl, 2.2 * fl);
-    this.glow.material.opacity = 0.6 + 0.3 * fl;
-  }
-  dispose() { this.group.removeFromParent(); this.flame.material.dispose(); this.core.material.dispose(); }
 }
