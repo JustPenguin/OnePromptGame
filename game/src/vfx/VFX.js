@@ -86,7 +86,18 @@ export class VFX {
     this.group.add(this.shadows.mesh, this.skids.mesh, this.beams.mesh, this.alpha.mesh, this.add.mesh, this.flames.mesh, this.emotes.mesh);
     this.bubbles.attachTo(this.group);
     this._sceneSync = 0;
-    this._isShield = (k) => (k.shield > 0 ? 1 : k.ext?.shield > 0 ? 1 : k.ext?.items?.shield > 0 ? 1 : 0);
+    // seconds of Prism Shield / star / Rocket Rider protection left (one look for all of them: kart shimmer + this bubble + sparkles)
+    this._shieldLeft = (k) => {
+      const it = k.ext?.items;
+      if (it?.bubble || k.respawn?.active) return 0;        // Agent D's own bubble on screen (or a rescue in progress): never draw a second one
+      let l = k.invincible > 0 ? k.invincible : 0;
+      if (k.rocket > l) l = k.rocket;
+      if (it?.shieldT > l) l = it.shieldT;
+      if (k.ext?.shield > l) l = k.ext.shield;
+      if (k.shield > l) l = k.shield;
+      return l;
+    };
+    this._shieldHot = (k) => k.rocket > 0;
     this._light = new THREE.Color(1, 1, 1);
     this._camPos = session.camera?.position ?? null;
     this._wire(session);
@@ -486,7 +497,7 @@ export class VFX {
     this.flames.end(); this.shadows.end(); this.beams.end();
     this.emotes.update(dt, cam);
     for (let i = 0; i < this.drones.length; i++) this.drones[i].update(dt);
-    this.bubbles.update(dt, karts, this._isShield);
+    this.bubbles.update(dt, karts, this._shieldLeft, this._shieldHot);
     this.add.flush(); this.alpha.flush(); this.skids.flush();
   }
 
@@ -630,7 +641,7 @@ export class VFX {
   /** boost / mini-turbo / rocket flames + trailing particles */
   _boost(k, st, dt) {
     const rocket = k.rocket > 0;
-    const on = k.boost.timer > 0 || rocket;
+    const on = (k.boost.timer > 0 || rocket) && !(rocket && k.ext?.items?.rocketPack);   // (D's rocket pack, if still present, draws its own flame)
     st.flame += ((on ? 1 : 0) - st.flame) * Math.min(1, dt * (on ? 16 : 7));
     if (st.flame < 0.02) { st.boostT = 0; return; }
     st.boostT += dt;
@@ -664,14 +675,15 @@ export class VFX {
     }
   }
 
-  /** invincibility sparkle trail, slipstream streaks */
+  /** shield / star / rocket sparkle trail, slipstream streaks */
   _status(k, st, dt, T) {
-    if (k.invincible > 0.05) {
-      const n = this.rate(st, R.INV, 48, dt);
+    const rk = k.rocket > 0.05;
+    if (k.invincible > 0.05 || rk) {
+      const n = this.rate(st, R.INV, rk ? 36 : 30, dt);
       for (let i = 0; i < n; i++) {
-        const c = rainbow((T * 0.8 + this.r() * 0.35) % 1, _rb);
+        const c = rk ? (this.r() < 0.5 ? GOLD : HOT) : rainbow((T * 0.8 + this.r() * 0.35) % 1, _rb);
         _d.copy(k.position).addScaledVector(k.right, this.sr() * 0.9).addScaledVector(k.forward, this.sr() * 1.3); _d.y += 0.15 + this.r() * 1.5;
-        this.star(_d.x, _d.y, _d.z, -k.velocity.x * 0.12 + this.sr() * 0.8, this.r() * 1.4, -k.velocity.z * 0.12 + this.sr() * 0.8, 0.45 + this.r() * 0.35, 0.16 + this.r() * 0.16, c, 2.2, this.r() < 0.5 ? SPR.STAR5 : SPR.FLARE, 0, 4);
+        this.star(_d.x, _d.y, _d.z, -k.velocity.x * 0.12 + this.sr() * 0.8, this.r() * 1.4, -k.velocity.z * 0.12 + this.sr() * 0.8, 0.45 + this.r() * 0.35, 0.14 + this.r() * 0.13, c, 1.35, this.r() < 0.5 ? SPR.STAR5 : SPR.FLARE, 0, 4);
       }
     }
     if (st.draft && k.speed > 10) {

@@ -147,6 +147,7 @@ export class KartVisual {
     this.session = opts.session ?? null;
     this.deferred = false;
     this.pending = 0;
+    this._td = 0;
     this.time = Math.random() * 10;
     this.qualityId = opts.quality ?? 'high';
     this.envMap = opts.envMap ?? getSharedEnvironment() ?? null;
@@ -252,7 +253,7 @@ export class KartVisual {
       susp: new Spring(260, 18), squash: new Spring(210, 13), bob: new Spring(90, 7), roll: new Spring(120, 10),
       torsoRoll: 0, torsoPitch: 0, headYaw: 0, headPitch: 0, headRoll: 0, lookBack: 0, boostBlend: 0, driftBlend: 0,
       blinkT: 1 + Math.random() * 3, blinkLeft: 0, hold: 0, holdFrame: FACE.OPEN, flash: 0, wobble: 0, flicker: 0,
-      throwT: 0, throwDir: 1, cheerT: 0, bump: 0, boostPunch: 0, wasAir: false, steerWheel: 0, rainbow: 0, glow: 1,
+      throwT: 0, throwDir: 1, cheerT: 0, bump: 0, boostPunch: 0, wasAir: false, steerWheel: 0, rainbow: 0, hot: 0, glow: 1,
       celebrate: 0, slump: 0, finishPose: 0, airT: 0, idle: Math.random() * 6,
     };
 
@@ -341,8 +342,9 @@ export class KartVisual {
     if (!k) return;
     let dt = this.pending;
     this.pending = 0;
+    this._td = Math.min(dt, 8);          // wall-clock the one-shot timers (flash, flicker, hold...) must still age by, even after a long headless advance()
     if (dt <= 0) dt = 1e-4;
-    dt = Math.min(dt, 0.1);
+    dt = Math.min(dt, 0.1);              // springs / animation integrate with a clamped step (stability)
     this.time += dt;
     this._updateLod(k);
     this._solve(dt, k);
@@ -400,13 +402,14 @@ export class KartVisual {
     s.boostBlend = damp(s.boostBlend, boosting ? 1 : 0, boosting ? 9 : 4, dt);
     s.driftBlend = damp(s.driftBlend, dr.dir !== 0 ? 1 : 0, 10, dt);
     s.lookBack = damp(s.lookBack, k.input?.lookBack && !finished ? 1 : 0, 10, dt);
-    s.boostPunch = Math.max(0, s.boostPunch - dt * 2.4);
-    s.flash = Math.max(0, s.flash - dt * 3.2);
-    s.wobble = Math.max(0, s.wobble - dt * 1.7);
-    s.flicker = Math.max(0, s.flicker - dt);
-    s.bump = Math.max(0, s.bump - dt * 1.8);
-    s.throwT = Math.max(0, s.throwT - dt * 2.6);
-    s.hold = Math.max(0, s.hold - dt);
+    const td = dt > this._td ? dt : this._td;      // timers age by the full elapsed time (a hit 20 s ago must not still be flashing white)
+    s.boostPunch = Math.max(0, s.boostPunch - td * 2.4);
+    s.flash = Math.max(0, s.flash - td * 3.2);
+    s.wobble = Math.max(0, s.wobble - td * 1.7);
+    s.flicker = Math.max(0, s.flicker - td);
+    s.bump = Math.max(0, s.bump - td * 1.8);
+    s.throwT = Math.max(0, s.throwT - td * 2.6);
+    s.hold = Math.max(0, s.hold - td);
     s.idle += dt;
     s.airT = flying ? s.airT + dt : 0;
     const vy = k.vy ?? 0;
@@ -494,10 +497,13 @@ export class KartVisual {
     // ---- shader state
     const u = this.mat.userData.u;
     u.uTime.value = t;
-    u.uFlash.value = s.flash > 0 ? Math.min(1, s.flash) * (0.55 + 0.45 * Math.sin(t * 40)) : 0;
-    const inv = (k.invincible ?? 0) > 0 || (k.rocket ?? 0) > 0;
-    s.rainbow = damp(s.rainbow, inv ? 1 : 0, 8, dt);
-    u.uRainbow.value = s.rainbow;
+    u.uFlash.value = s.flash > 0 ? Math.min(1, s.flash) * (0.5 + 0.2 * Math.sin(t * 40)) : 0;      // peak 0.7: a hit whitens the kart but never erases its colours
+    // Prism Shield / Rocket Rider / star: a bounded iridescent (or fiery) shimmer; blinks during the last 1.5 s
+    const left = Math.max(k.invincible ?? 0, k.rocket ?? 0);
+    s.rainbow = damp(s.rainbow, left > 0 ? 1 : 0, 8, dt);
+    s.hot = damp(s.hot, (k.rocket ?? 0) > 0 ? 1 : 0, 10, dt);
+    u.uRainbow.value = s.rainbow * (left > 0 && left < 1.5 ? 0.65 + 0.35 * Math.sin(t * 22) : 1);
+    u.uHot.value = s.hot;
     u.uGlow.value = 1 + s.boostBlend * 0.8 + s.boostPunch * 0.8;
     // respawn / post-respawn flicker
     this.root.visible = !(s.flicker > 0 && Math.floor(t * 14) % 2 === 0);

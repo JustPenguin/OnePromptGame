@@ -4,7 +4,7 @@
 // fur, emissive lights.  Per-vertex attributes written by PartBuilder choose the surface:
 //   color  albedo (with baked AO)      aPbr = (roughness, metalness, emissive strength, clearcoat mask)
 // plus a decal atlas (`map`, alpha-blended OVER the vertex colour), a fresnel rim light and a few cheap per-kart uniforms:
-//   uFlash   white hit flash 0..1       uRainbow  star / invincible shimmer 0..1     uGlow  emissive multiplier (brake lights, boost)
+//   uFlash   white hit flash 0..1       uRainbow  shield / rocket shimmer 0..1 (uHot 0 = prism, 1 = fire)     uGlow  emissive multiplier (brake lights, boost)
 //   uPaintOn/From/To/Lum  optional custom paint colour (see KartVisual.setPaint)
 // Everything lives in ONE draw call per kart, and every kart with the same quality shares ONE compiled program.
 import * as THREE from 'three';
@@ -19,6 +19,7 @@ varying vec4 vPbr;
 varying vec3 vObj;
 uniform float uFlash;
 uniform float uRainbow;
+uniform float uHot;
 uniform float uGlow;
 uniform float uTime;
 uniform float uRim;
@@ -50,8 +51,15 @@ const FRAG_FINAL = /* glsl */`
   // gentle sky-coloured rim keeps silhouettes readable against any backdrop (less on bare metal)
   outgoingLight += uRimColor * kfr * uRim * ( 0.3 + 0.7 * ( 1.0 - vPbr.y ) );
   if ( uRainbow > 0.001 ) {
-    vec3 rb = 0.5 + 0.5 * cos( 6.2831853 * ( vec3( 0.0, 0.33, 0.67 ) + vObj.y * 0.9 + vObj.z * 0.55 - uTime * 0.9 ) );
-    outgoingLight = mix( outgoingLight, outgoingLight * 0.35 + rb * 1.1, uRainbow * 0.8 ) + rb * kfr * uRainbow * 1.6;
+    // Prism Shield / Rocket Rider shimmer.  The kart KEEPS its own colours: a hue-shifting tint (+-20 %), a thin travelling sheen and a
+    // fresnel rim, every added term bounded (<= ~0.65 per channel) so bloom never turns the kart into a flat white blob.
+    float ph = vObj.y * 0.9 + vObj.z * 0.55 - uTime * 0.9;
+    vec3 prism = 0.5 + 0.5 * cos( 6.2831853 * ( vec3( 0.0, 0.33, 0.67 ) + ph ) );
+    vec3 fire = mix( vec3( 1.0, 0.32, 0.06 ), vec3( 1.0, 0.72, 0.2 ), 0.5 + 0.5 * sin( ph * 6.2831853 ) );
+    vec3 sh = mix( prism, fire, uHot );
+    outgoingLight *= mix( vec3( 1.0 ), 0.55 + sh, 0.34 * uRainbow );
+    float band = smoothstep( 0.8, 1.0, 0.5 + 0.5 * sin( ph * 9.42477 ) );
+    outgoingLight += sh * ( 0.14 * band + 0.5 * kfr ) * uRainbow;
   }
   outgoingLight = mix( outgoingLight, vec3( 1.3, 1.2, 1.05 ), uFlash );
 }
@@ -71,6 +79,7 @@ export function createKartMaterial(o = {}) {
   const u = {
     uFlash: { value: 0 },
     uRainbow: { value: 0 },
+    uHot: { value: 0 },
     uGlow: { value: 1 },
     uTime: { value: 0 },
     uRim: { value: ghost ? 1.6 : 0.22 },
